@@ -1,0 +1,172 @@
+{
+  "name": "generate-script-v1",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "m1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const topic = 'La toma de Espa\u00f1a por Francisco Franco';\nreturn [{ json: { topic } }];"
+      },
+      "id": "m2",
+      "name": "Tema",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.LLM_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"model\": $env.LLM_MODEL || \"gpt-4o-mini\",\n  \"response_format\": { \"type\": \"json_object\" },\n  \"temperature\": 0.8,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un guionista senior especializado en Shorts/TikTok/Reels hist\u00f3ricos con obsesi\u00f3n por la retenci\u00f3n. Devuelve SOLO JSON v\u00e1lido. Reglas de ritmo: v\u00eddeos din\u00e1micos con escenas cortas (2-5 segundos cada una), duraci\u00f3n total 40-55 segundos, frases contundentes y directas, sin relleno. Cada escena debe empujar a la siguiente sin pausa. 1) el hook debe abrir con una idea sorprendente, una paradoja, una amenaza, una cifra o una pregunta muy fuerte; 2) la primera escena debe ser la m\u00e1s magn\u00e9tica de todo el v\u00eddeo; 3) cada escena debe incluir voiceover, subtitle y visualPrompt coherentes; 4) subtitle debe ser corto, m\u00e1ximo 5 palabras, muy legible en m\u00f3vil; 5) targetDurationSec por escena debe ser entero entre 2 y 5; 6) usa entre 10 y 12 escenas; 7) suma total entre 40 y 55 segundos; 8) tono divulgativo, dram\u00e1tico y preciso, sin inventar datos; 9) la \u00daLTIMA escena debe funcionar como cierre + CTA de seguimiento: el voiceover debe incluir una invitaci\u00f3n a seguir la cuenta (ej: 'S\u00edguenos para m\u00e1s historias como esta'), el subtitle debe reflejar el CTA; 10) visualPrompt debe describir una imagen FOTOGR\u00c1FICA REALISTA que podr\u00eda encontrarse en un banco de im\u00e1genes, con detalles visuales concretos (iluminaci\u00f3n, encuadre, composici\u00f3n, colores). Evita conceptos abstractos. 11) Cada escena debe incluir imageSearch: 3-5 palabras clave en espa\u00f1ol separadas por espacios para buscar im\u00e1genes reales en bancos de im\u00e1genes. imageSearch debe ser diferente de visualPrompt: son keywords cortas de b\u00fasqueda, no una descripci\u00f3n. Ejemplo: 'mapa antiguo vela oscuridad'. No uses closingCta separado. Estructura exacta: title, hook, summary, totalTargetDurationSec, scenes. Cada escena: sceneNumber, purpose, narrativeFunction, visualPrompt, imagePrompt, voiceover, subtitle, targetDurationSec. narrativeFunction debe ser una de: hook, setup, escalation, turning_point, consequence, closing.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Genera un guion hist\u00f3rico muy atractivo para v\u00eddeo vertical sobre: \" + $json.topic + \". Quiero que el arranque tenga m\u00e1xima retenci\u00f3n y que cada escena se sienta como un avance natural de la anterior.\"\n    }\n  ]\n} }}",
+        "options": {}
+      },
+      "id": "m3",
+      "name": "OpenAI HTTP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const content = $input.first().json.choices?.[0]?.message?.content;\nif (!content) throw new Error('OpenAI no devolvi\u00f3 contenido');\nconst raw = JSON.parse(content);\nif (!Array.isArray(raw.scenes) || raw.scenes.length < 4) throw new Error('El guion no contiene suficientes escenas');\nconst scenes = raw.scenes.map((scene, index) => {\n  const targetDurationSec = Number(scene.targetDurationSec ?? scene.durationSec ?? 6);\n  return {\n    sceneNumber: index + 1,\n    purpose: scene.purpose || `beat-${index + 1}`,\n    narrativeFunction: String(scene.narrativeFunction || '').trim(),\n    visualPrompt: String(scene.visualPrompt || scene.imagePrompt || '').trim(),\n    imageSearch: String(scene.imageSearch || '').trim(),\n    voiceover: String(scene.voiceover || scene.text || '').trim(),\n    subtitle: String(scene.subtitle || scene.text || scene.voiceover || '').trim(),\n    targetDurationSec: Number.isFinite(targetDurationSec) ? targetDurationSec : 6,\n  };\n});\nconst totalTargetDurationSec = scenes.reduce((sum, scene) => sum + scene.targetDurationSec, 0);\nconst now = new Date();\nconst pad = (n) => String(n).padStart(2, '0');\nconst jobId = `hist-${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;\nconst script = {\n  title: String(raw.title || $('Tema').first().json.topic).trim(),\n  hook: String(raw.hook || '').trim(),\n  summary: String(raw.summary || '').trim(),\n  totalTargetDurationSec,\n  scenes,\n  closingCta: String(raw.closingCta || '').trim()\n};\nconst metadata = {\n  jobId,\n  status: 'SCRIPT_DRAFT',\n  topic: script.title,\n  requestedTopic: $('Tema').first().json.topic,\n  language: 'es-ES',\n  format: 'shorts-9x16',\n  targetDurationSeconds: totalTargetDurationSec,\n  script,\n  createdAt: now.toISOString(),\n  updatedAt: now.toISOString()\n};\nreturn [{ json: metadata }];"
+      },
+      "id": "m4",
+      "name": "Preparar metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "mode": "each",
+        "binaryPropertyName": "data",
+        "options": {
+          "format": true,
+          "fileName": "={{ $json.jobId + '.json' }}"
+        }
+      },
+      "id": "m5",
+      "name": "Convert to JSON File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1130,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fileName": "={{ '/data/metadata/' + $binary.data.fileName }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "m6",
+      "name": "Write Binary File",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Tema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tema": {
+      "main": [
+        [
+          {
+            "node": "OpenAI HTTP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI HTTP": {
+      "main": [
+        [
+          {
+            "node": "Preparar metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar metadata": {
+      "main": [
+        [
+          {
+            "node": "Convert to JSON File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to JSON File": {
+      "main": [
+        [
+          {
+            "node": "Write Binary File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "active": false
+}

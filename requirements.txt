@@ -1,0 +1,19 @@
+aiohappyeyeballs==2.6.2
+aiohttp==3.14.1
+aiosignal==1.4.0
+async-timeout==5.0.1
+attrs==26.1.0
+certifi==2026.6.17
+edge-tts==7.2.8
+frozenlist==1.8.0
+idna==3.18
+multidict==6.7.1
+propcache==0.5.2
+tabulate==0.10.0
+typing_extensions==4.15.0
+yarl==1.24.2
+
+# Opcional: subtítulos con faster-whisper (transcripción local)
+#   pip install faster-whisper
+#   Modelo por defecto: tiny (~500MB RAM, rápido en CPU)
+#   Configurar con WHISPER_MODEL env var

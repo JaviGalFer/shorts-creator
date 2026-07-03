@@ -1,0 +1,29 @@
+# Entorno y secretos
+.env
+*.local
+credential-*.json
+
+# Assets generados
+data/assets/*
+data/audio/*
+data/subtitles/*
+data/renders/*
+data/metadata/*
+data/videos/*
+logs/*
+!data/**/.gitkeep
+!logs/.gitkeep
+
+# Node / dependencias
+node_modules/
+dist/
+.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+*.swp
+*.swo

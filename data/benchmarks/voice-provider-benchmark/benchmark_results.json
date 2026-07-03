@@ -1,0 +1,66 @@
+[
+  {
+    "provider": "edge_tts",
+    "voice": "es-ES-AlvaroNeural",
+    "voice_name": "Alvaro Neural",
+    "available": true,
+    "status": "OK",
+    "duration_sec": 30.864,
+    "sample_rate": 24000,
+    "channels": 1,
+    "bitrate_kbps": 48,
+    "file_size_bytes": 185184,
+    "file_size_kb": 180.8,
+    "silence_leading_sec": 0.0,
+    "silence_trailing_sec": 0.0,
+    "silence_internal_sec": 0.0,
+    "silence_total_sec": 0.0,
+    "raw_path": "/home/javi/projects/shorts-historicos/data/benchmarks/voice-provider-benchmark/edge_tts/edge_tts_es_ES_AlvaroNeural.mp3",
+    "timing_support": "sentence",
+    "cost_per_1k_chars_usd": 0.0,
+    "monthly_quota_chars": 0,
+    "commercial_usage_status": "allowed",
+    "fallback_priority": 1
+  },
+  {
+    "provider": "elevenlabs",
+    "voice": "Xb7hH8MSUJpSbSDYk0k2",
+    "voice_name": "ElevenLabs Multilingual v2",
+    "available": true,
+    "status": "OK",
+    "duration_sec": 31.425,
+    "sample_rate": 44100,
+    "channels": 1,
+    "bitrate_kbps": 128,
+    "file_size_bytes": 503266,
+    "file_size_kb": 491.5,
+    "silence_leading_sec": 0.0,
+    "silence_trailing_sec": 0.0,
+    "silence_internal_sec": 0.0,
+    "silence_total_sec": 0.0,
+    "raw_path": "/home/javi/projects/shorts-historicos/data/benchmarks/voice-provider-benchmark/elevenlabs/elevenlabs_Xb7hH8MSUJpSbSDYk0k2.mp3",
+    "timing_support": "word",
+    "cost_per_1k_chars_usd": 0.3,
+    "monthly_quota_chars": 10000,
+    "commercial_usage_status": "unknown",
+    "fallback_priority": 2
+  },
+  {
+    "provider": "google_tts",
+    "voice": "es-ES-Neural2-A",
+    "available": false,
+    "status": "PENDIENTE_DE_VALIDAR"
+  },
+  {
+    "provider": "azure_speech",
+    "voice": "es-ES-AlvaroNeural",
+    "available": false,
+    "status": "PENDIENTE_DE_VALIDAR"
+  },
+  {
+    "provider": "piper",
+    "voice": "es_ES-carlfm-x_low",
+    "available": false,
+    "status": "PENDIENTE_DE_VALIDAR"
+  }
+]

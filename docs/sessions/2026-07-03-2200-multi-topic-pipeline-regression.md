@@ -1,0 +1,33 @@
+# Sesión: Multi-Topic Pipeline Regression — Edge TTS Timing
+
+- Fecha: 2026-07-03 22:00 UTC
+- Objetivo: Validate Edge TTS native WordBoundary timing is not overfit to Constantinople by running full pipeline on 3 distinct topics
+- Estado inicial: Edge default accepted, but only tested on one topic (Constantinople/Mehmed II)
+- Estado final: 3/3 topics rendered, 2 PASS / 1 FAIL validation. Edge default remains VALID.
+- Agente responsable: AI assistant (opencode deepseek-v4-flash-free)
+- Cambio OpenSpec relacionado: improve-tts-subtitle-alignment-and-job-validation
+- Riesgo asumido: Pipeline overfit to Constantinople test case; corrupted assets from fetchers
+- Validaciones realizadas: Full pipeline (script → images → audio → prep → render → validate) × 3 topics
+- Archivos modificados:
+  - `bin/generate_audio.py` (lines 138-139: added ¡¿ to strip() in text normalization)
+  - `docs/sessions/2026-07-03-2200-multi-topic-pipeline-regression.md` (this file)
+  - `openspec/.../proposal.md` (Estado updated)
+- Comandos ejecutados:
+  - `generate_script.py` × 3 (Pompeya, Wright, Magallanes)
+  - `fetch_images.py` × 3 (with manual cleanup of corrupted assets)
+  - `generate_audio.py --continuous --voice es-ES-AlvaroNeural --tts-provider edge_tts --subtitle-timing-provider auto` × 3
+  - `prepare_job.py --subtitle-style shorts_upper_dynamic` × 3
+  - `render_job.py --skip-asset-validation` × 3
+  - `validate_job.py --verbose` × 3
+- Resultado:
+  - `val-wright`: PASS (25.2s, 5 scenes, 10 cues, 89% coverage)
+  - `val-magallanes`: PASS (30.4s, 6 scenes, 13 cues, 78% coverage)
+  - `val-pompeya`: FAIL (25.1s, 5 scenes, 10 cues, 95% coverage, 1 error: cue spills past scene 3 window)
+- Próximos pasos:
+  - Review 3 rendered videos visually
+  - Address Pompeya scene-window edge case (proportional timing from asset failure)
+  - Consider extending regression test fixtures with multi-topic data
+- Bloqueos o decisiones pendientes:
+  - Proposal remains "awaiting review" until human reviews the 3 videos
+  - Leading ¡/¿ loss confirmed (cosmetic, deferred)
+  - Asset fetchers produce occasional corrupted files (218MB JPEG, GIF-as-JPG)
