@@ -37,11 +37,17 @@ Generar videos de divulgacion historica de principio a fin sin intervencion manu
 
 ## Showcase
 
-<div align="center">
-
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=17&duration=2400&pause=700&color=1F6FEB&center=true&vCenter=true&width=900&lines=Tema+historico+%E2%86%92+LLM+genera+guion+estructurado;Guion+%E2%86%92+Edge+TTS+genera+locucion+natural;Script+%E2%86%92+API+de+imagenes+consigue+assets+visuales;Assets+%E2%86%92+FFmpeg+render+video+9%3A16+con+subtitulos;Render+%E2%86%92+Revision+humana+%E2%86%92+publicacion"
-
-</div>
+```
+Tema historico ──► LLM genera guion estructurado
+       │
+       ├──► Edge TTS genera locucion natural
+       │
+       ├──► API imagenes consigue assets visuales
+       │
+       └──► FFmpeg render video 9:16 con subtitulos
+                    │
+                    └──► Revision humana ──► Publicacion
+```
 
 Ruta narrativa del pipeline:
 
