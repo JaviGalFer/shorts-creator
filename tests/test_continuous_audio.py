@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROJECT = Path("/home/javi/projects/shorts-historicos")
+PROJECT = Path("/home/javi/projects/shorts-creator")
 TEST_JOB_DIR = PROJECT / "data/videos/test-continuous-audio"
 REF_JOB_DIR = PROJECT / "data/videos/la-2026-07-01-173458"
 VENV_PYTHON = str(PROJECT / ".venv" / "bin" / "python3")

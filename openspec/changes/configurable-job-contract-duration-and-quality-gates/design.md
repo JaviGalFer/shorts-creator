@@ -16,8 +16,8 @@ WordBoundary events (no scene info)
 ### Duration contract flow
 
 ```
-request.duration {targetSec, minSec, maxSec, strictness}
-  → generate_script.py: budget words = targetSec * WPM / 60
+request.duration {targetSec, minSec, maxSec, strictness, wordsPerMinute}
+  → generate_script.py: budget words = targetSec * wordsPerMinute / 60 (default: 110)
   → LLM prompt includes word budget hint
   → Post-generation: estimate duration from script word count
   → If outside range, regenerate or mark WARNING
@@ -63,7 +63,7 @@ When `--skip-asset-validation` is used:
     "topic": "...",
     "language": "es-ES",
     "format": "shorts-9x16",
-    "duration": {"targetSec": 35, "minSec": 30, "maxSec": 40, "strictness": "balanced"},
+    "duration": {"targetSec": 28, "minSec": 25, "maxSec": 30, "strictness": "balanced"},
     "voice": {"provider": "edge_tts", "voiceId": "es-ES-AlvaroNeural"},
     "subtitles": {"enabled": true, "timingProvider": "auto", "style": "shorts_upper_dynamic"},
     "visuals": {"mode": "images", "allowGeneratedImages": false},
@@ -93,7 +93,7 @@ When `--skip-asset-validation` is used:
 | File | Change |
 |------|--------|
 | `bin/generate_audio.py` | Add sceneNumber to words, enforce scene boundaries in group_words_into_cues(), add duration validation |
-| `bin/generate_script.py` | Add word budget to prompt, validate script duration |
+| `bin/generate_script.py` | Add word budget to prompt (NARRATION_WORDS_PER_MINUTE=110), validate script duration |
 | `bin/render_job.py` | Add validation state model, asset gate status |
 | `bin/validate_job.py` | Add validation state model, cross-scene text check |
 | `bin/coverage_validation.py` | Add cross-scene text validation |

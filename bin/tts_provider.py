@@ -171,7 +171,7 @@ class EdgeTTSProvider(TTSProvider):
         rate = options.rate
 
         async def _run():
-            communicate = edge_tts.Communicate(text, voice, rate=rate)
+            communicate = edge_tts.Communicate(text, voice, rate=rate, boundary="WordBoundary")
             await communicate.save(output_path)
 
         asyncio.run(_run())
@@ -202,7 +202,7 @@ class EdgeTTSProvider(TTSProvider):
         sentence_boundaries = []
         submaker = SubMaker()
 
-        communicate = edge_tts.Communicate(text, voice, rate=rate)
+        communicate = edge_tts.Communicate(text, voice, rate=rate, boundary="WordBoundary")
         with open(output_path, "wb") as f:
             async for chunk in communicate.stream():
                 ctype = chunk.get("type")

@@ -13,26 +13,49 @@ from pathlib import Path
 
 DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 
-NARRATION_WORDS_PER_MINUTE = 145
-NARRATION_WORDS_PER_SECOND = NARRATION_WORDS_PER_MINUTE / 60.0
+# Speech rate (Edge TTS Spanish, ~AlvaroNeural):
+# Speech-only: ~160 WPM, but Edge TTS inserts ~1s pauses between sentences.
+# Measured speech rate (3 runs, total 164 words / 88.104s): ~111.7 WPM.
+# Using 110 as conservative spoken-only rate (not including scene pauses).
+SPOKEN_WORDS_PER_MINUTE = 110
+SPOKEN_WORDS_PER_SECOND = SPOKEN_WORDS_PER_MINUTE / 60.0
+
+# Inter-scene pause added by Edge TTS between narration units.
+# Each scene transition adds this pause to total duration.
+ESTIMATED_SCENE_PAUSE_MS = 350
+
+# For under-30 Shorts: 4-6 scenes, not 10.
+# 10 micro-scenes inflate effective duration via cumulative pauses.
+# With 5 transitions (6 scenes): 5 * 350ms = 1.75s pause overhead.
+# With 9 transitions (10 scenes): 9 * 350ms = 3.15s pause overhead.
+MAX_SCENES_FOR_SHORT = 6
+MIN_WORDS_PER_SCENE = 7
 
 SYSTEM_PROMPT = """Eres un guionista senior especializado en Shorts/TikTok/Reels históricos con obsesión por la retención y la calidad visual documental.
 
 Devuelve SOLO JSON válido, sin markdown, sin explicaciones.
 
-## Reglas de ritmo
-- Vídeo dinámico: 10-12 escenas
-- Duración total: 55-65 segundos
-- Cada escena: 4-7 segundos
+## Reglas de ritmo para Short (<30s)
+- Máximo 6 escenas (normalmente 4-6). Prefiere 5 escenas.
+- Duración total: 25-30 segundos
+- Cada escena: 4-7 segundos (mínimo 3.5s, evita micro-escenas)
+- Palabras totales: ~45-55
+- Mínimo 7 palabras por escena
 - Frases contundentes, sin relleno
-- El hook debe abrir con algo sorprendente (paradoja, amenaza, cifra, pregunta fuerte)
-- La última escena debe incluir CTA de seguimiento en voiceover y subtitle
+- El hook (primera escena) debe abrir con algo sorprendente (paradoja, amenaza, cifra, pregunta fuerte)
+- El CTA debe incluirse DENTRO de la última escena, no como escena separada.
+- NO crear una escena separada solo para CTA.
 
 ## Reglas de narración (voiceover)
 - En español de España (no latinoamericano)
-- 12-18 palabras por escena
+- Mínimo 7 palabras por escena
+- DEBEN SER ENTRE 4 Y 6 ESCENAS. Mínimo 4, máximo 6. Prefiere 5.
 - Tono divulgativo, dramático y preciso
 - No inventar datos históricos
+- Priorizar datos concretos: años, cifras, nombres propios
+- Incluir al menos una fecha con año y un nombre propio en el guion
+- Cada escena DEBE contribuir al total narrativo; no hay espacio para relleno
+- El CTA de seguimiento ("síguenos", "suscríbete") debe estar DENTRO de la voz en off de la última escena, no como escena independiente
 
 ## Reglas de subtítulos (subtitle)
 - Frase corta y memorable, máximo 7 palabras
@@ -272,32 +295,41 @@ def _count_voiceover_words(script_data: dict) -> int:
     return total
 
 
-def _estimate_narration_duration_sec(word_count: int) -> float:
-    return word_count / NARRATION_WORDS_PER_SECOND
+def _estimate_narration_duration_sec(word_count: int, scene_count: int) -> tuple[float, float, float]:
+    spoken_sec = word_count / SPOKEN_WORDS_PER_SECOND
+    transitions = max(0, scene_count - 1)
+    pause_sec = transitions * ESTIMATED_SCENE_PAUSE_MS / 1000.0
+    total_sec = spoken_sec + pause_sec
+    return total_sec, spoken_sec, pause_sec
 
 
 def _build_duration_prompt_instruction(target_sec: int, min_sec: int, max_sec: int,
                                        strictness: str, retry: int = 0) -> str:
-    word_budget_high = int(max_sec * NARRATION_WORDS_PER_SECOND)
-    word_budget_low = int(min_sec * NARRATION_WORDS_PER_SECOND)
-    target_words = int(target_sec * NARRATION_WORDS_PER_SECOND)
+    word_budget_high = int(max_sec * SPOKEN_WORDS_PER_SECOND)
+    word_budget_low = int(min_sec * SPOKEN_WORDS_PER_SECOND)
+    target_words = int(target_sec * SPOKEN_WORDS_PER_SECOND)
+    pause_ms = ESTIMATED_SCENE_PAUSE_MS
     lines = [
         f"## Restricción de duración ({strictness})",
         f"- Duración objetivo: {target_sec} segundos",
         f"- Ventana aceptable: {min_sec}-{max_sec} segundos",
-        f"- Presupuesto de palabras: aproximadamente {target_words} palabras en total (entre {word_budget_low} y {word_budget_high})",
-        f"- Distribución: 14-22 palabras por escena (no menos de 12, no más de 25)",
-        f"- El voiceover de cada escena DEBE tener al menos 14 palabras.",
-        f"- NO uses frases de relleno. Añade detalles narrativos concretos.",
+        f"- Presupuesto de palabras: aproximadamente {target_words} palabras habladas (más pausas entre escenas de ~{pause_ms}ms cada una)",
+        f"- Escenas: entre 4 y 6 (máximo 6 para vídeos <30s)",
+        f"- Mínimo 7 palabras por escena. Prefiere 7-10 palabras.",
+        f"- El CTA debe incluirse dentro de la voz en off de la última escena, no como escena separada.",
+        f"- NO uses frases de relleno. Añade detalles narrativos concretos: años, cifras, nombres propios.",
+        f"- Incluye al menos una fecha con año y al menos un nombre propio relevante.",
     ]
     if retry > 0:
         lines.append("")
         lines.append("## Intento anterior insuficiente")
-        lines.append("El guion anterior tenía muy pocas palabras. Debes escribir GUIONES MÁS EXTENSOS.")
+        lines.append("El guion anterior no cumplía los requisitos. Debes corregirlo:")
         lines.append("- Añade más contexto histórico, descripciones visuales y detalles narrativos.")
-        lines.append("- Cada escena debe tener 18-25 palabras en voiceover.")
-        lines.append("- No repitas el CTA (llamado a la acción) en varias escenas.")
+        lines.append("- Cada escena debe tener 7-10 palabras en voiceover, mínimo 7.")
+        lines.append("- DEBEN SER ENTRE 4 Y 6 ESCENAS. Máximo 6.")
+        lines.append("- El CTA debe estar DENTRO de la última escena, nunca como escena  aparte.")
         lines.append("- Usa datos concretos: años, cifras, nombres propios.")
+        lines.append("- Incluye al menos una fecha con año y un nombre propio relevante.")
     return "\n".join(lines)
 
 
@@ -307,9 +339,9 @@ def main() -> int:
     parser.add_argument("--output", help="Output path for metadata.json (default: data/videos/{jobId}/metadata.json)")
     parser.add_argument("--dry-run", action="store_true", help="Print prompt and exit without calling API")
     parser.add_argument("--model", help="LLM model override")
-    parser.add_argument("--duration-target", type=int, default=35, help="Target duration in seconds")
-    parser.add_argument("--duration-min", type=int, default=30, help="Minimum duration in seconds")
-    parser.add_argument("--duration-max", type=int, default=40, help="Maximum duration in seconds")
+    parser.add_argument("--duration-target", type=int, default=28, help="Target duration in seconds")
+    parser.add_argument("--duration-min", type=int, default=25, help="Minimum duration in seconds")
+    parser.add_argument("--duration-max", type=int, default=30, help="Maximum duration in seconds")
     parser.add_argument("--strictness", default="balanced",
                         choices=["strict", "balanced", "relaxed"],
                         help="Duration strictness level")
@@ -356,13 +388,15 @@ def main() -> int:
     print(f"Duration target: {target_dur}s, min: {min_sec}s, max: {max_sec}s, strictness: {strictness}")
 
     # ── Retry loop ────────────────────────────────────────────────────
+    # max_attempts: total LLM calls permitted (initial + retries)
+    # max_attempts=2 means 1 initial + up to 1 retry
     script_data: dict = {}
     retries = 0
-    max_retries = 2
+    max_attempts = 2
     retry_history = []
     current_prompt = user_prompt
 
-    while retries <= max_retries:
+    while retries < max_attempts:
         if retries > 0:
             dur_inst_retry = _build_duration_prompt_instruction(
                 target_dur, min_sec, max_sec, strictness, retry=retries
@@ -371,7 +405,7 @@ def main() -> int:
                 f"Genera un guion histórico muy atractivo para vídeo vertical sobre: {args.topic}. "
                 f"Quiero que el arranque tenga máxima retención.\n\n{dur_inst_retry}"
             )
-            print(f"Retry {retries}/{max_retries}: generating more detailed script...")
+            print(f"Retry {retries}/{max_attempts - 1}: generating more detailed script...")
 
         try:
             content = call_llm(current_prompt, api_key, model, provider)
@@ -387,10 +421,14 @@ def main() -> int:
             return 1
 
         word_count = _count_voiceover_words(script_data)
-        estimated_dur = _estimate_narration_duration_sec(word_count)
+        scene_count = len(script_data.get("scenes", []))
+        estimated_dur, spoken_sec, pause_sec = _estimate_narration_duration_sec(word_count, scene_count)
         retry_history.append({
             "retry": retries,
             "wordCount": word_count,
+            "sceneCount": scene_count,
+            "spokenDurationSec": round(spoken_sec, 1),
+            "pauseDurationSec": round(pause_sec, 1),
             "estimatedDurationSec": round(estimated_dur, 1),
         })
         print(f"  Attempt {retries + 1}: {word_count} words, estimated {estimated_dur:.1f}s "
@@ -423,6 +461,8 @@ def main() -> int:
             "minSec": min_sec,
             "maxSec": max_sec,
             "strictness": strictness,
+            "spokenWordsPerMinute": SPOKEN_WORDS_PER_MINUTE,
+            "estimatedScenePauseMs": ESTIMATED_SCENE_PAUSE_MS,
         },
         "voice": {
             "provider": "edge_tts",
@@ -458,7 +498,10 @@ def main() -> int:
     }
 
     word_count = _count_voiceover_words(script_data)
-    estimated_dur = _estimate_narration_duration_sec(word_count)
+    scene_count = len(script_data.get("scenes", []))
+    estimated_dur, spoken_sec, pause_sec = _estimate_narration_duration_sec(word_count, scene_count)
+
+    scene_count_ok = 4 <= scene_count <= MAX_SCENES_FOR_SHORT
 
     duration_ok_after_retries = False
     if strictness == "strict":
@@ -469,14 +512,23 @@ def main() -> int:
     else:
         duration_ok_after_retries = True
 
-    if duration_ok_after_retries:
-        status = "SCRIPT_DRAFT"
-        review_reasons = []
-    else:
-        status = "REVIEW_REQUIRED"
-        review_reasons = [f"DURATION_OUT_OF_RANGE: estimated={estimated_dur:.1f}s, "
-                         f"target={target_dur}s, min={min_sec}s, max={max_sec}s, "
-                         f"words={word_count}, retries={retries}"]
+    all_ok = duration_ok_after_retries and scene_count_ok
+
+    review_reasons = []
+    if not duration_ok_after_retries:
+        review_reasons.append(
+            f"DURATION_OUT_OF_RANGE: estimated={estimated_dur:.1f}s "
+            f"(spoken={spoken_sec:.1f}s + pauses={pause_sec:.1f}s), "
+            f"target={target_dur}s, min={min_sec}s, max={max_sec}s, "
+            f"words={word_count}, scenes={scene_count}"
+        )
+    if not scene_count_ok:
+        review_reasons.append(
+            f"SCENE_COUNT_OUT_OF_RANGE: got {scene_count} scenes, "
+            f"expected 4-{MAX_SCENES_FOR_SHORT}"
+        )
+
+    status = "SCRIPT_DRAFT" if all_ok else "REVIEW_REQUIRED"
 
     metadata = {
         "jobId": job_id,
@@ -493,11 +545,16 @@ def main() -> int:
             "minSec": min_sec,
             "maxSec": max_sec,
             "strictness": strictness,
-            "estimatedDurationSec": round(estimated_dur, 1),
+            "spokenWordsPerMinute": SPOKEN_WORDS_PER_MINUTE,
+            "estimatedScenePauseMs": ESTIMATED_SCENE_PAUSE_MS,
             "wordCount": word_count,
+            "sceneCount": scene_count,
+            "spokenDurationSec": round(spoken_sec, 1),
+            "pauseDurationSec": round(pause_sec, 1),
+            "estimatedDurationSec": round(estimated_dur, 1),
             "retries": retries,
             "retryHistory": retry_history,
-            "status": "PASS" if duration_ok_after_retries else "FAIL",
+            "status": "PASS" if all_ok else "FAIL",
         },
         "createdAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
@@ -505,7 +562,8 @@ def main() -> int:
 
     if review_reasons:
         metadata["reviewReasons"] = review_reasons
-        print(f"REVIEW_REQUIRED: {'; '.join(review_reasons)}")
+        for r in review_reasons:
+            print(f"REVIEW_REQUIRED: {r}")
 
     if args.output:
         out_path = Path(args.output).resolve()
@@ -532,8 +590,10 @@ def main() -> int:
         "narrativeBeats": total_beats,
         "segmentsWithMotion": total_with_motion,
         "wordCount": word_count,
+        "spokenDurationSec": round(spoken_sec, 1),
+        "pauseDurationSec": round(pause_sec, 1),
         "estimatedDurationSec": round(estimated_dur, 1),
-        "durationContractStatus": "PASS" if duration_ok_after_retries else "FAIL",
+        "durationContractStatus": "PASS" if all_ok else "FAIL",
         "retries": retries,
         "status": status,
     }))

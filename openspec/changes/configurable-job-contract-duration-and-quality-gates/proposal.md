@@ -19,7 +19,7 @@
 ## Alcance incluido
 
 - Fix `group_words_into_cues()` to enforce scene boundaries as hard flush points.
-- Add `NARRATION_WORDS_PER_MINUTE` config with a default of 145.
+- Add `NARRATION_WORDS_PER_MINUTE` config with a default of 110 (measured median of Edge TTS Spanish effective rate).
 - Add `duration` config to metadata with `targetSec`, `minSec`, `maxSec`, `strictness`.
 - Validate script word count against target duration before accepting LLM output.
 - Validate actual audio duration against target after synthesis; set REVIEW_REQUIRED if outside range.
@@ -48,9 +48,9 @@ Each word is assigned a `sceneNumber` by sequential matching against narration u
 ```json
 {
   "duration": {
-    "targetSec": 35,
-    "minSec": 30,
-    "maxSec": 40,
+    "targetSec": 28,
+    "minSec": 25,
+    "maxSec": 30,
     "strictness": "balanced"
   }
 }
@@ -60,6 +60,10 @@ Strictness modes:
 - `strict`: narration must remain within target ±10%
 - `balanced`: narration must remain within min/max range (default for shorts)
 - `relaxed`: target is advisory, actual duration reported
+
+Word budget at 110 WPM: ~46 words (25s) to ~55 words (30s), target ~51 words (28s).
+Measured effective rate (including inter-sentence pauses): 107-114 WPM across 3 runs.
+110 WPM chosen as conservative median within the observed range.
 
 Word budget: `word_count = int(targetSec * NARRATION_WORDS_PER_MINUTE / 60)`
 
@@ -88,8 +92,9 @@ When `--skip-asset-validation` is used and any asset fails validation, final sta
 2. No cue exceeds its scene window by more than 0.05s (tolerance).
 3. Wright-style "Kitty Hawk El" cross-scene leakage is detected and blocked.
 4. Pompeya-style "cenizas Una" cross-scene leakage is detected and blocked.
-5. Requested 35s with actual 25s in balanced mode is not accepted silently.
-6. Requested 35s with actual 33s in balanced mode passes.
+5. Requested 28s with actual 24s in balanced mode is not accepted silently (below 25s min).
+6. Requested 28s with actual 31s in balanced mode fails (above 30s max).
+7. Requested 28s with actual 28s in balanced mode passes.
 7. `render_job.py` and `validate_job.py` calculate matching coverage status.
 8. Invalid assets produce `RENDERED_WITH_ASSET_WARNINGS` not `RENDERED`.
 9. `request` and `resolvedConfig` are present in metadata and manifest.
