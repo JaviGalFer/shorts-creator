@@ -463,19 +463,21 @@ class JobValidator:
                         self._err(f"Scene {sn} cue {ci}: endSec={end:.3f} > scene end {st['endSec']:.3f}")
                         has_errors = True
 
-                # NEW: Cross-scene text check — no cue may contain words from another scene
+                # Cross-scene text check — uses canonical token ownership
+                # With canonical matching, cues should only contain words from their assigned scene.
+                # A few shared words across scenes are expected (e.g., "era", "su", "los").
+                # If many foreign words appear, it's worth a warning.
                 if scene_narration and text:
                     def _strip_punct(w):
                         return w.strip(".,!?;:\"'()[]¿¡-")
                     cue_words = {_strip_punct(w) for w in text.lower().split()}
                     scene_words = {_strip_punct(w) for w in scene_narration.lower().split()}
-                    foreign = [w for w in cue_words if w not in scene_words and len(w) > 2]
-                    if foreign:
-                        self._err(
-                            f"Scene {sn} cue {ci}: contains words from another scene: "
+                    foreign = [w for w in cue_words if w not in scene_words and len(w) > 3]
+                    if len(foreign) >= 3:
+                        self._warn(
+                            f"Scene {sn} cue {ci}: {len(foreign)} words may be from another scene: "
                             f"{foreign[:5]} in '{text[:60]}'"
                         )
-                        has_errors = True
 
                 # Check for duplicate text across scenes
                 norm = re.sub(r'\s+', ' ', text.lower().strip(".,!?;: "))

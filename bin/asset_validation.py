@@ -15,10 +15,13 @@ PLACEHOLDER_KEYWORDS = ["placeholder", "fallback", "no_image", "debug", "test_pa
 EDITORIAL_ROLE_COMPATIBILITY = {
     "context_map": ["historical_map", "map", "document", "illustration"],
     "battle_action": ["historical_photograph", "historical_art_or_document", "atmospheric_broll", "illustration"],
-    "battle_or_assault": ["historical_photograph", "historical_art_or_document", "atmospheric_broll", "illustration"],
+    "battle_or_assault": ["historical_photograph", "historical_art_or_document"],
+    "border_closure_construction": ["historical_photograph", "historical_art_or_document"],
     "portrait": ["historical_photograph", "historical_art_or_document", "painting"],
     "aftermath": ["historical_photograph", "atmospheric_broll", "historical_art_or_document"],
-    "consequence_or_legacy": ["historical_photograph", "atmospheric_broll", "historical_art_or_document"],
+    "document_or_date": ["document", "newspaper", "historical_map"],
+    "civilian_impact": ["historical_photograph", "historical_art_or_document"],
+    "consequence_or_legacy": ["historical_photograph", "historical_art_or_document", "reuse_previous_valid_asset"],
     "legacy": ["atmospheric_broll", "modern_photograph", "historical_photograph"],
     "abstract": ["atmospheric_broll", "generated_reconstruction", "illustration"],
     "unknown": None,
@@ -244,6 +247,65 @@ def _is_modern_street(segment: dict) -> bool:
     return False
 
 
+def check_role_evidence(segment: dict, editorial_role: str) -> list[dict]:
+    """Validate role-specific semantic evidence requirements (Fase 19)."""
+    failures = []
+    se = segment.get("semanticEvidence") or {}
+    if editorial_role == "border_closure_construction":
+        border_ev = se.get("borderClosureSubjectEvidence", [])
+        if not border_ev:
+            failures.append({
+                "rule": "missing_border_closure_evidence",
+                "message": f"border_closure_construction requires non-empty borderClosureSubjectEvidence, got {border_ev}",
+            })
+    if editorial_role == "consequence_or_legacy":
+        # For event_depiction scenes, require depicted-date or fall/opening subject evidence.
+        depicted = se.get("sourceDepictedDateEvidence", [])
+        fall_open = se.get("fallOpeningSubjectEvidence", [])
+        # Heuristic: validation only fails when neither is present AND the
+        # scene's narration mentions an event year (handled by fetch_images hard
+        # rule). For validation, we warn if both are empty for reused assets.
+        if segment.get("reuseReason") == "reuse_previous_valid_asset" and not depicted and not fall_open:
+            failures.append({
+                "rule": "reused_asset_no_event_evidence",
+                "message": "Reused asset for event_depiction lacks sourceDepictedDateEvidence and fallOpeningSubjectEvidence",
+            })
+    return failures
+
+
+def check_reuse_compatibility(segment: dict, scene: dict) -> list[dict]:
+    """Reject reuse where originalSceneNumber/role differs materially from target event."""
+    failures = []
+    if segment.get("reuseReason") != "reuse_previous_valid_asset":
+        return failures
+    orig_role = segment.get("originalEditorialRole") or segment.get("editorialRole", "")
+    se = segment.get("semanticEvidence") or {}
+    depicted = set(se.get("sourceDepictedDateEvidence", []))
+    division_subj = se.get("divisionSubjectEvidence", [])
+    fall_open = se.get("fallOpeningSubjectEvidence", [])
+    # Extract target event year from scene voiceover
+    target_years: set[str] = set()
+    vo = (scene.get("voiceover") or "")
+    for tok in vo.split():
+        c = tok.strip(".,;:!?()[]{}'\"")
+        if c.isdigit() and len(c) == 4:
+            target_years.add(c)
+    if target_years and depicted and not target_years.intersection(depicted):
+        if orig_role == "civilian_impact":
+            failures.append({
+                "rule": "reuse_civilian_impact_for_distinct_event",
+                "message": (f"Reused civilian_impact asset (depicted {sorted(depicted)}) "
+                            f"cannot depict target event {sorted(target_years)}"),
+            })
+        if division_subj and not fall_open:
+            failures.append({
+                "rule": "reuse_division_subject_for_distinct_event",
+                "message": (f"Reused division/family subject (divisionSubjectEvidence={division_subj[:2]}) "
+                            f"incompatible with target event {sorted(target_years)}"),
+            })
+    return failures
+
+
 def check_modern_asset_context(segment: dict, beat_text: str, editorial_role: str) -> list[dict]:
     if not _is_modern_asset(segment):
         return []
@@ -303,18 +365,31 @@ def validate_job_for_render(metadata: dict, project_root: Path, video_dir: Path 
         coherence_issues = check_editorial_coherence(entry, seg_asset, topic)
         provider_issues = check_provider_allowed(seg_asset)
 
+        # Renderability status check (from fetch_images pre-check)
+        renderability_status = (seg_asset or {}).get("renderabilityStatus")
+        renderability_issues = []
+        if renderability_status == "FAIL":
+            reasons = (seg_asset or {}).get("renderabilityReasons", [])
+            renderability_issues.append({"rule": "renderability_fail", "message": f"Asset marked as unrenderable: {reasons}"})
+
         scene_data = scene_by_num.get(sn, {})
         beat_text = " ".join(
             b.get("text", "") for b in scene_data.get("narrativeBeats", [])
         ).strip() or scene_data.get("voiceover", "") or ""
         editorial_role = (seg_asset.get("editorialRole") if seg_asset else
                           entry.get("assetType", ""))
+        # Role evidence / reuse compatibility checks (Fase 19)
+        role_evidence_issues = check_role_evidence(seg_asset or {}, editorial_role)
+        scene_data_for_reuse = scene_by_num.get(sn, {})
+        reuse_issues = check_reuse_compatibility(seg_asset or {}, scene_data_for_reuse)
+
         modern_issues = check_modern_asset_context(
             seg_asset or {}, beat_text, editorial_role
         )
 
         all_issues = (file_issues + placeholder_issues + metadata_issues
-                      + coherence_issues + provider_issues + modern_issues)
+                       + coherence_issues + provider_issues + modern_issues + renderability_issues
+                       + role_evidence_issues + reuse_issues)
         seg_result["failures"] = all_issues
         if all_issues:
             seg_result["valid"] = False
@@ -335,6 +410,13 @@ def validate_job_for_render(metadata: dict, project_root: Path, video_dir: Path 
         status = "BLOCKED"
     elif metadata_fail_count >= 2 or has_editorial_fail:
         status = "BLOCKED"
+    elif any(f["rule"] in ("missing_border_closure_evidence",
+                           "reuse_civilian_impact_for_distinct_event",
+                           "reuse_division_subject_for_distinct_event")
+             for f in failures):
+        status = "BLOCKED"
+    elif any(f["rule"] == "reused_asset_no_event_evidence" for f in failures):
+        status = "REVIEW_REQUIRED"
     elif metadata_fail_count == 1:
         status = "REVIEW_REQUIRED"
     elif score_below:

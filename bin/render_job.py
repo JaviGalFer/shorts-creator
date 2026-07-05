@@ -8,6 +8,7 @@ import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import asset_validation
@@ -170,13 +171,72 @@ def build_overlay_filter(overlay_text: str, input_label: str, out_label: str) ->
 
 
 # ---------------------------------------------------------------------------
+# Cross-job artifact isolation
+# ---------------------------------------------------------------------------
+
+_PATH_KEYS = {
+    "path", "imagepath", "assetpath", "audiopath",
+}
+
+
+def _collect_local_paths(obj: Any) -> list[str]:
+    """Collect string values from known path fields in metadata."""
+    paths: list[str] = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            key_lower = k.lower()
+            if isinstance(v, str) and (key_lower in _PATH_KEYS or key_lower.endswith("path")):
+                val = v.strip()
+                if val and not val.lower().startswith(("http://", "https://", "data:")):
+                    paths.append(val)
+            elif isinstance(v, (dict, list)):
+                paths.extend(_collect_local_paths(v))
+    elif isinstance(obj, list):
+        for item in obj:
+            paths.extend(_collect_local_paths(item))
+    return paths
+
+
+def validate_no_cross_job_paths(data: dict, video_dir: Path, project_root: Path) -> list[str]:
+    """Return errors for any local path that does not belong to the current job directory."""
+    errors: list[str] = []
+    video_dir_resolved = video_dir.resolve()
+    for raw in _collect_local_paths(data):
+        raw_path = Path(raw)
+        if raw_path.is_absolute():
+            resolved = raw_path.resolve()
+        else:
+            candidate = video_dir_resolved / raw_path
+            candidate2 = project_root.resolve() / raw_path
+            if candidate.exists():
+                resolved = candidate.resolve()
+            elif candidate2.exists():
+                resolved = candidate2.resolve()
+            else:
+                resolved = candidate
+        try:
+            resolved.relative_to(video_dir_resolved)
+        except ValueError:
+            errors.append(
+                f"CROSS_JOB_ARTIFACT_REFERENCE: path={raw} resolves outside current job dir "
+                f"({video_dir_resolved})"
+            )
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Preflight validation
 # ---------------------------------------------------------------------------
 
 def preflight_validate(render_timeline: list[dict], scenes: list[dict], project_root: Path, video_dir: Path,
                        expected_total: float | None = None,
-                       is_continuous_audio: bool = False) -> list[str]:
+                       is_continuous_audio: bool = False,
+                       metadata: dict | None = None) -> list[str]:
     errors = []
+
+    if metadata is not None:
+        errors.extend(validate_no_cross_job_paths(metadata, video_dir, project_root))
+
     audio_durations = {}
 
     for sc in scenes:
@@ -217,13 +277,16 @@ def preflight_validate(render_timeline: list[dict], scenes: list[dict], project_
             errors.append(f"{prefix}: durationSec={dur} > {MAX_SEGMENT_DURATION}s (max segment)")
 
         asset_path = entry.get("assetPath") or ""
-        if asset_path.startswith("scenes/"):
+        if not asset_path:
+            errors.append(f"{prefix}: assetPath is empty/null — unresolved asset")
+        elif asset_path.startswith("scenes/"):
             full_path = video_dir / asset_path
+            if not full_path.exists():
+                errors.append(f"{prefix}: assetPath={asset_path} not found")
         else:
             full_path = Path(asset_path)
-
-        if not full_path.exists():
-            errors.append(f"{prefix}: assetPath={asset_path} not found")
+            if not full_path.exists():
+                errors.append(f"{prefix}: assetPath={asset_path} not found")
 
         if not is_continuous_audio:
             total_video_sec += dur
@@ -501,7 +564,8 @@ def main() -> int:
     if not args.skip_validation:
         expected_total = audio_config.get('durationSec', 0) if is_continuous_audio else None
         errors = preflight_validate(render_timeline, data["script"]["scenes"], project_root, video_dir,
-                                    expected_total=expected_total, is_continuous_audio=is_continuous_audio)
+                                    expected_total=expected_total, is_continuous_audio=is_continuous_audio,
+                                    metadata=data)
         if errors:
             print("PREFLIGHT VALIDATION FAILED:")
             for e in errors:
@@ -555,6 +619,12 @@ def main() -> int:
             expected_duration += dur
         seg_idx = entry.get("segmentIndex", 1)
         asset_path = entry.get("assetPath") or ""
+
+        if not asset_path:
+            print(f"FATAL: entry scene={sn} has null assetPath — unresolved asset, aborting")
+            ffmpeg_ok = False
+            ffmpeg_exit_code = -1
+            break
 
         # Image input: -loop 1 (no -t, infinite stream)
         if asset_path.startswith("scenes/"):

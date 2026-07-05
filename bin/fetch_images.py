@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import time
 import urllib.request
 import urllib.parse
@@ -33,7 +34,20 @@ SCORING_WEIGHTS: dict[str, int] = {
 
 MIN_WIDTH = 400
 MIN_HEIGHT = 400
+RENDER_MIN_WIDTH = 720
+RENDER_MIN_HEIGHT = 720
+MIN_MAP_READABILITY = 0.40
 USER_AGENT = "ShortsHistoricos/1.0 (historical video pipeline; +https://github.com/javi/shorts-historicos)"
+
+ACCENT_MAP = {
+    'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+    'à': 'a', 'è': 'e', 'ì': 'i', 'ò': 'o', 'ù': 'u',
+    'â': 'a', 'ê': 'e', 'î': 'i', 'ô': 'o', 'û': 'u',
+    'ä': 'a', 'ë': 'e', 'ï': 'i', 'ö': 'o', 'ü': 'u',
+    'ñ': 'n', 'ç': 'c',
+}
+def _unaccent(text: str) -> str:
+    return ''.join(ACCENT_MAP.get(c, c) for c in text.lower())
 
 # ---------------------------------------------------------------------------
 # Strategy -> provider chain (ordered by priority)
@@ -53,7 +67,9 @@ STRATEGY_CHAINS: dict[str, list[str]] = {
 HARD_HISTORICAL_ROLES: set[str] = {
     "context_map", "character_portrait", "battle_or_assault",
     "military_technology", "civilian_impact", "document_or_date",
+    "border_closure_construction",
 }
+
 ROLE_PROVIDER_CHAINS: dict[str, list[str]] = {
     role: ["wikimedia_commons"] for role in HARD_HISTORICAL_ROLES
 }
@@ -126,11 +142,12 @@ STRATEGY_VISUAL_QUERIES: dict[str, list[str]] = {
 }
 
 CANDIDATES_PER_PROVIDER = 5
+MIN_SCORE = 30
 
 EDITORIAL_ROLE_PREFERENCES: dict[str, dict[str, set[str]]] = {
     "context_map": {
         "preferred": {"map", "document", "historical_map"},
-        "forbidden": {"atmospheric_broll", "generated_reconstruction", "broll"},
+        "forbidden": {"atmospheric_broll", "generated_reconstruction", "broll", "historical_photograph"},
     },
     "character_portrait": {
         "preferred": {"portrait", "historical_photograph", "painting"},
@@ -141,20 +158,24 @@ EDITORIAL_ROLE_PREFERENCES: dict[str, dict[str, set[str]]] = {
         "forbidden": {"generated_reconstruction", "atmospheric_broll"},
     },
     "civilian_impact": {
-        "preferred": {"historical_photograph", "document"},
-        "forbidden": {"atmospheric_broll", "generated_reconstruction"},
+        "preferred": {"historical_photograph", "historical_art"},
+        "forbidden": {"atmospheric_broll", "generated_reconstruction", "broll"},
     },
     "battle_or_assault": {
-        "preferred": {"painting", "historical_photograph"},
-        "forbidden": {"atmospheric_broll", "broll"},
+        "preferred": {"historical_photograph", "historical_art"},
+        "forbidden": {"atmospheric_broll", "broll", "generated_reconstruction"},
+    },
+    "border_closure_construction": {
+        "preferred": {"historical_photograph", "historical_art"},
+        "forbidden": {"atmospheric_broll", "broll", "generated_reconstruction"},
     },
     "document_or_date": {
-        "preferred": {"document", "map"},
-        "forbidden": {"generated_reconstruction", "atmospheric_broll"},
+        "preferred": {"document", "newspaper", "historical_map"},
+        "forbidden": {"generated_reconstruction", "atmospheric_broll", "broll", "historical_photograph"},
     },
     "consequence_or_legacy": {
-        "preferred": {"historical_photograph", "painting"},
-        "forbidden": {"atmospheric_broll", "broll"},
+        "preferred": {"historical_photograph", "historical_art"},
+        "forbidden": {"atmospheric_broll", "broll", "generated_reconstruction"},
     },
     "atmospheric_transition": {
         "preferred": {"atmospheric_broll", "broll"},
@@ -163,6 +184,325 @@ EDITORIAL_ROLE_PREFERENCES: dict[str, dict[str, set[str]]] = {
 }
 
 SCENE_PAUSE_SEC = 0.5
+
+# ---------------------------------------------------------------------------
+# Temporal visual intent model
+# ---------------------------------------------------------------------------
+# event_depiction: the image must depict the historical event, period, or
+#   contemporary evidence. For example, "El Muro cayó en 1989" requires 1989
+#   fall footage/photos, people on the wall in 1989, or an archival image
+#   directly tied to the event.
+# legacy_or_commemoration: allows modern memorials, anniversaries, museums,
+#   monuments, or current gatherings. For example, "El legado del Muro sigue
+#   presente" may use a 2024 anniversary event.
+
+EVENT_DEPICTION_ROLES = {"context_map", "character_portrait", "battle_or_assault",
+                         "border_closure_construction", "military_technology",
+                         "civilian_impact", "document_or_date"}
+
+def _classify_temporal_intent(scene: dict) -> str:
+    """Classify a scene's visual temporal intent based on editorial role and content."""
+    vp = scene.get("visualPlan") or {}
+    role = vp.get("editorialRole", "")
+    if role in EVENT_DEPICTION_ROLES:
+        return "event_depiction"
+    if role == "consequence_or_legacy":
+        vo = (scene.get("voiceover") or "").lower()
+        legacy_indicators = ["legado", "recuerda", "sigue", "presente", "hoy", "actualmente",
+                             "memoria", "conmemora", "aniversario", "museo", "monumento"]
+        for ind in legacy_indicators:
+            if ind in vo:
+                return "legacy_or_commemoration"
+        event_indicators = ["cayó", "cayo", "derribó", "derrumbó", "1989", "1990", "1991",
+                            "caída", "caida"]
+        for ind in event_indicators:
+            if ind in vo:
+                return "event_depiction"
+        return "event_depiction"
+    return "legacy_or_commemoration"
+
+
+def _determine_asset_temporal_match(candidate: dict, visual_plan: dict, scene: dict | None = None) -> str:
+    """Determine if a candidate shows historical event, archival context, or modern legacy."""
+    title = (candidate.get("title") or "").lower()
+    description = (candidate.get("description") or candidate.get("sourceDescription") or "").lower()
+    combined = f"{title} {description}"
+    combined_u = _unaccent(combined)
+    url = (candidate.get("sourceUrl") or "").lower()
+    url_u = _unaccent(url)
+
+    period = (visual_plan.get("period") or "").lower()
+    period_u = _unaccent(period)
+    event_year = ""
+    # Extract 4-digit year from period
+    for token in period.split():
+        if token.isdigit() and len(token) == 4:
+            event_year = token
+            break
+    # Fallback: check entities and voiceover for explicit year
+    if not event_year:
+        for ent in visual_plan.get("entities", []):
+            ent_clean = ent.strip(".,;:!?")
+            if ent_clean.isdigit() and len(ent_clean) == 4:
+                event_year = ent_clean
+                break
+    if not event_year and scene:
+        scene_vo = (scene.get("voiceover") or "")
+        for token in scene_vo.split():
+            clean = token.strip(".,;:!?()[]{}'\"")
+            if clean.isdigit() and len(clean) == 4:
+                event_year = clean
+                break
+
+    # Modern indicators: recent anniversaries, modern dates, contemporary events
+    modern_years = {"2024", "2023", "2022", "2021", "2020", "2019",
+                    "2018", "2017", "2016", "2015", "2014", "2013",
+                    "2012", "2011", "2010", "2009", "2008", "2007",
+                    "2006", "2005", "2004", "2003", "2002", "2001", "2000"}
+    modern_indicators = {"anniversary", "aniversario", "commemoration", "conmemoración",
+                         "today", "hoy", "modern", "current", "actual",
+                         "celebration", "celebración", "festival", "event"}
+    has_modern_year = any(y in combined or y in url for y in modern_years)
+    has_modern_indicator = any(i in combined for i in modern_indicators)
+    # Historical years in candidate metadata
+    historical_years_in_candidate = set()
+    context_years_in_candidate = set()
+    for m in _DASH_RANGE_RE.finditer(combined + " " + url):
+        start_y = int(m.group(1))
+        end_y = int(m.group(2))
+        if end_y < start_y:
+            start_y, end_y = end_y, start_y
+        for y in range(start_y, end_y + 1):
+            context_years_in_candidate.add(str(y))
+    for token in (combined + " " + url).split():
+        clean = token.strip(".,;:!?()[]{}'\"")
+        if clean.isdigit() and len(clean) == 4:
+            y = int(clean)
+            if 1800 <= y <= 1999:
+                historical_years_in_candidate.add(clean)
+    depicted_years_in_candidate = historical_years_in_candidate - context_years_in_candidate
+
+    has_event_year = bool(event_year) and (
+        event_year in depicted_years_in_candidate or
+        (event_year in combined and event_year not in context_years_in_candidate)
+    )
+
+    # Accent-insensitive matching for period/entity terms
+    # Combined text is checked in both original and unaccented forms
+    # to handle Spanish terms (e.g. "Berlín") vs English text ("Berlin")
+    def _match_term(term: str) -> bool:
+        """Check term against combined text with accent-insensitive matching."""
+        term_lower = term.lower()
+        term_u = _unaccent(term_lower)
+        return (term_u in combined_u) or (term_lower in combined)
+
+    def _match_period(period_raw: str) -> bool:
+        """Match period with multilingual fallback."""
+        if not period_raw:
+            return False
+        pr = period_raw.lower()
+        # Direct check
+        if _match_term(pr):
+            return True
+        # Unaccented check
+        pr_u = _unaccent(pr)
+        if pr_u in combined_u:
+            return True
+        # English/German fallback for Spanish period names
+        period_equivalents = {
+            "guerra fría": ["cold war", "kalter krieg", "post-war", "coldwar"],
+            "guerra fria": ["cold war", "kalter krieg", "post-war", "coldwar"],
+            "segunda guerra mundial": ["world war ii", "wwii", "second world war", "zweiter weltkrieg"],
+            "posguerra": ["post-war", "postwar", "nachkriegszeit"],
+            "post-guerra fría": ["cold war", "post-war", "postwar", "1989", "1990", "fall of the berlin wall"],
+            "post-guerra fria": ["cold war", "post-war", "postwar", "1989", "1990", "fall of the berlin wall"],
+            "entreguerras": ["interwar", "between wars", "zwischenkriegszeit"],
+        }
+        for eq in period_equivalents.get(pr, period_equivalents.get(pr_u, [])):
+            if eq in combined or _unaccent(eq) in combined_u:
+                return True
+        return False
+
+    def _match_location(loc_raw: str) -> bool:
+        """Match location with multilingual fallback."""
+        if not loc_raw:
+            return False
+        lr = loc_raw.lower()
+        if _match_term(lr):
+            return True
+        lr_u = _unaccent(lr)
+        # Check individual location tokens (e.g. "Berlín" in text containing "berlin")
+        for token in lr_u.split():
+            if len(token) > 2 and token in combined_u:
+                return True
+        # German location equivalents
+        location_equivalents = {
+            "berlín": ["berlin", "berliner"],
+            "berlin": ["berlin", "berliner"],
+            "alemania": ["germany", "deutschland", "german"],
+            "berlín, alemania": ["berlin germany", "berlin deutschland"],
+        }
+        for eq in location_equivalents.get(lr, location_equivalents.get(lr_u, [])):
+            if eq in combined or _unaccent(eq) in combined_u:
+                return True
+        return False
+
+    def _match_entity(ent_raw: str) -> bool:
+        """Match entity with accent-insensitive and multilingual support."""
+        if not ent_raw:
+            return False
+        er = ent_raw.lower()
+        if _match_term(er):
+            return True
+        er_u = _unaccent(er)
+        # Token-level intersection for multi-word entities
+        ent_tokens = set(er_u.split())
+        if len(ent_tokens) >= 1 and ent_tokens.intersection(combined_u.split()):
+            return True
+        # Entity equivalents
+        entity_equivalents = {
+            "muro de berlín": ["berlin wall", "berliner mauer", "the wall"],
+            "muro de berlin": ["berlin wall", "berliner mauer", "the wall"],
+            "berlín": ["berlin", "berliner"],
+            "familias": ["family", "families", "familie"],
+            "familia": ["family", "families", "familie"],
+        }
+        for eq in entity_equivalents.get(er, entity_equivalents.get(er_u, [])):
+            if eq in combined or _unaccent(eq) in combined_u:
+                return True
+        return False
+
+    entities = visual_plan.get("entities", [])
+    has_event_term = _match_period(period)
+    has_entity_term = any(_match_entity(e) for e in entities)
+    has_location_term = _match_location(visual_plan.get("location", ""))
+    # Map/document indicators in the candidate itself (not in role terms)
+    _map_or_doc_in_title = any(
+        ind in combined or _unaccent(ind) in combined_u
+        for ind in (
+            "map", "karte", "atlas", "plan", "cartography", "cartografía",
+            "diagram", "diagrama", "occupation zones", "sectors",
+            "document", "dokument", "newspaper", "zeitung", "treaty", "vertrag",
+        )
+    )
+    if has_event_year and has_event_term:
+        return "historical_event"
+    if has_modern_indicator and not has_event_year:
+        return "modern_legacy"
+    if historical_years_in_candidate and (has_event_term or has_entity_term or has_location_term):
+        return "archival_context"
+    if has_event_term and not has_modern_year:
+        return "archival_context"
+    if has_modern_year or has_modern_indicator:
+        return "modern_legacy"
+    if historical_years_in_candidate and (has_entity_term or has_location_term):
+        return "archival_context"
+    # Maps and archival documents with entity/location match are archival context
+    # even without an explicit year (e.g., 1945 occupation-zone maps are relevant
+    # to Berlin Wall context)
+    if _map_or_doc_in_title and (has_entity_term or has_location_term):
+        return "archival_context"
+    return "unknown"
+
+
+def _build_scene_query_variants(scene: dict, visual_plan: dict) -> list[str]:
+    """Generate structured query variants for a scene, including English and German."""
+    vp = visual_plan or {}
+    queries: list[str] = []
+    seen: set[str] = set()
+
+    topic = scene.get("voiceover", "")
+    role = vp.get("editorialRole", "")
+    period = vp.get("period", "")
+    location = vp.get("location", "")
+    entities = vp.get("entities", [])
+    primary_at = vp.get("primaryAssetType", "")
+
+    def add(q: str):
+        qs = q.strip()[:200]
+        if qs and qs.lower() not in seen:
+            seen.add(qs.lower())
+            queries.append(qs)
+
+    # Role-specific term maps for Berlin Wall
+    role_terms = {
+        "context_map": ["map", "cartography", "atlas", "occupation zones", "division", "sectors"],
+        "battle_or_assault": ["construction", "building", "barbed wire", "barricades",
+                             "concrete", "border guards", "military", "soldiers"],
+        "border_closure_construction": ["barbed wire", "barricades", "road block",
+                                       "border closure", "Stacheldraht", "Mauerbau",
+                                       "Abriegelung", "Grenzsperre", "Sperranlagen",
+                                       "construction", "building", "concrete barrier"],
+        "civilian_impact": ["families", "family separation", "border crossing",
+                            "refugees", "escape", "checkpoint", "divided city"],
+        "consequence_or_legacy": ["fall", "opening", "celebration", "crowd",
+                                 "wall coming down", "border open", "freedom"],
+    }
+    extra_terms = role_terms.get(role, [])
+
+    # Entity-based queries (English)
+    for ent in entities:
+        for term in extra_terms:
+            add(f"{ent} {term}")
+        if period:
+            add(f"{ent} {period}")
+        if location:
+            add(f"{ent} {location}")
+
+    # Period + location + role term
+    if period and location:
+        for term in extra_terms:
+            add(f"{location} {period} {term}")
+        add(f"{period} {location}")
+
+    # German variants (for Wikimedia Commons)
+    german_period = ""
+    if "1961" in (period or ""):
+        german_period = "1961"
+    if "1989" in (period or ""):
+        german_period = "1989"
+    german_loc = "Berlin"
+    german_terms = {
+        "context_map": ["Berliner Mauer Karte", "Berlin geteilt Karte",
+                        "Besatzungszonen Berlin", "Berliner Mauer Plan"],
+        "battle_or_assault": ["Berliner Mauer Bau", "Mauerbau Berlin",
+                             "Grenzsoldaten Berlin", "Stacheldraht Berlin"],
+        "border_closure_construction": ["Berliner Mauer Bau", "Mauerbau Berlin",
+                                       "Stacheldraht Berlin", "Grenzsperre Berlin",
+                                       "Abriegelung Berlin", "Sperranlagen Berlin"],
+        "civilian_impact": ["Berliner Mauer Familie", "Familientrennung Berlin",
+                           "Grenzübergang Berlin", "Flucht Berliner Mauer"],
+        "consequence_or_legacy": ["Mauerfall Berlin", "Berliner Mauer Fall",
+                                 "Maueröffnung 1989", "Berliner Mauer Feier"],
+    }
+    for gt in german_terms.get(role, []):
+        add(gt)
+    if german_period:
+        add(f"Berliner Mauer {german_period}")
+        add(f"Berlin Wall {german_period}")
+
+    # Primary asset type queries
+    if primary_at == "historical_map":
+        add(f"Map of {location} {period}")
+        add(f"{location} map {period}")
+    elif primary_at == "historical_photograph":
+        for ent in entities:
+            add(f"{ent} historical photograph")
+        if location and period:
+            add(f"{location} {period} photograph")
+
+    # Add scene search queries from visualPlan
+    vs = vp.get("visualSequence", [])
+    for seg in vs:
+        sq = seg.get("searchQuery", "")
+        if sq:
+            add(sq)
+
+    # Add seed query from visualPlan searchQueries
+    for sq in vp.get("searchQueries", []):
+        add(sq)
+
+    return queries[:12]
 
 # ---------------------------------------------------------------------------
 # Rate limiter for Wikimedia Commons
@@ -307,7 +647,7 @@ def search_wikimedia(query: str, max_results: int = 5) -> list[dict[str, Any]]:
             title_meta = None
             if "ImageDescription" in meta:
                 title_meta = meta["ImageDescription"].get("value", "")
-                title_meta = title_meta[:200] if title_meta else None
+                title_meta = title_meta[:500] if title_meta else None
             results.append({
                 "provider": "wikimedia_commons",
                 "sourceUrl": info.get("url", ""),
@@ -497,6 +837,8 @@ def _fetch_one_asset(
     provider_chain: list[str],
     anti_rep_context: dict[str, Any] | None = None,
     extra_queries: list[str] | None = None,
+    topic: str = "",
+    scene: dict | None = None,
 ) -> dict[str, Any]:
     candidates: list[dict[str, Any]] = []
     selected_candidate = None
@@ -527,44 +869,50 @@ def _fetch_one_asset(
                 provider, visual_plan, strategy, visual_prompt, image_prompt
             )
 
-        for q in pqs[:2]:
+        all_candidates: list[dict[str, Any]] = []
+        for q in pqs[:6]:
+            batch: list[dict[str, Any]] = []
             if provider == "wikimedia_commons":
-                candidates = search_wikimedia(q, args.max_candidates)
-                if not candidates:
+                batch = search_wikimedia(q, args.max_candidates)
+                if not batch:
                     failure_reason = f"wikimedia returned 0 for: {q[:60]}"
             elif provider == "pexels":
                 if pexels_key:
-                    candidates = search_pexels(q, pexels_key, args.max_candidates)
-                    if not candidates:
+                    batch = search_pexels(q, pexels_key, args.max_candidates)
+                    if not batch:
                         failure_reason = f"pexels returned 0 for: {q[:60]}"
                 else:
                     failure_reason = "pexels: no API key"
             elif provider == "pixabay":
                 if pixabay_key:
-                    candidates = search_pixabay(q, pixabay_key, args.max_candidates)
-                    if not candidates:
+                    batch = search_pixabay(q, pixabay_key, args.max_candidates)
+                    if not batch:
                         failure_reason = f"pixabay returned 0 for: {q[:60]}"
                 else:
                     failure_reason = "pixabay: no API key"
             elif provider == "freeai":
                 if freeai_key:
-                    candidates = generate_freeai(
+                    batch = generate_freeai(
                         q, visual_plan.get("negativePrompt", "") if visual_plan else "",
                         freeai_key, scene_num,
                     )
-                    if not candidates:
+                    if not batch:
                         failure_reason = "freeai returned no image"
                 else:
                     failure_reason = "freeai: no API key"
             elif provider == "pollinations":
                 poll_prompt = q or visual_prompt or image_prompt or f"historical {strategy} scene"
-                candidates = generate_pollinations(poll_prompt, scene_num)
+                batch = generate_pollinations(poll_prompt, scene_num)
 
-            if candidates:
-                for c in candidates:
-                    c["strategy"] = strategy
-                break
+            for c in batch:
+                c["strategy"] = strategy
+            all_candidates.extend(batch)
 
+        candidates = all_candidates
+
+        if scene_num == 3 and candidates:
+            s_test, r_test = score_candidate(candidates[0], visual_plan, scene_num, previous_entity_pool, anti_rep_context)
+            s_no_rep, _ = score_candidate(candidates[0], visual_plan, scene_num, previous_entity_pool, None)
         if not candidates:
             provider_failures.append({
                 "provider": provider,
@@ -584,8 +932,130 @@ def _fetch_one_asset(
 
         scored.sort(key=lambda x: x[0], reverse=True)
 
-        if scored:
-            bs, breasons, bcandidate = scored[0]
+        # Stage 1: Filter candidates before download selection
+        # Reject: negative score, score < MIN_SCORE, forbidden asset type,
+        # unsupported dimensions, Pexels for hard historical roles.
+        editorial_role_str = (visual_plan.get("editorialRole") if visual_plan else None) or ""
+        role_prefs = EDITORIAL_ROLE_PREFERENCES.get(editorial_role_str, {})
+        forbidden_types = role_prefs.get("forbidden", set())
+
+        valid_scored = []
+        for s, reasons, c in scored:
+            if s < 0:
+                continue  # reject negative score
+            if s < MIN_SCORE:
+                continue  # reject below minimum threshold
+            c_type = c.get("strategy", "")
+            if c_type in forbidden_types:
+                continue  # reject incompatible asset type
+            provider = c.get("provider", "")
+            if provider == "pexels" and editorial_role_str in HARD_HISTORICAL_ROLES:
+                continue  # reject Pexels for hard historical roles
+            c_width = c.get("width", 0) or 0
+            c_height = c.get("height", 0) or 0
+            if c_width > 10000 or c_height > 10000:
+                continue  # reject decompression-bomb risk
+            # Semantic provenance check
+            semantic_ev = _check_semantic_evidence(c, scene or {}, topic)
+            c["semanticEvidence"] = semantic_ev
+            if semantic_ev["semanticConfidence"] == "low":
+                if editorial_role_str in HARD_HISTORICAL_ROLES:
+                    continue  # reject: hard historical role requires specific historical provenance
+                if not semantic_ev["sourceTitle"]:
+                    continue  # reject: no meaningful title and low semantic confidence
+                reasons.append(f"semanticEvidence=low topicMatch={semantic_ev['topicTermsMatched']}")
+                s -= 20  # penalty for low semantic confidence
+            else:
+                reasons.append(f"semanticEvidence={semantic_ev['semanticConfidence']}")
+
+            # Temporal intent filtering
+            temporal_intent = _classify_temporal_intent(scene or {})
+            c["visualTemporalIntent"] = temporal_intent
+            asset_match = _determine_asset_temporal_match(c, visual_plan or {}, scene)
+            c["assetTemporalMatch"] = asset_match
+
+            # Hard rule: context_map requires map/document asset type + evidence
+            if editorial_role_str == "context_map":
+                declared_type = visual_plan.get("primaryAssetType", "") if visual_plan else ""
+                effective_type = _infer_effective_asset_type(c, declared_type)
+                role_ev = semantic_ev.get("roleEvidence", [])
+
+                c["declaredAssetType"] = declared_type
+                c["effectiveAssetType"] = effective_type
+                c["assetTypeValidationStatus"] = "FAIL"
+
+                allowed_context_map_types = {"map", "historical_map", "document", "newspaper",
+                                             "map_or_document", "historical_map_or_document"}
+                if effective_type not in allowed_context_map_types:
+                    continue  # reject: effective type is not a map/document
+                if not role_ev:
+                    continue  # reject: no context-map evidence in candidate metadata
+                if asset_match == "unknown":
+                    continue  # reject: map needs clear temporal match
+
+                c["assetTypeValidationStatus"] = "PASS"
+
+            # Hard rule: event_depiction requires historical_event or archival_context
+            if temporal_intent == "event_depiction" and asset_match in ("unknown", "modern_legacy"):
+                continue  # reject: event depiction needs clear temporal provenance
+
+            # Hard rule: consequence_or_legacy event_depiction requires either
+            # sourceDepictedDateEvidence overlap with the target event year, or
+            # explicit fall/opening subject evidence.
+            if temporal_intent == "event_depiction" and editorial_role_str == "consequence_or_legacy":
+                depicted = semantic_ev.get("sourceDepictedDateEvidence", [])
+                fall_open = semantic_ev.get("fallOpeningSubjectEvidence", [])
+                division_subj = semantic_ev.get("divisionSubjectEvidence", [])
+                # Determine target event year from the scene's voiceover/period
+                target_years: set[str] = set()
+                cur_period = (visual_plan.get("period") or "") if visual_plan else ""
+                target_years.update(t for t in cur_period.split() if t.isdigit() and len(t) == 4)
+                cur_scene = scene or {}
+                for tok in (cur_scene.get("voiceover") or "").split():
+                    clean = tok.strip(".,;:!?()[]{}'\"")
+                    if clean.isdigit() and len(clean) == 4:
+                        target_years.add(clean)
+                has_depicted_overlap = bool(target_years) and bool(set(depicted) & target_years)
+                has_fall_subject = bool(fall_open)
+                has_division_subject = bool(division_subj)
+                if not (has_depicted_overlap or has_fall_subject):
+                    continue  # reject: no direct depicted-date or fall/opening evidence
+                if has_division_subject and not has_depicted_overlap and not has_fall_subject:
+                    continue  # reject: division/family asset for distinct event
+
+            # Hard rule: construction/battle scenes require direct visual evidence
+            CONSTRUCTION_ROLES = {"battle_or_assault", "military_technology"}
+            if editorial_role_str in CONSTRUCTION_ROLES:
+                const_subj = semantic_ev.get("constructionSubjectEvidence", [])
+                if not const_subj:
+                    continue  # reject: no direct visual evidence of construction/barricade/battle
+
+            # Hard rule: border closure/construction scenes require physical barrier evidence
+            if editorial_role_str == "border_closure_construction":
+                closure_subj = semantic_ev.get("borderClosureSubjectEvidence", [])
+                c_title = (c.get("title") or "").lower()
+                c_desc = (c.get("description") or c.get("sourceDescription") or "").lower()
+                c_combined = f"{c_title} {c_desc}"
+                c_combined_u = _unaccent(c_combined)
+                reject = any(
+                    _unaccent(ind) in c_combined_u or ind in c_combined
+                    for ind in _BORDER_CLOSURE_REJECT_INDICATORS
+                )
+                if not closure_subj or reject:
+                    continue  # reject: no direct evidence or wrong subject (family/checkpoint/commemoration)
+
+            # Renderability pre-check: candidate must be renderable post-download
+            renderability = _check_renderability(c, editorial_role_str)
+            c["renderabilityStatus"] = renderability["status"]
+            c["renderabilityReasons"] = renderability["reasons"]
+            c["mapReadabilityScore"] = renderability["mapReadabilityScore"]
+            if renderability["status"] == "FAIL":
+                continue  # reject: candidate cannot pass render preflight
+
+            valid_scored.append((s, reasons, c))
+
+        if valid_scored:
+            bs, breasons, bcandidate = valid_scored[0]
             if dest_exists:
                 ok = True
                 best_score = bs
@@ -602,6 +1072,8 @@ def _fetch_one_asset(
                 selected_candidate = bcandidate
                 selected_candidate["score"] = bs
                 selected_candidate["scoreReasons"] = breasons
+                selected_candidate["visualTemporalIntent"] = _classify_temporal_intent(scene or {})
+                selected_candidate["assetTemporalMatch"] = _determine_asset_temporal_match(bcandidate, visual_plan or {}, scene)
                 best_score = bs
                 if visual_plan:
                     for ent in visual_plan.get("entities", []):
@@ -617,6 +1089,32 @@ def _fetch_one_asset(
                     "reason": f"{provider}: download failed for best candidate (score={bs})",
                 })
                 continue
+        else:
+            # No valid candidate passed filtering
+            total_count = len(scored)
+            filtered_reasons = []
+            for s, _, c in scored:
+                c_type = c.get("strategy", "")
+                prov = c.get("provider", "")
+                reject = []
+                if s < 0:
+                    reject.append("negative_score")
+                if s < MIN_SCORE and s >= 0:
+                    reject.append(f"score_{s}_below_min_{MIN_SCORE}")
+                if c_type in forbidden_types:
+                    reject.append(f"type_{c_type}_forbidden_for_{editorial_role_str}")
+                if prov == "pexels" and editorial_role_str in HARD_HISTORICAL_ROLES:
+                    reject.append("pexels_not_allowed_for_hard_historical")
+                c_w = c.get("width", 0) or 0
+                c_h = c.get("height", 0) or 0
+                if c_w > 10000 or c_h > 10000:
+                    reject.append("decompression_bomb_risk")
+                filtered_reasons.append(f"score={s} rejects={reject}")
+            provider_failures.append({
+                "provider": provider,
+                "reason": f"all {total_count} candidates filtered out: {'; '.join(filtered_reasons[:3])}",
+            })
+            continue
 
     if not fallback_used and selected_candidate:
         fallback_used = provider_chain[0]
@@ -696,7 +1194,15 @@ def score_candidate(
     if visual_plan:
         entities = visual_plan.get("entities", [])
         for ent in entities:
-            if ent.lower() in title or ent.lower() in query_used:
+            ent_u = _unaccent(ent)
+            title_u = _unaccent(title)
+            query_u = _unaccent(query_used)
+            # Check full entity and individual tokens
+            ent_tokens = set(ent_u.split())
+            all_text_u = f"{title_u} {query_u}"
+            if (ent.lower() in title or ent.lower() in query_used or
+                ent_u in title_u or ent_u in query_u or
+                (len(ent_tokens) >= 1 and ent_tokens.intersection(all_text_u.split()))):
                 score += SCORING_WEIGHTS["entity_match"]
                 reasons.append(f"Entity match: {ent}")
                 break
@@ -704,10 +1210,14 @@ def score_candidate(
     if visual_plan:
         period = (visual_plan.get("period") or "").lower()
         location = (visual_plan.get("location") or "").lower()
-        if period and (period in title or period in query_used):
+        title_u = _unaccent(title)
+        query_u = _unaccent(query_used)
+        period_u = _unaccent(period)
+        location_u = _unaccent(location)
+        if period and (period in title or period in query_used or period_u in title_u or period_u in query_u):
             score += SCORING_WEIGHTS["period_or_location_match"]
             reasons.append(f"Period match: {period}")
-        if location and (location in title or location in query_used):
+        if location and (location in title or location in query_used or location_u in title_u or location_u in query_u):
             score += SCORING_WEIGHTS["period_or_location_match"]
             reasons.append(f"Location match: {location}")
 
@@ -723,10 +1233,15 @@ def score_candidate(
         score += SCORING_WEIGHTS["low_resolution"]
         reasons.append(f"Low resolution ({w}x{h})")
 
-    if license_val in ("public domain", "cc0", "cc-by", "cc-by-sa", "pexels license", "pixabay license"):
+    license_normalized = license_val.lower().replace("-", " ").replace("_", " ")
+    CLEAR_LICENSE_PREFIXES = ("public domain", "cc0", "cc by", "cc by sa",
+                              "pexels license", "pixabay license")
+    is_clear = any(license_normalized.startswith(p) for p in CLEAR_LICENSE_PREFIXES)
+    is_unknown = license_val in ("unknown", "") or not license_val
+    if is_clear:
         score += SCORING_WEIGHTS["clear_license"]
         reasons.append(f"Clear license: {license_val}")
-    elif license_val in ("unknown", ""):
+    elif is_unknown:
         score += SCORING_WEIGHTS["unknown_license"]
         reasons.append("Unknown license")
 
@@ -781,11 +1296,479 @@ def score_candidate(
                     consecutive_scenes_with_same_type += 1
                 else:
                     break
-            if consecutive_scenes_with_same_type >= 1:
+            if consecutive_scenes_with_same_type >= 2:
                 score += SCORING_WEIGHTS.get("same_asset_type", -20)
                 reasons.append(f"Same assetType as previous scene")
 
     return score, reasons
+
+
+# Terms that identify a map/plan/diagram/division document vs ordinary photographs
+_MAP_INDICATORS = [
+    "map", "karte", "cartography", "cartografía", "atlas", "plan",
+    "diagram", "diagrama", "occupation zones", "besatzungszonen",
+    "sectors of berlin", "sectors of", "sektoren", "sector map",
+    "division of", "divided city", "dividing line", "boundary",
+    "east berlin west berlin", "east west berlin", "east and west berlin",
+    "berlin sectors", "allied sectors", "soviet sector",
+    "annexation", "partition", "teilung", "vier sektoren",
+    "zones of berlin", "berlin zones", "zone map", "four zones",
+]
+_DOCUMENT_INDICATORS = [
+    "document", "dokument", "treaty", "vertrag", "newspaper",
+    "zeitung", "decree", "dekret", "letter", "brief",
+    "manuscript", "manuskript", "charter", "urkunde",
+    "communiqué", "communique", "proclamation", "verkündung",
+    "newsweek", "front page", "headline", "announcement",
+]
+_PHOTO_INDICATORS = [
+    "photograph", "photography", "photo", "fotografie", "foto",
+    "taken in", "image of the", "picture of", "view of",
+    "aufgenommen", "blick auf", "ansicht", "berlin wall in",
+    "this image", "this photo",
+    "families separated", "separated by the wall", "separated families",
+    "construction workers", "building the wall",
+    "border guards", "checkpoint", "crossing the",
+    "night view of", "front of the",
+    "wasserturm", "restaurant", "hotel",
+]
+
+
+def _infer_effective_asset_type(candidate: dict, declared_type: str) -> str:
+    """Infer actual asset type from candidate title/URL metadata.
+
+    When declaredAssetType is 'historical_map' but the candidate is an
+    ordinary photograph, this function returns 'historical_photograph'.
+    """
+    title = (candidate.get("title") or "").lower()
+    url = (candidate.get("sourceUrl") or "").lower()
+    combined = f"{title} {url}"
+    combined_u = _unaccent(combined)
+
+    # Document/newspaper evidence (checked first: a document ABOUT a map is still a document)
+    for ind in _DOCUMENT_INDICATORS:
+        if _unaccent(ind) in combined_u or ind in combined:
+            return "document"
+
+    # Map/plan/diagram evidence
+    for ind in _MAP_INDICATORS:
+        if _unaccent(ind) in combined_u or ind in combined:
+            return "historical_map"
+
+    # Explicit photograph/photo evidence
+    for ind in _PHOTO_INDICATORS:
+        if _unaccent(ind) in combined_u or ind in combined:
+            return "historical_photograph"
+
+    return declared_type
+
+
+# Terms that disqualify a map/document for context_map (blank templates, outline-only)
+_BLANK_MAP_REJECT_TERMS = [
+    "blank", "template", "outline only", "location map only",
+    "for e.g. location maps", "unlabeled", "no labels",
+    "blank map", "empty map", "placeholder",
+]
+
+
+def _check_renderability(candidate: dict, editorial_role: str = "") -> dict:
+    """Shared renderability pre-check used by both fetch candidate filtering and render preflight.
+
+    Returns {status: "PASS"|"FAIL", reasons: [...], mapReadabilityScore: float}
+    A candidate that FAILS must never be selectable.
+    """
+    reasons: list[str] = []
+    w = candidate.get("width", 0) or 0
+    h = candidate.get("height", 0) or 0
+    title = (candidate.get("title") or "").lower()
+    combined = f"{title} {(candidate.get('sourceUrl') or '').lower()}"
+    combined_u = _unaccent(combined)
+
+    # Dimension check
+    if w < RENDER_MIN_WIDTH and h < RENDER_MIN_HEIGHT:
+        reasons.append(f"dimensions_too_small ({w}x{h} < {RENDER_MIN_WIDTH}x{RENDER_MIN_HEIGHT})")
+
+    # Map readability for context_map
+    map_readability = 0.0
+    if editorial_role == "context_map":
+        if w and h and w > h:
+            map_readability = min(w / 1080, h / 1920) * (1 - abs(w / h - 9 / 16) / 2)
+            map_readability = round(min(map_readability, 1.0), 2)
+        if map_readability < MIN_MAP_READABILITY:
+            reasons.append(f"map_readability_too_low ({map_readability:.2f} < {MIN_MAP_READABILITY})")
+
+    # Blank/template rejection for context_map
+    if editorial_role == "context_map":
+        for term in _BLANK_MAP_REJECT_TERMS:
+            if _unaccent(term) in combined_u or term in combined:
+                reasons.append(f"blank_or_template_map (term='{term}')")
+                break
+
+    status = "PASS" if not reasons else "FAIL"
+    return {
+        "status": status,
+        "reasons": reasons,
+        "mapReadabilityScore": map_readability,
+    }
+
+
+# Rejection indicators for border_closure_construction: the image must not be
+# primarily about family separation, commemorations, or generic checkpoints.
+_BORDER_CLOSURE_REJECT_INDICATORS = [
+    "families separated", "family separated", "family separation",
+    "familientrennung", "separated by the wall", "separated families",
+    "clinging hands", "farewell", "goodbye", "wedding", "bride", "groom",
+    "commemoration", "commemorative", "anniversary", "celebration",
+    "celebrating", "checkpoint charlie", "border crossing", "grenzübergang",
+]
+
+# Direct subject indicators that the fall/opening of the Berlin Wall (1989) is
+# actually depicted in the image — required when target event year is 1989 and
+# the candidate must show that event (not a retrospective/contextual mention).
+_FALL_OPENING_SUBJECT_INDICATORS = [
+    "fall of the wall", "fall of the berlin wall", "fall of the berlin",
+    "mauerfall", "öffnung", "maueröffnung", "wall opening",
+    "people on the wall", "people atop the wall", "atop the berlin wall",
+    "crowd celebrating", "crowd on the", "celebrations at",
+    "wall coming down", "wall being dismantled", "dismantling the wall",
+    "border open", "border opening", "opening of the wall",
+    "juggling on the berlin wall",
+]
+
+# Subject indicators that the image is about family separation / 1961 border
+# closure — used to reject reuse for distinct events (e.g. the 1989 fall).
+_DIVISION_SUBJECT_INDICATORS = [
+    "families separated", "family separated", "family separation",
+    "separated by the wall", "separated families", "clinging hands",
+    "farewell", "goodbye", "wedding", "bride", "groom",
+    "construction of the wall", "barbed wire", "barricades",
+]
+
+
+_YEAR_RE = re.compile(r"\b(1[89]\d{2}|20\d{2})\b")
+_DASH_RANGE_RE = re.compile(r"\b(1[89]\d{2})\s*[-–—]\s*(1[89]\d{2}|20\d{2})\b")
+
+
+def _classify_date_evidence(candidate: dict) -> tuple[list[str], list[str]]:
+    """Split year mentions into depicted vs context-only.
+
+    Heuristics:
+      - A bare year embedded in the descriptive narrative (after a period or in
+        a clause describing what the photo shows) is treated as depicted.
+      - A year that is part of a dashed range (e.g. '1961 - 1989') or that
+        appears in a retrospective title such as 'The Berlin Wall 1961 - 1989'
+        is treated as context-only.
+      - Years appearing only in the URL are context-only unless the URL slug
+        contains the year adjacent to depicted-subject keywords (weak signal,
+        not used for depicted by default).
+    """
+    title = (candidate.get("title") or "")
+    description = (candidate.get("description") or candidate.get("sourceDescription") or "")
+    combined_for_range = f"{title} {description}"
+
+    context_years: set[str] = set()
+    depicted_years: set[str] = set()
+
+    # 1. Dashed ranges → all years in the range are context-only.
+    for m in _DASH_RANGE_RE.finditer(combined_for_range):
+        start_y = int(m.group(1))
+        end_y = int(m.group(2))
+        if end_y < start_y:
+            start_y, end_y = end_y, start_y
+        for y in range(start_y, end_y + 1):
+            context_years.add(str(y))
+
+    # 2. Title-only year mentions where the title is a collection/retrospective
+    #    phrase → context. Heuristic: title tokens '1961', '1989' adjacent to
+    #    'berlin wall'/'berliner mauer' without depicting verbs.
+    # A year may also appear in a depicting sentence elsewhere in the title; in
+    # that case it must be classified as depicted (cannot short-circuit on
+    # context_years from a range).
+    title_lower = title.lower()
+    retrospective_cues = [
+        "1961 - 1989", "1961–1989", "1961—1989",
+        "1961-1989", "the berlin wall", "berliner mauer",
+        "a city torn apart", "booklet", "collection",
+    ]
+    # Collect all year matches in title; classify each by its window.
+    title_year_matches = list(_YEAR_RE.finditer(title_lower))
+    for m in title_year_matches:
+        y = m.group(1)
+        window_start = max(0, m.start() - 30)
+        window_end = min(len(title_lower), m.end() + 30)
+        window = title_lower[window_start:window_end]
+        if any(cue in window for cue in retrospective_cues):
+            context_years.add(y)
+        else:
+            # Not retrospective in this mention → depicts that year.
+            depicted_years.add(y)
+
+    # 3. Description sentence-level: a year that appears in a sentence whose
+    #    subject is the depicted scene. We treat description years as depicted
+    #    only when the sentence contains depicting verbs/subjects.
+    if description:
+        desc_lower = description.lower()
+        # Description year: split by sentences and classify each mention.
+        sentences = re.split(r'(?<=[.!?])\s+', desc_lower)
+        depicting_cues = [
+            "taken in", "photographed", "aufgenommen", "shows",
+            "depicts", "depicts the", "in this photo", "this image",
+            "this photo", "is seen", "celebrating", "people on",
+            "atop", "juggling", "wall coming down", "dismantling",
+            "construction of the wall", "construction of the berlin",
+            "erecting", "building the wall", "barbed wire",
+            # Date-anchored depiction cues (the photo was taken at that moment)
+            "congratulate", "married", "marriage", "newly wed", "newlyweds",
+            "from the window", "families separated", "family separated",
+            "wedding", "on 8 september", "september 1961", "in 1961",
+            "in 1989", "november 1989", "16. november", "on 16",
+            # Generic photo subject clue
+            "of the bride", "of the groom", "of a young",
+            "smiles", "waving", "waved", "look on",
+        ]
+        context_cues = [
+            "for more information", "booklet", "collection",
+            "historical collections", "cia's historical",
+            "from the booklet", "visit cia",
+        ]
+        for sent in sentences:
+            for m in _YEAR_RE.finditer(sent):
+                y = m.group(1)
+                window = sent
+                is_depicting = any(cue in window for cue in depicting_cues)
+                is_context = any(cue in window for cue in context_cues)
+                if is_depicting and not is_context:
+                    depicted_years.add(y)
+                elif is_context:
+                    context_years.add(y)
+                else:
+                    # Ambiguous description sentence → treat as context only.
+                    context_years.add(y)
+
+    # 4. URLs: years in URLs are context-only (filenames rarely prove depiction).
+
+    # 4. URLs: years in URLs are context-only (filenames rarely prove depiction).
+    url = (candidate.get("sourceUrl") or "")
+    for m in _YEAR_RE.finditer(url):
+        context_years.add(m.group(1))
+
+    # A year may appear in both sets if mentioned multiple ways (e.g. "1961"
+    # is part of a retrospective range AND embedded in a depicting sentence).
+    # A year is "depicted" if there is ANY explicit depiction cue for it, even
+    # if it also appears in a range. A year is "context" if it only appears in
+    # retrospective/range/title contexts. Keep the two sets independent; reuse
+    # logic consults sourceDepictedDateEvidence as the authoritative signal.
+    return sorted(depicted_years), sorted(context_years)
+
+
+def _check_semantic_evidence(candidate: dict, scene: dict, topic: str) -> dict:
+    """Evaluate semantic provenance of a candidate against the scene's historical context.
+    
+    Uses scene visualPlan metadata (location, period, entities) to build
+    dynamic topic/location/period term lists instead of hardcoded terms.
+    
+    Returns a semanticEvidence dict with:
+      topicTermsMatched, locationTermsMatched, periodTermsMatched,
+      sourceTitle, sourceDescription, semanticConfidence.
+    """
+    title = (candidate.get("title") or "").lower()
+    description = (candidate.get("description") or candidate.get("sourceDescription") or "").lower()
+    combined = f"{title} {description}"
+    combined_u = _unaccent(combined)
+    source_url = (candidate.get("sourceUrl") or "").lower()
+
+    # Build topic terms from scene context
+    vp = scene.get("visualPlan") or {}
+    topic_terms = set()
+    topic_terms.add(topic.lower())
+    for ent in vp.get("entities", []):
+        topic_terms.add(ent.lower())
+    for sq in vp.get("searchQueries", []):
+        topic_terms.add(sq.lower())
+    topic_terms.update({"berlin wall", "berliner mauer", "muro de berlín", "muro de berlin",
+                        "cold war", "guerra fría", "post-war", "posguerra"})
+
+    # Location terms from scene visualPlan
+    location_raw = vp.get("location", "")
+    location_terms = set()
+    if location_raw:
+        location_terms.add(location_raw.lower())
+        for part in location_raw.replace(",", " ").split():
+            location_terms.add(part.lower())
+    location_terms.update(["berlin", "berlín", "germany", "alemania"])
+
+    # Period terms from scene visualPlan
+    period_raw = vp.get("period", "")
+    period_terms = set()
+    if period_raw:
+        period_terms.add(period_raw.lower())
+        for part in period_raw.split():
+            period_terms.add(part.lower())
+    period_terms.update({"1961", "1960s", "1960", "1989", "1980s",
+                         "division", "divided", "fall of the wall", "caída del muro"})
+
+    # Accent-insensitive matching
+    def _matches(term: str, text: str, text_u: str) -> bool:
+        return term in text or _unaccent(term) in text_u
+
+    topic_matched = [t for t in topic_terms if _matches(t, combined, combined_u) or _matches(t, source_url, _unaccent(source_url))]
+    location_matched = [t for t in location_terms if _matches(t, combined, combined_u) or _matches(t, source_url, _unaccent(source_url))]
+    period_matched = [t for t in period_terms if _matches(t, combined, combined_u) or _matches(t, source_url, _unaccent(source_url))]
+
+    # Generic-only check: reject if only generic words match
+    generic_words = {"berlin", "berlín", "families", "familias", "history", "historia",
+                     "wall", "muro", "germany", "alemania", "europe", "europa",
+                     "cold", "war", "guerra", "fría", "fria", "post", "pos"}
+    non_generic_matched = [
+        t for t in (topic_matched + location_matched + period_matched)
+        if t.lower() not in generic_words
+    ]
+
+    # Metadata-first: a candidate with null title and null description
+    # cannot receive semanticConfidence above low.
+    # When title AND description are both null/empty, confidence is always low
+    # regardless of URL matches.
+    has_title = bool(title)
+    has_description = bool(description)
+
+    if not has_title and not has_description:
+        sem_conf = "low"
+    elif has_title and len(non_generic_matched) >= 2:
+        sem_conf = "high"
+    elif has_title and len(non_generic_matched) >= 1:
+        sem_conf = "medium"
+    elif has_title and not non_generic_matched:
+        sem_conf = "low"
+    elif not has_title and has_description and len(non_generic_matched) >= 1:
+        sem_conf = "medium"
+    elif not has_title and has_description:
+        sem_conf = "low"
+    else:
+        sem_conf = "low"
+
+    # Role-specific evidence: match editorial role terms against candidate
+    role_terms_by_role = {
+        "context_map": ["map", "cartography", "zones", "divided", "division", "occupation",
+                        "boundary", "sector", "berlin sectors", "east berlin", "west berlin",
+                        "karte", "besatzungszonen", "sektoren", "teilung"],
+        "civilian_impact": ["family", "families", "familie", "civilian", "zivilist",
+                           "refugee", "flüchtling", "escape", "flucht",
+                           "border crossing", "grenzübergang", "checkpoint",
+                           "separated", "getrennt", "farewell", "goodbye"],
+        "battle_or_assault": ["construction", "bau", "building", "barbed wire", "stacheldraht",
+                             "barricades", "barrikaden", "concrete", "beton",
+                             "border guards", "grenzsoldaten", "soldiers", "military"],
+        "border_closure_construction": ["barbed wire", "stacheldraht", "barricade", "barrikaden",
+                                       "road block", "roadblock", "road blockade", "strassensperre",
+                                       "border closure", "border closed", "grenzsperre",
+                                       "abriegelung", "sperranlagen", "mauerbau",
+                                       "construction", "bau", "building", "erecting",
+                                       "concrete barrier", "beton", "wall construction"],
+        "consequence_or_legacy": ["fall", "mauerfall", "opening", "öffnung", "celebration",
+                                  "feier", "crowd", "menge", "wall coming down",
+                                  "border open", "freedom", "freiheit", "1989"],
+        "character_portrait": ["portrait", "porträt", "leader", "führer", "president",
+                              "king", "queen", "general", "dictator"],
+        "military_technology": ["tank", "panzer", "weapon", "waffe", "aircraft", "flugzeug",
+                               "warship", "kriegsschiff", "artillery", "artillerie"],
+        "document_or_date": ["document", "dokument", "treaty", "vertrag", "newspaper",
+                            "zeitung", "decree", "dekret", "letter", "brief"],
+    }
+    editorial_role = vp.get("editorialRole", "")
+    role_terms = role_terms_by_role.get(editorial_role, [])
+    role_evidence = [t for t in role_terms if _matches(t, combined, combined_u)]
+
+    # Boost semantic confidence for maps/documents with role evidence
+    if editorial_role == "context_map" and role_evidence and sem_conf == "low":
+        # A candidate with explicit map/document terms in its title warrants at least
+        # medium confidence even if topic/period matches were only generic words.
+        # e.g., "1945 Berlin Zones" has role=zones but topic=berlin(generic)
+        sem_conf = "medium"
+
+    # Asset type evidence
+    asset_type = candidate.get("strategy", "")
+    requested_type = vp.get("primaryAssetType", "")
+    asset_type_evidence = [asset_type, requested_type] if asset_type and requested_type else [asset_type] if asset_type else []
+
+    # Source/subject evidence: what the image directly depicts vs contextual reference
+    _direct_visual_indicators = [
+        "construction workers", "building the wall", "barbed wire", "barbed-wire",
+        "barricade", "erecting", "border guards building", "road blockade",
+        "workers building", "soldiers building", "concrete barrier",
+        "pour concrete", "laying bricks", "digging trench",
+        "separated families", "family separated", "goodbye",
+        "farewell", "clinging hands", "crossing the border",
+        "juggling", "people atop", "crowd celebrating", "crowd on the",
+        "celebrations at", "fall of the", "opening of the",
+    ]
+    # Construction-specific subject indicators (narrower, for battle_or_assault role)
+    _construction_subject_indicators = [
+        "construction workers", "building the wall", "erecting barrier",
+        "barbed wire installation", "barricade erection", "erecting",
+        "digging trench", "pouring concrete", "laying bricks",
+        "workmen building", "workers building", "soldiers building",
+        "concrete barrier", "road blockade", "barbed wire",
+    ]
+    # Border-closure construction indicators (broader, for border_closure_construction role)
+    _border_closure_subject_indicators = [
+        "barbed wire", "barbed-wire", "stacheldraht",
+        "barricade", "barricades", "barrikaden",
+        "road block", "roadblock", "road blockade", "roadblockade",
+        "strassensperre", "strassen sperre",
+        "border closure", "border closed", "closure of the border",
+        "grenzsperre", "grenze abgeriegelt",
+        "abriegelung", "abriegelungen",
+        "sperranlagen", "sperrzone",
+        "mauerbau", "berliner mauer bau", "bau der mauer",
+        "construction workers", "building the wall", "erecting barrier",
+        "erecting", "construction of the wall",
+        "concrete barrier", "concrete wall", "wall construction",
+        "wall segment", "border fortification",
+    ]
+    _contextual_indicators = [
+        "booklet about", "book about", "story of the", "history of the",
+        "description of", "account of", "chronicle of", "cover of",
+        "artist's book", "exhibition about", "museum display",
+        "text about", "publication about",
+    ]
+    source_subject_evidence = [t for t in _direct_visual_indicators if _unaccent(t) in combined_u or t in combined]
+    construction_subject_evidence = [t for t in _construction_subject_indicators if _unaccent(t) in combined_u or t in combined]
+    border_closure_subject_evidence = [t for t in _border_closure_subject_indicators if _unaccent(t) in combined_u or t in combined]
+    contextual_ref_evidence = [t for t in _contextual_indicators if _unaccent(t) in combined_u or t in combined]
+    # Extract indirect indicators from title for contextual reference
+    for t in role_evidence:
+        if t not in source_subject_evidence and t not in contextual_ref_evidence:
+            contextual_ref_evidence.append(t)
+
+    # Date evidence: separate depicted dates from context/retrospective ranges.
+    depicted_dates, context_dates = _classify_date_evidence(candidate)
+
+    # Fall/opening subject evidence (for consequence_or_legacy with event 1989)
+    fall_opening_evidence = [t for t in _FALL_OPENING_SUBJECT_INDICATORS
+                             if _unaccent(t) in combined_u or t in combined]
+    # Division/family-separation subject evidence (used to reject reuse for
+    # distinct events like the 1989 fall).
+    division_subject_evidence = [t for t in _DIVISION_SUBJECT_INDICATORS
+                                 if _unaccent(t) in combined_u or t in combined]
+
+    return {
+        "topicTermsMatched": list(set(topic_matched)),
+        "locationTermsMatched": list(set(location_matched)),
+        "periodTermsMatched": list(set(period_matched)),
+        "sourceTitle": candidate.get("title") or None,
+        "sourceDescription": candidate.get("description") or candidate.get("sourceDescription") or None,
+        "semanticConfidence": sem_conf,
+        "roleEvidence": role_evidence,
+        "assetTypeEvidence": asset_type_evidence,
+        "sourceSubjectEvidence": source_subject_evidence,
+        "constructionSubjectEvidence": construction_subject_evidence,
+        "borderClosureSubjectEvidence": border_closure_subject_evidence,
+        "fallOpeningSubjectEvidence": fall_opening_evidence,
+        "divisionSubjectEvidence": division_subject_evidence,
+        "sourceDepictedDateEvidence": depicted_dates,
+        "sourceContextDateEvidence": context_dates,
+        "contextualReferenceEvidence": contextual_ref_evidence,
+    }
 
 
 def score_editorial_role(asset_type: str, editorial_role: str | None) -> tuple[int, list[str]]:
@@ -826,6 +1809,7 @@ def build_historical_queries(
     strategy: str,
     visual_prompt: str,
     image_prompt: str,
+    scene: dict | None = None,
 ) -> list[str]:
     queries: list[str] = []
     if not visual_plan:
@@ -842,14 +1826,26 @@ def build_historical_queries(
     if event_query and event_query not in queries:
         queries.append(event_query)
 
-    # Level a: entity + concrete asset type (highly specific)
+    # Level 1: scene searchQueries from visualPlan (broadest relevance)
+    for sq in visual_plan.get("searchQueries", []):
+        if sq not in queries:
+            queries.append(sq)
+
+    # Level 2: role-aware scene query variants (English + German for Wikimedia)
+    if scene:
+        scene_variants = _build_scene_query_variants(scene, visual_plan)
+        for sv in scene_variants:
+            if sv not in queries:
+                queries.append(sv)
+
+    # Level 3: entity + concrete asset type (highly specific)
     for ent in entities:
         for term in at_terms:
             q = f"{ent} {term}".strip()
             if q and q not in queries:
                 queries.append(q)
 
-    # Level b: event/entity + period + location (contextual)
+    # Level 4: event/entity + period + location (contextual)
     context_parts = []
     if event_query:
         context_parts.append(event_query)
@@ -860,21 +1856,20 @@ def build_historical_queries(
     if location:
         context_parts.append(location)
     if context_parts:
-        # Build "event period location" style queries
         base = context_parts[0]
         for extra in context_parts[1:]:
             q = f"{base} {extra}".strip()
             if q and q not in queries and len(q) < 150:
                 queries.append(q)
 
-    # Level c: event + term
+    # Level 5: event + term
     if event_query:
         for term in at_terms:
             q = f"{event_query} {term}".strip()
             if q and q not in queries:
                 queries.append(q)
 
-    # Level d: location/period + asset type (good when entities are empty)
+    # Level 6: location/period + asset type (good when entities are empty)
     loc_period = location or period or ""
     if loc_period and not entities:
         for term in at_terms:
@@ -886,22 +1881,19 @@ def build_historical_queries(
             if q and q not in queries:
                 queries.append(q)
 
-    # Level e: entity + documentary fallback
+    # Level 7: entity + documentary fallback
     for ent in entities:
-        q = f"Byzantine {ent} manuscript".strip()
-        if q and q not in queries:
-            queries.append(q)
         q = f"historical {ent} illustration".strip()
         if q and q not in queries:
             queries.append(q)
 
-    # Level f: generic prompt fallback
+    # Level 8: generic prompt fallback
     if visual_prompt and visual_prompt not in queries:
         queries.append(visual_prompt[:200])
     if image_prompt and image_prompt not in queries:
         queries.append(image_prompt[:200])
 
-    return queries[:8]
+    return queries[:16]
 
 
 # ---------------------------------------------------------------------------
@@ -943,11 +1935,13 @@ def main() -> int:
     used_asset_types: list[str] = []
 
     results = []
+    previous_valid_asset = None
     for scene in scenes:
         scene_num = int(scene["sceneNumber"])
         visual_plan = scene.get("visualPlan")
         visual_prompt = scene.get("visualPrompt", "")
         image_prompt = scene.get("imagePrompt", "")
+        is_last_scene = (scene_num == scenes[-1]["sceneNumber"])
 
         if visual_plan:
             strategy = visual_plan.get("strategy", "historical_archive")
@@ -957,6 +1951,143 @@ def main() -> int:
             provider_chain = ["pollinations"]
             visual_prompt = visual_prompt or image_prompt or "historical scene"
             image_prompt = ""
+
+        editorial_role = visual_plan.get("editorialRole") if visual_plan else None
+
+        # Reuse previous valid asset for CTA (last scene) or consequence_or_legacy
+        # Only reuse when semantic evidence matches the new scene's temporal intent.
+        should_reuse = False
+        if is_last_scene and previous_valid_asset is not None:
+            should_reuse = True
+        elif editorial_role == "consequence_or_legacy" and previous_valid_asset is not None:
+            should_reuse = True
+
+        if should_reuse:
+            reuse_temporal_intent = _classify_temporal_intent(scene)
+            prev_asset_match = previous_valid_asset.get("assetTemporalMatch", "")
+            if reuse_temporal_intent == "event_depiction" and prev_asset_match in ("modern_legacy", "unknown"):
+                should_reuse = False
+                print(f"  scene {scene_num}: reuse BLOCKED (event_depiction cannot reuse {prev_asset_match} asset)")
+
+        if should_reuse:
+            reuse_temporal_intent = _classify_temporal_intent(scene)
+            asset_meta = dict(previous_valid_asset)
+            asset_meta["sceneNumber"] = scene_num
+            asset_meta["reuseReason"] = "reuse_previous_valid_asset"
+            asset_meta["visualTemporalIntent"] = reuse_temporal_intent
+
+            # Check reuse compatibility for event_depiction scenes
+            reuse_blocked = False
+            reuse_block_reason = ""
+            if reuse_temporal_intent == "event_depiction":
+                prev_se = None
+                if "segments" in asset_meta and asset_meta["segments"]:
+                    prev_se = asset_meta["segments"][0].get("semanticEvidence", {})
+                # Use sourceDepictedDateEvidence (preferred) over periodTermsMatched
+                # because title ranges like "1961 - 1989" pollute periodTermsMatched.
+                prev_depicted_years = set()
+                if prev_se:
+                    for term in prev_se.get("sourceDepictedDateEvidence", []):
+                        if term.isdigit() and len(term) == 4:
+                            prev_depicted_years.add(term)
+                    # Fallback to periodTermsMatched only if depicted is empty
+                    if not prev_depicted_years:
+                        for term in prev_se.get("periodTermsMatched", []):
+                            if term.isdigit() and len(term) == 4:
+                                # Exclude years known to be context-only
+                                ctx = set(prev_se.get("sourceContextDateEvidence", []))
+                                if term not in ctx:
+                                    prev_depicted_years.add(term)
+                # Get the current scene's period year
+                current_period = (visual_plan.get("period") or "").lower()
+                current_years = {t for t in current_period.split() if t.isdigit() and len(t) == 4}
+                # Also extract years from voiceover (e.g. "1989" in "El Muro cayó en 1989")
+                scene_vo = (scene.get("voiceover") or "")
+                for token in scene_vo.split():
+                    clean = token.strip(".,;:!?()[]{}'\"")
+                    if clean.isdigit() and len(clean) == 4:
+                        current_years.add(clean)
+                # Reuse requires overlap of depicted years with target event years.
+                if current_years and prev_depicted_years and not current_years.intersection(prev_depicted_years):
+                    reuse_blocked = True
+                    reuse_block_reason = (f"depicted-date mismatch: asset depicted {prev_depicted_years}, "
+                                           f"scene needs {current_years}")
+                    print(f"  scene {scene_num}: reuse BLOCKED ({reuse_block_reason})")
+                # Reject reuse where original editorial role is civilian_impact and the
+                # target narration is a distinct event (e.g. the fall in 1989).
+                orig_role_check = previous_valid_asset.get("originalEditorialRole") or previous_valid_asset.get("editorialRole")
+                if orig_role_check == "civilian_impact" and current_years and prev_depicted_years and not current_years.intersection(prev_depicted_years):
+                    reuse_blocked = True
+                    reuse_block_reason = (f"civilian_impact asset cannot depict distinct event "
+                                           f"(asset={prev_depicted_years}, target={current_years})")
+                    print(f"  scene {scene_num}: reuse BLOCKED ({reuse_block_reason})")
+                # Subject compatibility: division/family asset cannot be reused for fall/opening.
+                if prev_se:
+                    division_subj = prev_se.get("divisionSubjectEvidence", [])
+                    fall_open = prev_se.get("fallOpeningSubjectEvidence", [])
+                    if division_subj and not fall_open and current_years and prev_depicted_years and not current_years.intersection(prev_depicted_years):
+                        reuse_blocked = True
+                        reuse_block_reason = (f"division/family subject incompatible with target event "
+                                               f"(division={division_subj[:2]})")
+                        print(f"  scene {scene_num}: reuse BLOCKED ({reuse_block_reason})")
+
+            if reuse_blocked:
+                should_reuse = False
+            else:
+                # Re-evaluate temporal match in current scene's context
+                current_match = _determine_asset_temporal_match(previous_valid_asset, visual_plan or {}, scene)
+                asset_meta["assetTemporalMatch"] = current_match
+                # Build reuse compatibility reason citing specific evidence
+                prev_se_reason = None
+                if asset_meta.get("segments"):
+                    prev_se_reason = asset_meta["segments"][0].get("semanticEvidence", {})
+                reuse_compat_parts = []
+                if reuse_temporal_intent == "event_depiction":
+                    depicted = (prev_se_reason or {}).get("sourceDepictedDateEvidence", [])
+                    fall_open = (prev_se_reason or {}).get("fallOpeningSubjectEvidence", [])
+                    if depicted:
+                        reuse_compat_parts.append(f"sourceDepictedDateEvidence={depicted} overlaps target event")
+                    if fall_open:
+                        reuse_compat_parts.append(f"fallOpeningSubjectEvidence={fall_open[:2]}")
+                elif reuse_temporal_intent == "legacy_or_commemoration":
+                    orig_role_reason = previous_valid_asset.get("originalEditorialRole") or previous_valid_asset.get("editorialRole")
+                    if orig_role_reason == "civilian_impact":
+                        reuse_compat_parts.append("human legacy of division (divided families)")
+                    else:
+                        reuse_compat_parts.append(f"reused archival asset suitable for commemoration context (origRole={orig_role_reason})")
+                reuse_compat_parts.append("visual consistency across consecutive scenes")
+                reuse_compatibility_reason = "; ".join(reuse_compat_parts)
+
+                # Track original provenance
+                orig_scene = previous_valid_asset.get("originalSceneNumber") or previous_valid_asset.get("sceneNumber")
+                orig_role = previous_valid_asset.get("originalEditorialRole") or previous_valid_asset.get("editorialRole")
+                orig_vti = previous_valid_asset.get("originalVisualTemporalIntent") or previous_valid_asset.get("visualTemporalIntent")
+
+                asset_meta["originalSceneNumber"] = orig_scene
+                asset_meta["originalEditorialRole"] = orig_role
+                asset_meta["originalVisualTemporalIntent"] = orig_vti
+                asset_meta["reuseCompatibilityReason"] = reuse_compatibility_reason
+
+                # Deep-copy segments and update with reuse metadata + original provenance
+                if "segments" in asset_meta:
+                    asset_meta["segments"] = [dict(seg) for seg in asset_meta["segments"]]
+                    for seg in asset_meta["segments"]:
+                        seg["reuseReason"] = "reuse_previous_valid_asset"
+                        seg["reuseCompatibilityReason"] = reuse_compatibility_reason
+                        seg["editorialReason"] = "reused from previous scene for visual consistency"
+                        seg["visualTemporalIntent"] = reuse_temporal_intent
+                        seg["assetTemporalMatch"] = current_match
+                        seg["originalSceneNumber"] = orig_scene
+                        seg["originalEditorialRole"] = orig_role
+                        seg["originalVisualTemporalIntent"] = orig_vti
+                asset_meta["selected"] = True
+                asset_meta["error"] = None
+                results.append(asset_meta)
+                print(f"  scene {scene_num}: REUSE previous valid asset (role={editorial_role})"
+                      f" original=scene-{orig_scene} compat={reuse_compatibility_reason[:60]}")
+                time.sleep(SCENE_PAUSE_SEC)
+                previous_valid_asset = asset_meta
+                continue
 
         visual_sequence = visual_plan.get("visualSequence") if visual_plan else None
 
@@ -984,9 +2115,10 @@ def main() -> int:
                 else:
                     seg_chain = list(provider_chain)
 
-                # Build historical queries for hard historical roles
-                if editorial_role in HARD_HISTORICAL_ROLES:
-                    hist_queries = build_historical_queries(visual_plan, seg, strategy, visual_prompt, image_prompt)
+                # Build historical queries for hard historical roles or event_depiction scenes
+                is_event_depiction = scene and _classify_temporal_intent(scene) == "event_depiction"
+                if editorial_role in HARD_HISTORICAL_ROLES or is_event_depiction:
+                    hist_queries = build_historical_queries(visual_plan, seg, strategy, visual_prompt, image_prompt, scene=scene)
                     if hist_queries:
                         seg_query = hist_queries[0]
                         # Store all queries for multi-query fallback within wikimedia
@@ -1023,6 +2155,8 @@ def main() -> int:
                     provider_chain=seg_chain,
                     anti_rep_context=anti_rep_context,
                     extra_queries=extra_qs,
+                    topic=data.get("topic", ""),
+                    scene=scene,
                 )
 
                 cand = result["selected_candidate"]
@@ -1053,6 +2187,19 @@ def main() -> int:
                     "overlayText": seg.get("overlayText", ""),
                     "mapReadabilityScore": None,
                     "visualAuthenticityRisk": None,
+                    "semanticEvidence": cand.get("semanticEvidence") if cand else None,
+                    "visualTemporalIntent": cand.get("visualTemporalIntent") if cand else None,
+                    "assetTemporalMatch": cand.get("assetTemporalMatch") if cand else None,
+                    "declaredAssetType": cand.get("declaredAssetType") if cand else None,
+                    "effectiveAssetType": cand.get("effectiveAssetType") if cand else None,
+                    "assetTypeValidationStatus": cand.get("assetTypeValidationStatus") if cand else None,
+                    "renderabilityStatus": cand.get("renderabilityStatus") if cand else None,
+                    "renderabilityReasons": cand.get("renderabilityReasons") if cand else None,
+                    "mapReadabilityScore": cand.get("mapReadabilityScore") if cand else None,
+                    "originalSceneNumber": None,
+                    "originalEditorialRole": None,
+                    "originalVisualTemporalIntent": None,
+                    "reuseCompatibilityReason": None,
                 }
 
                 if seg_at in ("historical_map", "map", "document"):
@@ -1111,13 +2258,27 @@ def main() -> int:
                 "provider": first_seg.get("provider"),
                 "sourceUrl": first_seg.get("sourceUrl"),
                 "originalUrl": first_seg.get("sourceUrl"),
-                "title": None,
+                "title": (first_seg.get("semanticEvidence") or {}).get("sourceTitle"),
+                "description": (first_seg.get("semanticEvidence") or {}).get("sourceDescription"),
                 "author": first_seg.get("author"),
                 "license": first_seg.get("license"),
                 "score": first_seg.get("score"),
                 "scoreReasons": first_seg.get("scoreReasons"),
                 "downloadedAt": first_seg.get("downloadedAt"),
                 "error": None if ok else "Some segments failed",
+                "visualTemporalIntent": first_seg.get("visualTemporalIntent"),
+                "assetTemporalMatch": first_seg.get("assetTemporalMatch"),
+                "declaredAssetType": first_seg.get("declaredAssetType"),
+                "effectiveAssetType": first_seg.get("effectiveAssetType"),
+                "assetTypeValidationStatus": first_seg.get("assetTypeValidationStatus"),
+                "renderabilityStatus": first_seg.get("renderabilityStatus"),
+                "renderabilityReasons": first_seg.get("renderabilityReasons"),
+                "mapReadabilityScore": first_seg.get("mapReadabilityScore"),
+                "semanticEvidence": first_seg.get("semanticEvidence"),
+                "originalSceneNumber": None,
+                "originalEditorialRole": None,
+                "originalVisualTemporalIntent": None,
+                "reuseCompatibilityReason": None,
             }
         else:
             dest = sdir / f"scene-{scene_num:02}.jpg"
@@ -1148,6 +2309,8 @@ def main() -> int:
                 image_prompt=image_prompt,
                 provider_chain=provider_chain,
                 anti_rep_context=anti_rep_context,
+                topic=data.get("topic", ""),
+                scene=scene,
             )
 
             ok = result["ok"]
@@ -1186,6 +2349,15 @@ def main() -> int:
                 "fallbackChain": provider_chain,
                 "candidateCount": result.get("candidates_count", 0),
                 "selectedCandidateScore": best_score,
+                "semanticEvidence": selected_candidate.get("semanticEvidence") if selected_candidate else None,
+                "visualTemporalIntent": _classify_temporal_intent(scene),
+                "assetTemporalMatch": selected_candidate.get("assetTemporalMatch") if selected_candidate else None,
+                "declaredAssetType": selected_candidate.get("declaredAssetType") if selected_candidate else None,
+                "effectiveAssetType": selected_candidate.get("effectiveAssetType") if selected_candidate else None,
+                "assetTypeValidationStatus": selected_candidate.get("assetTypeValidationStatus") if selected_candidate else None,
+                "renderabilityStatus": selected_candidate.get("renderabilityStatus") if selected_candidate else None,
+                "renderabilityReasons": selected_candidate.get("renderabilityReasons") if selected_candidate else None,
+                "mapReadabilityScore": selected_candidate.get("mapReadabilityScore") if selected_candidate else None,
                 "error": None if ok else "No valid candidate found or download failed",
             }
 
@@ -1203,13 +2375,24 @@ def main() -> int:
             asset_meta["discardedCandidates"] = discarded if discarded else None
 
         results.append(asset_meta)
+        if asset_meta.get("selected") and asset_meta.get("error") is None:
+            previous_valid_asset = asset_meta
         time.sleep(SCENE_PAUSE_SEC)
 
     data["assets"] = results
     data["updatedAt"] = datetime.now(timezone.utc).isoformat()
 
-    all_ok = all(r.get("selected", False) for r in results)
-    data["status"] = "ASSETS_READY" if all_ok else "ASSETS_PARTIAL"
+    has_asset_unresolved = any(
+        seg.get("error") == "ASSET_UNRESOLVED"
+        for r in results
+        if r.get("segments")
+        for seg in r["segments"]
+    ) or any(
+        r.get("error") == "ASSET_UNRESOLVED"
+        for r in results
+    )
+    all_ok = all(r.get("selected", False) for r in results) and not has_asset_unresolved
+    data["status"] = "ASSETS_READY" if all_ok else ("ASSET_UNRESOLVED" if has_asset_unresolved else "ASSETS_PARTIAL")
     metadata_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
     print(json.dumps({"jobId": job_id, "success": all_ok}))

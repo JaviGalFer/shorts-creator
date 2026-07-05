@@ -304,14 +304,19 @@ def build_render_timeline(scenes: list, assets: list, scenes_dir: Path,
                 if all_cue_indices_valid and start_cue_idx < len(cues) and end_cue_idx < len(cues):
                     start_sec = cues[start_cue_idx]["startSec"]
                     end_sec = cues[end_cue_idx]["endSec"]
-                    if is_continuous and bi == len(beats) and st_entry:
-                        end_sec = st_entry.get("endSec", end_sec)
                 else:
                     beat_share = 1.0 / len(beats)
                     beat_start = (bi - 1) * scene_duration * beat_share
                     beat_end = bi * scene_duration * beat_share
                     start_sec = scene_offset + beat_start
                     end_sec = scene_offset + beat_end
+
+                if is_continuous and st_entry:
+                    scene_end = st_entry.get("endSec", scene_offset + scene_duration)
+                    if bi == 1:
+                        start_sec = min(start_sec, scene_offset)
+                    if bi == len(beats):
+                        end_sec = max(end_sec, scene_end)
 
                 seg_idx = (bi - 1) % max(len(segments), 1)
                 seg = segments[seg_idx] if segments else {}
@@ -325,7 +330,7 @@ def build_render_timeline(scenes: list, assets: list, scenes_dir: Path,
                 motion_type = seg.get("motionType", "static")
                 overlay_text = seg.get("overlayText", "")
 
-                asset_path = seg.get("path", "") if segments else str(scenes_dir / f"scene-{sn:02}.jpg")
+                asset_path = (seg.get("path") or "") if segments else str(scenes_dir / f"scene-{sn:02}.jpg")
 
                 render_timeline.append({
                     "sceneNumber": sn,
@@ -365,7 +370,7 @@ def build_render_timeline(scenes: list, assets: list, scenes_dir: Path,
                 render_timeline.append({
                     "sceneNumber": sn,
                     "beatIndex": seg_idx,
-                    "assetPath": seg.get("path", ""),
+                    "assetPath": seg.get("path") or "",
                     "startSec": round(start_sec, 3),
                     "endSec": round(end_sec, 3),
                     "durationSec": round(seg_duration, 3),
@@ -407,6 +412,42 @@ def build_render_timeline(scenes: list, assets: list, scenes_dir: Path,
             })
 
     return render_timeline
+
+
+def _fill_timeline_gaps(timeline: list[dict], narration_duration_sec: float | None = None) -> list[dict]:
+    """Fill gaps between render timeline entries by extending previous visual coverage.
+    
+    Ensures: visual start <= 0.05s, gap <= 0.05s between entries, end at narration_duration.
+    """
+    if not timeline:
+        return timeline
+    
+    # Sort by startSec
+    timeline.sort(key=lambda e: e.get("startSec", 0))
+    
+    # Fix start: first entry must begin at <= 0.0
+    if timeline[0].get("startSec", 0) > 0.05:
+        timeline[0]["startSec"] = 0.0
+        timeline[0]["durationSec"] = round(timeline[0]["endSec"] - timeline[0]["startSec"], 3)
+    
+    # Fill gaps between entries
+    for i in range(len(timeline) - 1):
+        current_end = timeline[i].get("endSec", 0)
+        next_start = timeline[i + 1].get("startSec", 0)
+        gap = next_start - current_end
+        if gap > 0.05:
+            # Extend current entry's end to cover gap
+            timeline[i]["endSec"] = round(next_start, 3)
+            timeline[i]["durationSec"] = round(timeline[i]["endSec"] - timeline[i]["startSec"], 3)
+    
+    # Fix end: last entry must reach narration duration
+    if narration_duration_sec:
+        last_end = timeline[-1].get("endSec", 0)
+        if narration_duration_sec - last_end > 0.05:
+            timeline[-1]["endSec"] = round(narration_duration_sec, 3)
+            timeline[-1]["durationSec"] = round(timeline[-1]["endSec"] - timeline[-1]["startSec"], 3)
+    
+    return timeline
 
 
 def main() -> int:
@@ -523,6 +564,8 @@ def main() -> int:
         render_timeline = build_render_timeline(scenes, merged_assets, scenes_dir)
         audio_dur = total_duration
 
+    # Fill timeline gaps: extend visuals to cover silence between scene windows
+    render_timeline = _fill_timeline_gaps(render_timeline, audio_dur)
     data['renderTimeline'] = render_timeline
 
     data['subtitles'] = {'path': str(subtitle_path), 'format': subtitle_format}

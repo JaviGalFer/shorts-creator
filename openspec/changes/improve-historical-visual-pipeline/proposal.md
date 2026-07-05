@@ -52,6 +52,39 @@ Evolucionar el pipeline visual con:
 6. Al menos un vídeo de prueba renderizado exitosamente
 7. Sin secretos en documentación
 
+## Fase 17 — Validación semántica hard de assets históricos
+
+### Problema
+
+El pipeline podía seleccionar assets semánticamente incorrectos para escenas históricas:
+- Escenas `context_map` recibían fotografías ordinarias en lugar de mapas/documentos.
+- Escenas `event_depiction` reutilizaban assets de años incorrectos (ej. foto de 1961 para una escena sobre la caída de 1989).
+- Assets de aniversarios recientes ("35th anniversary") se clasificaban como contexto archivístico en vez de legado moderno.
+- La reutilización de assets no verificaba el año explícito de la escena cuando el periodo no lo contenía.
+
+### Solución
+
+1. **Hard rule `context_map`**: verificar `visualPlan.primaryAssetType` contra un conjunto de tipos permitidos (`map`, `historical_map`, `document`, `newspaper`, `map_or_document`, `historical_map_or_document`).
+2. **Hard rule `event_depiction`**: rechazar assets cuyo `assetTemporalMatch` sea `unknown` o `modern_legacy`.
+3. **`assetTemporalMatch` mejorado**:
+   - Matching sin acentos y multilingüe (español → inglés/alemán).
+   - Extracción de año desde `period`, `entities` y `voiceover`.
+   - Periodo "Post-Guerra Fría" mapeado a "fall of the Berlin Wall" / 1989.
+   - Indicadores modernos (`anniversary`, `celebration`) priorizados sobre coincidencia de periodo cuando no hay año de evento.
+4. **Reutilización segura**:
+   - Bloquear reúso para `event_depiction` si el asset reusado es `modern_legacy` o `unknown`.
+   - Extraer años del `voiceover` actual para detectar mismatch (ej. 1961 vs 1989).
+   - Re-evaluar `assetTemporalMatch` en el contexto de la escena destino.
+   - Preservar `title`/`description` en `asset_meta` para que el matching funcione en cadenas de reuso.
+5. **Queries históricas para `event_depiction`**: generar queries históricas incluso para roles no hard cuando el intent temporal es `event_depiction`, evitando quedarse con queries genéricas como "Berlin Wall fall celebrations".
+
+### Criterios de éxito
+
+- Job `validation-realistic-berlin-wall-v5-assets-*` alcanza `ASSETS_READY` sin render.
+- Escena 1 obtiene un mapa histórico real.
+- Escena 4 obtiene un asset de 1989 (no reutiliza el asset de 1961 de la escena 3).
+- Todos los tests de `tests/test_semantic_asset_validation.py` pasan.
+
 ## Riesgos
 
 - Rate limits de Wikimedia Commons (429)
