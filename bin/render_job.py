@@ -1031,10 +1031,11 @@ def main() -> int:
     voice_provider = audio_config.get("provider", "edge_tts")
     voice_id = audio_config.get("voice", "es-ES-AlvaroNeural")
     resolved = {
+        "durationProfile": req.get("durationProfile", "short_25_30"),
         "duration": {
-            "targetSec": req.get("duration", {}).get("targetSec", 35),
-            "minSec": req.get("duration", {}).get("minSec", 30),
-            "maxSec": req.get("duration", {}).get("maxSec", 40),
+            "targetSec": req.get("duration", {}).get("targetSec", 28),
+            "minSec": req.get("duration", {}).get("minSec", 25),
+            "maxSec": req.get("duration", {}).get("maxSec", 30),
             "strictness": req.get("duration", {}).get("strictness", "balanced"),
         },
         "voice": {

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 
-def normalize(t: str) -> str:
-    import re
-    return re.sub(r'\s+', ' ', t.lower().strip()).strip(".,!?;: \"'")
+from subtitle_normalize import (
+    normalize_subtitle_text,
+    normalize_subtitle_tokens,
+    compare_cue_vs_narration_bulk,
+)
 
 
 def validate_scene_timing_coverage(scene_timings: list[dict], audio_duration_sec: float) -> dict:
@@ -89,13 +91,19 @@ def _strip_punct(w: str) -> str:
 def validate_cue_text(cues_by_scene: dict[int, list[dict]],
                       narration_units: list[dict]) -> list[str]:
     errors = []
-    cue_text = " ".join(
+    cue_texts = [
         c["text"] for cues in cues_by_scene.values() for c in cues
-    )
-    nar_text = " ".join(u["text"] for u in narration_units)
+    ]
+    nar_texts = [u["text"] for u in narration_units]
 
-    if normalize(cue_text) != normalize(nar_text):
-        errors.append("Cue text does not match narration text")
+    result = compare_cue_vs_narration_bulk(cue_texts, nar_texts)
+    if result["status"] != "PASS":
+        msg = "Cue text does not match narration text"
+        if result.get("missingTokens"):
+            msg += f" (missing: {result['missingTokens']})"
+        if result.get("extraTokens"):
+            msg += f" (extra: {result['extraTokens']})"
+        errors.append(msg)
     return errors
 
 

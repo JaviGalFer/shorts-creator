@@ -35,6 +35,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from visual_normalize import normalize_scene_visual
+from subtitle_normalize import normalize_subtitle_text, normalize_subtitle_tokens
 
 
 FPS = 25
@@ -485,10 +486,10 @@ class JobValidator:
                     self._warn(f"Scene {sn} cue {ci}: duplicate text across scenes: '{text[:40]}'")
                 seen_cues.add(norm)
 
-                # Check text similarity with voiceover
+                # Check text similarity with voiceover (normalized comparison)
                 if voiceover and text:
-                    vo_norm = re.sub(r'\s+', ' ', voiceover.lower().strip(".,!?;: "))
-                    cue_norm = re.sub(r'\s+', ' ', text.lower().strip(".,!?;: "))
+                    vo_norm = normalize_subtitle_text(voiceover)
+                    cue_norm = normalize_subtitle_text(text)
                     ratio = difflib.SequenceMatcher(None, cue_norm, vo_norm).ratio()
                     if ratio < 0.3:
                         self._warn(f"Scene {sn} cue {ci}: low text similarity ({ratio:.0%}) vs voiceover: '{text[:50]}'")
@@ -616,6 +617,57 @@ class JobValidator:
         return result
 
 
+def update_manifest_gates(metadata_path: Path):
+    """Re-run coverage validation and update quality gates in job-manifest.json."""
+    from coverage_validation import run_coverage_validation
+
+    with open(metadata_path) as f:
+        data = json.load(f)
+
+    video_dir = metadata_path.parent
+    manifest_path = video_dir / "job-manifest.json"
+    if not manifest_path.exists():
+        print(f"job-manifest.json not found: {manifest_path}")
+        return False
+
+    manifest = json.loads(manifest_path.read_text())
+
+    audio_config = data.get("audio", {})
+    scene_timings = audio_config.get("sceneTimings", [])
+    audio_dur = audio_config.get("durationSec", 0)
+    cues_by_scene = {}
+    for sc in data.get("script", {}).get("scenes", []):
+        sn = sc["sceneNumber"]
+        cues_by_scene[sn] = sc.get("subtitleTiming", {}).get("cues", [])
+    narration_units = audio_config.get("narrationUnits", [])
+
+    coverage_result = run_coverage_validation(
+        scene_timings, audio_dur, cues_by_scene, narration_units
+    )
+    coverage_status = coverage_result.get("status", "N/A")
+
+    gates = manifest.get("validation", {}).get("gates", {})
+    if gates:
+        gates["subtitleCoverageValidation"] = (
+            coverage_status if coverage_status != "N/A" else "NOT_APPLICABLE"
+        )
+        sub_gates = {k: v for k, v in gates.items() if k != "qualityGate"}
+        gate_failures = [k for k, v in sub_gates.items() if v == "FAIL"]
+        gate_warnings = [k for k, v in sub_gates.items() if v in ("REVIEW_REQUIRED", "WARNING")]
+        gates["qualityGate"] = (
+            "FAIL" if gate_failures
+            else ("WARNING" if gate_warnings else "PASS")
+        )
+        manifest["validation"]["gates"] = gates
+
+    manifest["validation"]["coverageStatus"] = coverage_status
+
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+    print(f"Updated manifest: subtitleCoverageValidation={coverage_status}, "
+          f"qualityGate={gates.get('qualityGate', 'N/A')}")
+    return coverage_status == "PASS"
+
+
 def main() -> int:
     import os as _os
     _os.environ['DOCKER_API_VERSION'] = '1.43'
@@ -626,12 +678,18 @@ def main() -> int:
     parser.add_argument("metadata_path", help="Path to metadata.json")
     parser.add_argument("--json", action="store_true", help="Output JSON report")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show all checks")
+    parser.add_argument("--update-manifest", action="store_true",
+                        help="Re-run coverage validation and update manifest gates")
     args = parser.parse_args()
 
     metadata_path = Path(args.metadata_path).resolve()
     if not metadata_path.exists():
         print(f"ERROR: metadata not found: {metadata_path}")
         return 1
+
+    if args.update_manifest:
+        ok = update_manifest_gates(metadata_path)
+        return 0 if ok else 1
 
     import io
     validator = JobValidator(metadata_path, verbose=args.verbose)
