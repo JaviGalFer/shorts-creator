@@ -567,6 +567,190 @@ render, validate, review_job NOT ejecutados. OpenSpec change NO se cierra.
 
 - Bitácora completa: `docs/sessions/2026-07-05-1945-prompt-and-hard-role-fallback.md`
 
+### Phase 23 validator consolidation (2026-07-06)
+
+Consolidación de código/tests del validador compartido de segmentos. Sin verificación real del runner.
+
+**Defectos corregidos:**
+
+1. `_validate_segment_for_role()` existía pero tenía **cero call sites en producción** — definida en `bin/fetch_images.py` pero nunca llamada desde `main()`.
+2. `_try_hard_role_fallback()` existía pero tenía **cero call sites en producción** — definida pero nunca llamada desde `main()`. La sesión anterior afirmó haberla integrado pero el código no lo reflejaba.
+3. La validación de segmentos en `main()` usaba comprobaciones manuales duplicadas de tipos prohibidos en lugar del validador compartido.
+4. El camino de reuse no validaba segmentos contra el rol/intención temporal destino, permitiendo reuse de tipos incompatibles.
+
+**Correcciones:**
+
+- `_validate_segment_for_role` expandido con todas las hard rules (context_map, document_or_date, event_depiction, construction, border_closure, renderability, semantic confidence).
+- Integrado en los tres caminos de producción de `main()`: normal, fallback, reuse.
+- `_try_hard_role_fallback` activado en `main()` — se llama cuando falla la resolución Wikimedia-only para hard roles.
+- Fallback validado con `_validate_segment_for_role` antes de aceptación.
+- Lógica duplicada de validación manual eliminada.
+
+**Tests:** +7 tests nuevos (67 total en test_semantic_asset_validation.py, 240 total suite).
+
+**No verificado:** runner real, prepare, render, validate. OpenSpec NO se cierra.
+
+- Bitácora: `docs/sessions/2026-07-06-1811-integrate-shared-segment-validator.md`
+
+### Corrección post-consolidación (misma sesión)
+
+Dos defectos corregidos:
+
+1. **Fallback eligibility narrowing**: `_fetch_one_asset` ahora retorna `failure_classification` (`resolution_exhausted` / `download_failed` / `None`). `main()` solo invoca fallback para `resolution_exhausted`, no para fallos operacionales de descarga.
+2. **Anti-repetition tracking for fallback**: `accepted_candidate` canónico en `main()` — `cand` para normal, reconstruido desde `seg_entry` para fallback. `used_urls`/`used_authors`/`used_queries` usan el valor canónico.
+
++5 tests (72 en test_semantic_asset_validation.py, 245 total). Sin verificación real del runner.
+
+### Runner real prepare verification (2026-07-06)
+
+Primera verificación con `run_job.py --topic "La caída del Muro de Berlín" --duration 30 --duration-max 35 --stop-after prepare --verbose`.
+
+**Resultado: bloqueo en script stage** (job `la-2026-07-06-183114`).
+
+- Duration contract FAIL: 70 palabras (retry 0) → 8 palabras (retry 1).
+- Runner detectó `REVIEW_REQUIRED` y detuvo correctamente antes de assets.
+- Assets, audio, y prepare NO fueron ejecutados.
+- Las integraciones del validador/fallback/failure_classification no fueron ejercitadas (no se llegó a fetch_images.py).
+
+El runner se verificó solo en su comportamiento de script gate. La verificación completa a través de prepare queda pendiente.
+
+- Bitácora: `docs/sessions/2026-07-06-1831-runner-real-prepare-verification-post-consolidation.md`
+
+### Script retry structural contract fix (2026-07-06)
+
+El job real `la-2026-07-06-183114` reveló tres defectos en `generate_script.py`:
+
+1. `max_attempts=2` → solo 1 retry correctivo. Corregido a `MAX_SCRIPT_ATTEMPTS=3`.
+2. Prompt de retry descartaba el contrato completo (schema JSON, visualPlan, visualSequence, narrativeBeats). Ahora `_build_user_prompt` se reutiliza en cada retry, con instrucción correctiva añadida.
+3. Sin validación estructural — un script CTA de 1 escena con 8 palabras pasaba la comprobación de de duration. Nueva función `_validate_script_structure` con taxonomía de razones.
+
++7 tests (252 total suite). Sin verificación real del runner. Assets/audio/prepare verification sigue pendiente.
+
+- Bitácora: `docs/sessions/2026-07-06-1838-script-retry-structural-contract.md`
+
+### Gaps cerrados (misma sesión): integración retry + contrato de tipos
+
+Dos gaps restantes:
+
+1. **Sin test de integración del bucle de retry**: añadidos 2 tests que prueban `main()` completo con LLM mockeado (3 intentos → success y 3 intentos → REVIEW_REQUIRED).
+2. **Conflicto script/asset type contract**: creado `bin/editorial_asset_contract.py` compartido entre `generate_script.py` y `fetch_images.py`. `_validate_script_structure` ahora rechaza `forbidden_segment_asset_type`.
+
++6 tests adicionales (259 total suite). Sin verificación real del runner.
+
+- Bitácora: mismo archivo `docs/sessions/2026-07-06-1838-script-retry-structural-contract.md`
+
+### Contract alignment (misma sesión)
+
+6 contradicciones corregidas entre SYSTEM_PROMPT, editorial_asset_contract, generate_script y fetch_images:
+
+1. JSON example: `context_map + atmospheric_broll` → `context_map + document`.
+2. Prosa portrait: "broll atmosférico" eliminado (character_portrait lo prohíbe).
+3. Prosa motionType: b-roll restringido a consequence_or_legacy + legacy.
+4-6. Duplicación `.discard()` y lecturas manuales de `forbidden` reemplazadas por `is_asset_type_allowed` en `_fetch_one_asset`, `score_editorial_role`, `_validate_segment_for_role`, y reuse path.
+
++4 tests (263 total suite). Sin verificación real del runner.
+
+- Bitácora: mismo archivo `docs/sessions/2026-07-06-1838-script-retry-structural-contract.md`
+
+### Strategy-as-type removal (misma sesión)
+
+Eliminación del uso incorrecto de `candidate["strategy"]` como asset type en compatibilidad editorial:
+
+- Eliminados 4 call sites que pasaban `c.get("strategy")` a `is_asset_type_allowed` o `score_editorial_role`.
+- `_fetch_one_asset` ya no rechaza candidatos por su strategy name.
+- `score_editorial_role` ahora acepta `temporal_intent` opcional para la excepción documentada.
+- `_validate_segment_for_role` permanece como única autoridad de aceptación/rechazo por tipo.
+
++4 tests (267 total suite). Sin verificación real del runner.
+
+- Bitácora: mismo archivo `docs/sessions/2026-07-06-1838-script-retry-structural-contract.md`
+
+### Runner real prepare verification after contract alignment (2026-07-06)
+
+Comando: `run_job.py --topic "La caída del Muro de Berlín" --duration 30 --duration-max 35 --stop-after prepare --verbose`.
+
+**Resultado: bloqueo en script** (job `la-2026-07-06-192920`).
+
+- 3 intentos LLM (MAX_SCRIPT_ATTEMPTS=3 funcionando).
+- Los 3 rechazados por validación estructural: `insufficient_segments`, `forbidden_segment_asset_type`.
+- Retry 1 habría pasado el presupuesto de words (52 en rango 47-61) pero fue rechazado por tipos prohibidos.
+- Retry reasons correctos: estructural issues toman prioridad sobre word-count.
+- Retry history contiene structuralIssues y structuralIssueDetails.
+- Runner detuvo en REVIEW_REQUIRED. Assets/audio/prepare no ejecutados.
+
+El pipeline de validación estructural y retry funciona correctamente. El LLM no produce scripts totalmente válidos en 3 intentos con este topic — problema de compliance del modelo, no del código.
+
+- Bitácora: `docs/sessions/2026-07-06-1929-runner-real-prepare-verification-after-contract-alignment.md`
+
+### Ambigüedades prompt/schema corregidas (misma sesión)
+
+5 contradicciones corregidas en prompt/schema responsables de los fallos del LLM:
+
+1. Schema examples con `broll` genérico → calificados con restricción de rol.
+2. Sin cheat-sheet de tipos → tabla de tipos permitidos por rol + tabla rol↔intent.
+3. Sin validación de temporal intent → `forbidden_visual_temporal_intent`.
+4. Sin validación de primaryAssetType/secondaryAssetType → checks añadidos.
+5. Retry sin sugerencias de reemplazo → `suggest_replacement_types()` con hints.
+
++7 tests (274 total suite). Sin verificación real del runner.
+
+- Bitácora: mismo archivo `docs/sessions/2026-07-06-1929-runner-real-prepare-verification-after-contract-alignment.md`
+
+### Allow-list redesign (misma sesión)
+
+El contrato deny-list (`all_types - forbidden`) permitía silenciosamente tipos no intencionados (context_map+portrait, military_technology+broll, character_portrait+generated_reconstruction). Rediseñado a allow-list explícito con `ROLE_ALLOWED_TYPES`, fail-closed para unknowns, y segment-count rules por duración (≤4s:1, 5-7s:2, ≥8s:2-3).
+
++17 tests (291 total suite). Sin verificación real del runner.
+
+- Bitácora: mismo archivo
+
+### Deterministic assets-audio-prepare verification (2026-07-06)
+
+Fixture manual `fixture-berlin-wall-current-contract-20260706-203702` con 4 escenas, contrato estructural válido. Sin LLM.
+
+**Resultados:**
+- Assets: 5/8 segments resueltos (Wikimedia Commons). 2 ASSET_UNRESOLVED por fallback exhausto (hard roles), 1 download failed (soft role atmosphere).
+- Fallback ejercitado correctamente: hard-role Wikimedia exhaustion → Pexels/Pixabay fallback → ASSET_UNRESOLVED cuando sin resultados. Soft role sin fallback.
+- Audio: 4/4 escenas Edge TTS.
+- Prepare: subtitle.ass, timeline, renderTimeline generados.
+
+**Bug encontrado:** `SCENE_PAUSE_SEC` eliminado accidentalmente al mover EDITORIAL_ROLE_PREFERENCES. Restaurado.
+
+**RenderTimeline:** overlap de 1.9s en scene 4 por beat-driven timeline con segmentos sin imagen. Sin gaps materiales. Paths internos al job.
+
+### Prepare asset-completion gate (2026-07-06)
+
+La verificación anterior de prepare fue inválida: `prepare_job.py` aceptaba segmentos con `path: null` y errores, generando `subtitle.ass` y `renderTimeline` con entradas sin asset.
+
+Corrección: `_validate_asset_completion()` bloquea prepare si algún segmento requerido falla (error, path null, file missing, validationStatus != PASS, path fuera del job). Exit code 1, status ASSET_UNRESOLVED.
+
++8 tests (299 total suite). Fixture válido ahora es correctamente rechazado.
+
+### Prepare gate completion (2026-07-06)
+
+SCENE_NOT_SELECTED ahora aplicado (antes era no-op). `_invalidate_derived_artifacts()` limpia subtitle.ass y metadata stale en failures. Fail-closed: `selected is not True`. +7 tests (308 total suite).
+
+### v9 current prepare/render/validate verification (2026-07-06)
+
+Prepare→render→validate contra job v9 histórico. `verification-v9-current-prepare-render-20260706-222006`. Exit 0 en los 3 stages. 5/5 assetPath no vacío. video.mp4 1.49MB, 25.32s, durationDelta=0.0s. Validate 0 errors. Path isolation limpio. Sin regresiones con la nueva prepare gate.
+
+- Bitácora: `docs/sessions/2026-07-06-2220-v9-current-prepare-render-validate-verification.md`
+
+### E2E live assets Berlin Wall verification (2026-07-07)
+
+Verificación E2E con live asset sourcing, fixture manual determinista (4 escenas, 8 segmentos). Sin LLM.
+
+**Resultado: FAILED en fetch_images.**
+
+- 3/8 segmentos resueltos (Wikimedia Commons)
+- 5/8 ASSET_UNRESOLVED: 3 por Wikimedia exhaustion (hard roles, sin Pexels/Pixabay para fallback), 2 por failure total (soft role scene 4 sin API keys)
+- Pipeline detenido correctamente con status ASSET_UNRESOLVED, exit code != 0
+- generate_audio, prepare, render, validate NO ejecutados
+
+**Causa raíz:** Wikimedia tiene pool finito para un topic dado. Ocho segmentos con validación estricta exceden los candidatos disponibles sin API keys de stock photo.
+
+- Bitácora: `docs/sessions/2026-07-06-2233-live-assets-e2e-berlin-wall-verification.md`
+
 ### Limitaciones restantes
 
 1. **FREEAI_API_KEY no configurada** — `generated_reconstruction` sigue cayendo a Pollinations.

@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from duration_profiles import add_duration_profile_args, resolve_requested_duration, calculate_word_budget
+from editorial_asset_contract import is_asset_type_allowed, is_temporal_intent_allowed, allowed_asset_types_for_role
+import editorial_asset_contract
 
 DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 
@@ -91,9 +93,9 @@ Cada escena debe tener un plan visual estructurado. NO uses prompts genéricos.
 Cada escena debe tener una microsecuencia de 1-3 segmentos visuales.
 
 ### Reglas de segmentación (OBLIGATORIAS):
-- Escenas ≤4s: 1 segmento (sin división)
-- Escenas 5-7s: EXACTAMENTE 2 segmentos. No uses 1 segmento.
-- Escenas ≥8s: 2-3 segmentos. No uses 1 segmento.
+- Escenas ≤4s: EXACTAMENTE 1 segmento (sin división)
+- Escenas 5-7s: EXACTAMENTE 2 segmentos, cada uno con durationFraction (la suma debe ser 1.0)
+- Escenas ≥8s: 2-3 segmentos, cada uno con durationFraction (la suma debe ser 1.0)
 - Toda escena >4s DEBE tener al menos 2 segmentos en visualSequence. Es una regla técnica obligatoria.
 - No repetir assetType en segmentos consecutivos de la misma escena
 - No repetir generated_reconstruction en escenas consecutivas
@@ -103,7 +105,7 @@ Cada escena debe tener una microsecuencia de 1-3 segmentos visuales.
 
 ### Reglas de composición:
 - Si el assetType es historical_map o document, indicar en editorialReason si necesita centrado o zoom a región
-- Para portrait, puede ocupar todo el segmento o ir acompañado de broll atmosférico
+- Para portrait, debe acompañarse de painting, historical_photograph o historical_art (nunca atmospheric_broll ni broll)
 - Para atmospheric_broll, especificar qué ambiente concreto (amanecer, tormenta, humo, etc.)
 - La suma de durationFraction de todos los segmentos debe ser exactamente 1.0
 - transition posible: "cut" (corte seco) o "fade" (fundido de 0.5s)
@@ -140,6 +142,31 @@ Cada escena debe tener un editorialRole que define el propósito visual. La sele
 - Alternar editorialRole entre escenas: no repetir el mismo rol en escenas consecutivas.
 - Para mapas, incluir focalRegion (center|north|south|east|west), cropMode (full_map|region_zoom|detail), y overlayText (fecha/lugar).
 - generated_reconstruction no puede usarse en escenas consecutivas.
+
+## Cheat sheet: tipos de asset permitidos por rol editorial
+
+| editorialRole | Asset types permitidos |
+|---------------|----------------------|
+| context_map | map, historical_map, document, newspaper |
+| document_or_date | document, newspaper, map, historical_map |
+| character_portrait | portrait, historical_photograph, painting, historical_art |
+| military_technology | historical_photograph, painting, document, historical_art |
+| civilian_impact | historical_photograph, historical_art, historical_art |
+| battle_or_assault | historical_photograph, historical_art, painting |
+| border_closure_construction | historical_photograph, historical_art, painting |
+| consequence_or_legacy (event_depiction) | historical_photograph, historical_art, painting |
+| consequence_or_legacy (legacy_or_commemoration) | historical_photograph, historical_art, painting, atmospheric_broll, broll |
+| atmospheric_transition | atmospheric_broll, broll, historical_photograph, painting |
+
+El broll solo está permitido en consequence_or_legacy con legacy_or_commemoration y en atmospheric_transition. Para cualquier otro rol, usar historical_photograph, historical_art, painting, document, map, historical_map u otros tipos documentales según la tabla.
+
+## Relación obligatoria editorialRole ↔ visualTemporalIntent
+
+| editorialRole | visualTemporalIntent |
+|---------------|---------------------|
+| context_map, character_portrait, battle_or_assault, military_technology, civilian_impact, document_or_date, border_closure_construction | SOLO event_depiction |
+| consequence_or_legacy | event_depiction O legacy_or_commemoration (según voiceover describa el evento o su legado) |
+| atmospheric_transition | SOLO context_or_setup |
 
 ### Reglas de intent temporal (visualTemporalIntent)
 Cada escena debe tener un visualTemporalIntent que clasifica si la escena describe un evento histórico concreto o un legado moderno:
@@ -191,7 +218,7 @@ Reglas de motionType:
 - Mapas: slow_zoom_in, pan_left, pan_right.
 - Grabados/pinturas: slow_zoom_in, detail_crop.
 - Documentos: slow_zoom_in, detail_crop.
-- B-roll: static, slow_zoom_in (suave, no exagerado).
+- B-roll (solo consequence_or_legacy con legacy_or_commemoration): static, slow_zoom_in (suave, no exagerado).
 - Alternar motionType entre beats de una misma escena si tienen distinto contenido visual.
 
 ## Formato JSON de salida
@@ -224,8 +251,8 @@ Reglas de motionType:
       "visualPlan": {
         "strategy": "historical_archive|map_or_document|atmospheric_broll|generated_reconstruction",
         "editorialRole": "context_map",
-        "primaryAssetType": "historical_photograph|map|painting|document|broll",
-        "secondaryAssetType": "map|document|portrait|broll|null",
+        "primaryAssetType": "historical_photograph|map|painting|document|historical_map|historical_art|portrait|newspaper|atmospheric_broll|broll (must be compatible with editorialRole — see cheat sheet below)",
+        "secondaryAssetType": "map|document|portrait|historical_photograph|historical_art|null (must be compatible with editorialRole)",
         "period": "Historical period, e.g. Spanish Civil War, 1936-1939",
         "location": "Geographic location",
         "entities": ["Entity1", "Entity2"],
@@ -253,11 +280,11 @@ Reglas de motionType:
           },
           {
             "segmentIndex": 2,
-            "assetType": "atmospheric_broll",
-            "searchQuery": "old stone walls fortress dramatic sky",
+            "assetType": "document",
+            "searchQuery": "siege of Constantinople 1453 document",
             "durationFraction": 0.5,
             "transition": "fade",
-            "editorialReason": "Ambiente de fortaleza medieval para situar al espectador",
+            "editorialReason": "Documento histórico que complementa el mapa de la batalla",
             "motionType": "pan_right"
           }
         ]
@@ -374,33 +401,159 @@ def _build_duration_prompt_instruction(budget: dict, strictness: str) -> str:
     return "\n".join(lines)
 
 
+def _validate_script_structure(script_data: dict, min_scenes: int, topic: str) -> dict:
+    """Validate structural completeness of a generated script.
+
+    Returns {valid: bool, reasons: [(code, message), ...]}.
+    Duration is checked separately by the budget loop.
+    """
+    reasons: list[tuple[str, str]] = []
+    scenes = script_data.get("scenes", [])
+
+    if not scenes:
+        reasons.append(("empty_scenes", "script has no scenes"))
+        return {"valid": False, "reasons": reasons}
+
+    if len(scenes) < min_scenes:
+        reasons.append(("insufficient_scene_count",
+                        f"{len(scenes)} scenes, need at least {min_scenes}"))
+
+    scene_nums = []
+    for s in scenes:
+        sn = s.get("sceneNumber")
+        if isinstance(sn, (int, float)):
+            scene_nums.append(int(sn))
+        else:
+            scene_nums.append(sn)
+        vo = (s.get("voiceover") or "").strip()
+        if not vo:
+            reasons.append(("empty_voiceover",
+                            f"scene {sn} has empty voiceover"))
+        vp = s.get("visualPlan")
+        vti = s.get("visualTemporalIntent", "")
+        if not vp or not isinstance(vp, dict):
+            reasons.append(("missing_visualPlan",
+                            f"scene {sn} missing visualPlan"))
+        else:
+            er = vp.get("editorialRole", "")
+            # Temporal intent compatibility
+            if er and vti and not is_temporal_intent_allowed(er, vti):
+                allowed_intents = ", ".join(sorted(editorial_asset_contract.ROLE_INTENT_RULES.get(er, set())))
+                reasons.append(("forbidden_visual_temporal_intent",
+                                f"scene {sn} editorialRole={er} forbids visualTemporalIntent={vti} (allowed: {allowed_intents})"))
+            # Primary asset type compatibility
+            primary = vp.get("primaryAssetType", "")
+            if primary and er and not is_asset_type_allowed(er, primary, vti):
+                repl = editorial_asset_contract.suggest_replacement_types(er, primary, vti)
+                repl_hint = f" (use: {', '.join(repl[:3])})" if repl else ""
+                reasons.append(("forbidden_primary_asset_type",
+                                f"scene {sn} editorialRole={er} forbids primaryAssetType={primary}{repl_hint}"))
+            # Secondary asset type compatibility
+            secondary = vp.get("secondaryAssetType", "")
+            if secondary and secondary != "null" and er and not is_asset_type_allowed(er, secondary, vti):
+                repl = editorial_asset_contract.suggest_replacement_types(er, secondary, vti)
+                repl_hint = f" (use: {', '.join(repl[:3])})" if repl else ""
+                reasons.append(("forbidden_secondary_asset_type",
+                                f"scene {sn} editorialRole={er} forbids secondaryAssetType={secondary}{repl_hint}"))
+            vs = vp.get("visualSequence")
+            if not vs or not isinstance(vs, list) or len(vs) == 0:
+                reasons.append(("missing_visualSequence",
+                                f"scene {sn} missing visualSequence"))
+            else:
+                dur = s.get("targetDurationSec") or s.get("target_duration_sec") or 0
+                seg_count = len(vs)
+                if dur <= 4:
+                    if seg_count != 1:
+                        reasons.append(("invalid_segment_count_short",
+                                        f"scene {sn} duration {dur}s requires exactly 1 segment, got {seg_count}"))
+                elif dur < 8:
+                    if seg_count != 2:
+                        reasons.append(("invalid_segment_count_medium",
+                                        f"scene {sn} duration {dur}s requires exactly 2 segments, got {seg_count}"))
+                else:
+                    if seg_count < 2 or seg_count > 3:
+                        reasons.append(("invalid_segment_count_long",
+                                        f"scene {sn} duration {dur}s requires 2-3 segments, got {seg_count}"))
+                for seg in vs:
+                    seg_at = seg.get("assetType", "")
+                    if seg_at and not is_asset_type_allowed(er, seg_at, vti):
+                        repl = editorial_asset_contract.suggest_replacement_types(er, seg_at, vti)
+                        repl_hint = f" (use: {', '.join(repl[:3])})" if repl else ""
+                        reasons.append(("forbidden_segment_asset_type",
+                                        f"scene {sn} editorialRole={er} forbids assetType={seg_at}{repl_hint}"))
+
+    # Scene number order
+    numeric_scene_nums = [int(n) for n in scene_nums if isinstance(n, (int, float))]
+    if numeric_scene_nums and numeric_scene_nums != sorted(numeric_scene_nums):
+        reasons.append(("unordered_scenes", "scene numbers not ordered"))
+
+    # Historical content: at minimum, the script must mention the topic entity
+    # or include a proper name, date, or factual claim beyond a generic CTA.
+    all_vo = " ".join((s.get("voiceover") or "") for s in scenes)
+    has_date = bool(re.search(r'\b(1[89]\d{2}|20\d{2})\b', all_vo))
+    has_named_entity = False
+    topic_parts = [w for w in re.sub(r'[^a-záéíóúñü ]', '', topic.lower()).split() if len(w) > 2]
+    for part in topic_parts:
+        if part in all_vo.lower():
+            has_named_entity = True
+            break
+    if not has_named_entity:
+        proper_pattern = r'\b[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+\b'
+        if re.search(proper_pattern, all_vo):
+            has_named_entity = True
+    if not has_date and not has_named_entity:
+        reasons.append(("cta_only_or_non_historical",
+                        "script lacks factual historical content (no date or named entity)"))
+
+    valid = len(reasons) == 0
+    return {"valid": valid, "reasons": reasons}
+
+
 def _build_retry_instruction(
     budget: dict,
     actual_word_count: int,
     actual_scene_count: int,
     estimated_dur: float,
+    structural_issues: list[tuple[str, str]] | None = None,
 ) -> str:
     min_w = budget.get("minimumWords", 0)
     pref_w = budget.get("preferredWords", 0)
     max_w = budget.get("maximumWords", 0)
     missing = max(0, min_w - actual_word_count)
     excess = max(0, actual_word_count - max_w)
-    pause_ms = budget.get("estimatedScenePauseMs", 350)
     dur_min = budget.get("minSec", 0)
     dur_max = budget.get("maxSec", 0)
     dur_target = budget.get("targetSec", 0)
+    pause_ms = budget.get("estimatedScenePauseMs", 350)
 
     lines = [
-        f"## Corrección de duración — intento anterior insuficiente",
+        f"## Corrección de guion — intento anterior insuficiente",
         f"",
         f"El guion anterior tiene {actual_word_count} palabras habladas "
         f"en {actual_scene_count} escenas y estima {estimated_dur:.1f} segundos.",
         f"",
-        f"El trabajo requiere:",
-        f"- Duración: {dur_target}s objetivo, ventana {dur_min}-{dur_max}s",
-        f"- Palabras totales: mínimo {min_w}, preferidas ~{pref_w}, máximo {max_w}",
-        f"- Pausas entre escenas: ~{pause_ms}ms cada una",
     ]
+
+    # ── Structural issues first ──────────────────────────────────────
+    if structural_issues:
+        lines.append("### Problemas estructurales que debes corregir:")
+        for code, msg in structural_issues:
+            lines.append(f"- [{code}] {msg}")
+        lines.append("")
+        lines.append("Instrucciones para corregir la estructura:")
+        lines.append("- El guion debe tener entre 4 y 6 escenas con contenido histórico real.")
+        lines.append("- Cada escena DEBE tener voiceover, subtitle, visualPlan y visualSequence.")
+        lines.append("- Toda escena de más de 4s DEBE tener EXACTAMENTE 2 segmentos (5-7s) o 2-3 segmentos (≥8s).")
+        lines.append("- La duración total de los segmentos (suma de durationFraction) debe ser 1.0.")
+        lines.append("- NO hagas un CTA genérico. Cada escena debe aportar contenido histórico con fechas, nombres propios y datos concretos.")
+        lines.append("- narrativeBeats y motionType son obligatorios en cada escena.")
+        lines.append("")
+
+    # ── Duration correction ─────────────────────────────────────────
+    lines.append("### Contrato de duración:")
+    lines.append(f"- Duración: {dur_target}s objetivo, ventana {dur_min}-{dur_max}s")
+    lines.append(f"- Palabras totales: mínimo {min_w}, preferidas ~{pref_w}, máximo {max_w}")
+    lines.append(f"- Pausas entre escenas: ~{pause_ms}ms cada una")
 
     if missing > 0:
         lines.append("")
@@ -422,18 +575,41 @@ def _build_retry_instruction(
         )
 
     lines.append("")
-    lines.append("Reglas:")
-    lines.append("- DEBEN SER ENTRE 4 Y 6 ESCENAS. Máximo 6.")
+    lines.append("### Reglas obligatorias:")
+    lines.append("- DEBEN SER ENTRE 4 Y 6 ESCENAS. Mínimo 4, máximo 6. Prefiere 5.")
     lines.append("- El CTA debe estar DENTRO de la última escena, nunca como escena aparte.")
-    lines.append("- Cada escena debe tener al menos 7 palabras.")
+    lines.append("- Cada escena debe tener al menos 7 palabras de voiceover con contenido histórico real.")
     lines.append("- Usa datos concretos: años, cifras, nombres propios.")
     lines.append("- No inventar datos históricos.")
-    lines.append("- Incluye al menos una fecha con año y un nombre propio relevante.")
+    lines.append("- Incluye al menos una fecha con año y al menos un nombre propio relevante.")
+    lines.append("- Toda escena de más de 4s DEBE tener EXACTAMENTE 2 segmentos en visualSequence (5-7s) o 2-3 segmentos (≥8s).")
+    lines.append("- Cada segmento debe tener durationFraction; la suma de todas las durationFraction debe ser 1.0.")
+    lines.append("- Cada escena DEBE tener visualPlan completo con editorialRole, searchQueries, visualSequence con motionType.")
+    lines.append("- Cada escena DEBE tener narrativeBeats.")
+    lines.append("- NO crees una escena separada solo para CTA.")
+    lines.append("- Responde SOLO con JSON válido, sin markdown ni explicaciones.")
 
     return "\n".join(lines)
 
 
 PROVISIONAL_SCENE_COUNT = 5
+MIN_SCENE_COUNT = 4
+MAX_SCRIPT_ATTEMPTS = 3  # initial generation + up to 2 corrective retries
+
+
+def _build_user_prompt(topic: str, budget: dict, strictness: str) -> str:
+    """Build the complete user prompt with duration instruction and all
+    schema/contract requirements. Reused for initial generation and retries."""
+    duration_instruction = _build_duration_prompt_instruction(budget, strictness)
+    return (
+        f"Genera un guion histórico muy atractivo para vídeo vertical sobre: {topic}. "
+        f"Quiero que el arranque tenga máxima retención, que cada escena tenga un plan visual detallado "
+        f"con visualPlan Y visualSequence, y que la progresión visual sea coherente alternando tipos de "
+        f"asset entre escenas. IMPORTANTE: Toda escena de más de 4 segundos DEBE tener 2 o más segmentos "
+        f"en visualSequence. También DEBE incluir narrativeBeats array en cada escena y motionType en cada "
+        f"segmento de visualSequence. Es una regla técnica obligatoria.\n\n"
+        f"{duration_instruction}"
+    )
 
 
 def main() -> int:
@@ -485,23 +661,13 @@ def main() -> int:
         estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
     )
 
-    duration_instruction = _build_duration_prompt_instruction(provisional_budget, strictness)
-
-    user_prompt = (
-        f"Genera un guion histórico muy atractivo para vídeo vertical sobre: {args.topic}. "
-        f"Quiero que el arranque tenga máxima retención, que cada escena tenga un plan visual detallado "
-        f"con visualPlan Y visualSequence, y que la progresión visual sea coherente alternando tipos de "
-        f"asset entre escenas. IMPORTANTE: Toda escena de más de 4 segundos DEBE tener 2 o más segmentos "
-        f"en visualSequence. También DEBE incluir narrativeBeats array en cada escena y motionType en cada "
-        f"segmento de visualSequence. Es una regla técnica obligatoria.\n\n"
-        f"{duration_instruction}"
-    )
+    base_prompt = _build_user_prompt(args.topic, provisional_budget, strictness)
 
     if args.dry_run:
         print("=== SYSTEM PROMPT ===")
         print(SYSTEM_PROMPT)
         print("\n=== USER PROMPT ===")
-        print(user_prompt)
+        print(base_prompt)
         print("\n=== MODEL ===")
         print(f"provider={provider}, model={model}")
         return 0
@@ -511,16 +677,13 @@ def main() -> int:
     print(f"Duration target: {target_dur}s, min: {min_sec}s, max: {max_sec}s, strictness: {strictness}")
 
     # ── Retry loop ────────────────────────────────────────────────────
-    # max_attempts: total LLM calls permitted (initial + retries)
-    # max_attempts=2 means 1 initial + up to 1 retry
     script_data: dict = {}
     retries = 0
-    max_attempts = 2
-    retry_history = []
-    current_prompt = user_prompt
+    retry_history: list[dict] = []
+    current_prompt = base_prompt
     final_budget = dict(provisional_budget)
 
-    while retries < max_attempts:
+    while retries < MAX_SCRIPT_ATTEMPTS:
         if retries > 0:
             word_count = _count_voiceover_words(script_data)
             scene_count = len(script_data.get("scenes", []))
@@ -530,15 +693,19 @@ def main() -> int:
                 min_sec=min_sec,
                 max_sec=max_sec,
                 spoken_words_per_minute=SPOKEN_WORDS_PER_MINUTE,
-                scene_count=scene_count,
+                scene_count=scene_count if scene_count >= MIN_SCENE_COUNT else PROVISIONAL_SCENE_COUNT,
                 estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
             )
-            retry_inst = _build_retry_instruction(retry_budget, word_count, scene_count, estimated_dur)
-            current_prompt = (
-                f"Genera un guion histórico muy atractivo para vídeo vertical sobre: {args.topic}. "
-                f"Quiero que el arranque tenga máxima retención.\n\n{retry_inst}"
+            # Check structural validity
+            sv = _validate_script_structure(script_data, MIN_SCENE_COUNT, args.topic)
+            retry_inst = _build_retry_instruction(
+                retry_budget, word_count, scene_count, estimated_dur,
+                structural_issues=sv["reasons"] if not sv["valid"] else None,
             )
-            print(f"Retry {retries}/{max_attempts - 1}: generated {word_count} words, "
+            # Rebuild base prompt with current budget, append correction
+            base_retry = _build_user_prompt(args.topic, retry_budget, strictness)
+            current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
+            print(f"Retry {retries}/{MAX_SCRIPT_ATTEMPTS - 1}: generated {word_count} words, "
                   f"estimated {estimated_dur:.1f}s, need {retry_budget['minimumWords']}-{retry_budget['maximumWords']} words")
 
         try:
@@ -572,6 +739,9 @@ def main() -> int:
               f"(target {target_dur}s, range {min_sec}-{max_sec}s, "
               f"budget {final_budget['minimumWords']}-{final_budget['preferredWords']}-{final_budget['maximumWords']})")
 
+        # ── Structural validation ───────────────────────────────────
+        sv = _validate_script_structure(script_data, MIN_SCENE_COUNT, args.topic)
+
         # Check duration
         if strictness == "strict":
             margin = target_dur * 0.10
@@ -579,10 +749,13 @@ def main() -> int:
         elif strictness == "balanced":
             duration_ok = min_sec <= estimated_dur <= max_sec
         else:
-            duration_ok = True  # relaxed
+            duration_ok = True
 
         # Determine reason for retry history
-        if duration_ok:
+        if not sv["valid"]:
+            retry_reason = sv["reasons"][0][0] if sv["reasons"] else "invalid_scene_structure"
+            retry_instruction = "fix_structure_then_duration"
+        elif duration_ok:
             retry_reason = "in_range"
             retry_instruction = "none_needed"
         elif word_count < final_budget["minimumWords"]:
@@ -595,7 +768,7 @@ def main() -> int:
             retry_reason = "duration_out_of_range"
             retry_instruction = "expand_content"
 
-        retry_entry = {
+        retry_entry: dict = {
             "retry": retries,
             "reason": retry_reason,
             "actualWordCount": word_count,
@@ -605,13 +778,20 @@ def main() -> int:
             "estimatedDurationSec": round(estimated_dur, 1),
             "instructionType": retry_instruction,
         }
+        if not sv["valid"]:
+            retry_entry["structuralIssues"] = [code for code, _ in sv["reasons"]]
+            retry_entry["structuralIssueDetails"] = [msg for _, msg in sv["reasons"]]
         retry_history.append(retry_entry)
 
-        if duration_ok:
-            print(f"  Duration OK ({estimated_dur:.1f}s within range)")
+        # Accept only when BOTH structure AND duration are ok
+        if sv["valid"] and duration_ok:
+            print(f"  Accepted: structure valid + duration OK ({estimated_dur:.1f}s within range)")
             break
 
         retries += 1
+    else:
+        # Loop exhausted all attempts without break
+        pass
 
     job_id = generate_job_id(args.topic)
 
@@ -670,8 +850,7 @@ def main() -> int:
     word_count = _count_voiceover_words(script_data)
     scene_count = len(script_data.get("scenes", []))
     estimated_dur, spoken_sec, pause_sec = _estimate_narration_duration_sec(word_count, scene_count)
-
-    scene_count_ok = 4 <= scene_count <= MAX_SCENES
+    sv = _validate_script_structure(script_data, MIN_SCENE_COUNT, args.topic)
 
     duration_ok_after_retries = False
     if strictness == "strict":
@@ -682,20 +861,18 @@ def main() -> int:
     else:
         duration_ok_after_retries = True
 
-    all_ok = duration_ok_after_retries and scene_count_ok
+    all_ok = duration_ok_after_retries and sv["valid"]
 
     review_reasons = []
+    if not sv["valid"]:
+        for code, msg in sv["reasons"]:
+            review_reasons.append(f"STRUCTURE_{code.upper()}: {msg}")
     if not duration_ok_after_retries:
         review_reasons.append(
             f"DURATION_OUT_OF_RANGE: estimated={estimated_dur:.1f}s "
             f"(spoken={spoken_sec:.1f}s + pauses={pause_sec:.1f}s), "
             f"target={target_dur}s, min={min_sec}s, max={max_sec}s, "
             f"words={word_count}, scenes={scene_count}"
-        )
-    if not scene_count_ok:
-        review_reasons.append(
-            f"SCENE_COUNT_OUT_OF_RANGE: got {scene_count} scenes, "
-            f"expected 4-{MAX_SCENES}"
         )
 
     status = "SCRIPT_DRAFT" if all_ok else "REVIEW_REQUIRED"
@@ -742,6 +919,8 @@ def main() -> int:
             "pauseSec": final_budget["pauseSec"],
             "retries": retries,
             "retryHistory": retry_history,
+            "structureValid": sv["valid"],
+            "structureIssues": [code for code, _ in sv["reasons"]] if not sv["valid"] else [],
             "status": "PASS" if all_ok else "FAIL",
         },
         "createdAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),

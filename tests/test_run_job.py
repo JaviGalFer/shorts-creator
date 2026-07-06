@@ -1110,6 +1110,93 @@ def test_validate_exit0_sets_validated(fake_job_dir, initial_metadata_file, caps
                     assert "VALIDATED" in out
 
 
+# ── Prepare exit-1 pipeline integration ──────────────────────────────────
+
+
+def test_prepare_exit1_fails_pipeline(fake_job_dir, initial_metadata_file, capsys):
+    """Prepare exits 1 → runner records failedStage=prepare."""
+    meta_path = str(fake_job_dir / "metadata.json")
+    script_output = json.dumps({"jobId": "test-1", "path": meta_path, "status": "SCRIPT_DRAFT"})
+
+    scenes_dir = fake_job_dir / "scenes"
+    scenes_dir.mkdir()
+    (scenes_dir / "scene-1.jpg").touch()
+    (scenes_dir / "scene-1.mp3").touch()
+
+    def side_effect(cmd, **kw):
+        cmd_str = " ".join(cmd)
+        if "generate_script.py" in cmd_str:
+            return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
+        if "prepare_job.py" in cmd_str:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="Asset failures")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    script_meta = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
+    assets_meta = {"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
+    audio_meta = {"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
+
+    with patch("run_job.subprocess.run", side_effect=side_effect):
+        with patch("run_job.load_metadata",
+                   side_effect=[dict(script_meta), dict(script_meta),
+                                dict(assets_meta), dict(assets_meta),
+                                dict(audio_meta), dict(audio_meta),
+                                dict(audio_meta)]):
+            with patch("run_job.save_metadata") as mock_save:
+                with patch.object(sys, "argv",
+                                  ["run_job.py", "--topic", "Test", "--stop-after", "prepare"]):
+                    rc = main()
+                    assert rc == 1
+                    calls = mock_save.call_args_list
+                    failed_save = calls[-1][0][1]
+                    assert failed_save["status"] == "FAILED"
+                    assert failed_save["failure"]["failedStage"] == "prepare"
+                    assert failed_save["failure"]["exitCode"] == 1
+                    assert "childCommand" in failed_save["failure"]
+                    assert "prepare_job.py" in failed_save["failure"]["childCommand"]
+                    out = capsys.readouterr().out
+                    assert "FAILED" in out
+
+
+def test_prepare_exit1_no_render_no_validate(fake_job_dir, initial_metadata_file, capsys):
+    """After prepare fails, render and validate must not be invoked."""
+    meta_path = str(fake_job_dir / "metadata.json")
+    script_output = json.dumps({"jobId": "test-1", "path": meta_path, "status": "SCRIPT_DRAFT"})
+
+    scenes_dir = fake_job_dir / "scenes"
+    scenes_dir.mkdir()
+    (scenes_dir / "scene-1.jpg").touch()
+    (scenes_dir / "scene-1.mp3").touch()
+
+    call_count = []
+
+    def side_effect(cmd, **kw):
+        cmd_str = " ".join(cmd)
+        call_count.append(cmd_str)
+        if "generate_script.py" in cmd_str:
+            return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
+        if "prepare_job.py" in cmd_str:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    script_meta = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
+    assets_meta = {"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
+    audio_meta = {"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
+
+    with patch("run_job.subprocess.run", side_effect=side_effect):
+        with patch("run_job.load_metadata",
+                   side_effect=[dict(script_meta), dict(script_meta),
+                                dict(assets_meta), dict(assets_meta),
+                                dict(audio_meta), dict(audio_meta),
+                                dict(audio_meta)]):
+            with patch("run_job.save_metadata"):
+                with patch.object(sys, "argv",
+                                  ["run_job.py", "--topic", "Test", "--stop-after", "validate"]):
+                    rc = main()
+                    assert rc == 1
+                    assert not any("render_job.py" in c for c in call_count)
+                    assert not any("validate_job.py" in c for c in call_count)
+
+
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------

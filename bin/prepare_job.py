@@ -453,6 +453,126 @@ def _fill_timeline_gaps(timeline: list[dict], narration_duration_sec: float | No
     return timeline
 
 
+def _invalidate_derived_artifacts(data: dict, video_dir: Path) -> None:
+    """Remove stale prepare-generated artifacts and metadata fields.
+
+    Does NOT delete: source metadata, audio files, downloaded assets, logs.
+    """
+    # Remove subtitle file if present
+    subtitle_path = video_dir / "subtitle.ass"
+    try:
+        if subtitle_path.exists():
+            subtitle_path.unlink()
+    except OSError:
+        pass
+
+    # Remove stale timeline / renderTimeline metadata
+    data.pop("timeline", None)
+    data.pop("renderTimeline", None)
+    data.pop("subtitles", None)
+    data.pop("render", None)
+    data.pop("review", None)
+
+
+def _validate_asset_completion(data: dict, video_dir: Path) -> list[dict]:
+    """Validate every required visualSequence segment has a resolved asset.
+
+    Returns list of failure dicts.  Empty list means all segments valid.
+    """
+    failures: list[dict] = []
+    scenes = data.get("script", {}).get("scenes", [])
+    asset_by_scene: dict[int, dict] = {}
+    for a in data.get("assets", []):
+        sn = a.get("sceneNumber")
+        if sn is not None:
+            asset_by_scene[int(sn)] = a
+
+    for scene in scenes:
+        sn = scene.get("sceneNumber")
+        vs_list = (scene.get("visualPlan") or {}).get("visualSequence") or []
+        asset_entry = asset_by_scene.get(sn, {})
+        segments = asset_entry.get("segments", [])
+        seg_by_idx = {s.get("segmentIndex"): s for s in segments}
+
+        for vs in vs_list:
+            si = vs.get("segmentIndex", 1)
+            seg = seg_by_idx.get(si)
+
+            failure = {
+                "sceneNumber": sn,
+                "segmentIndex": si,
+                "requestedAssetType": vs.get("assetType"),
+                "path": None,
+                "validationStatus": None,
+                "error": None,
+                "failureCode": None,
+            }
+
+            if not seg:
+                failure["failureCode"] = "SEGMENT_MISSING"
+                failure["error"] = "No asset segment entry"
+                failures.append(failure)
+                continue
+
+            path_val = seg.get("path")
+            failure["path"] = path_val
+            failure["validationStatus"] = seg.get("segmentValidationStatus")
+            failure["error"] = seg.get("error")
+
+            if seg.get("error"):
+                failure["failureCode"] = "SEGMENT_ERROR"
+                failures.append(failure)
+                continue
+
+            if seg.get("segmentValidationStatus") != "PASS":
+                failure["failureCode"] = "SEGMENT_VALIDATION_FAILED"
+                failures.append(failure)
+                continue
+
+            if not path_val or not isinstance(path_val, str) or not path_val.strip():
+                failure["failureCode"] = "SEGMENT_PATH_NULL"
+                failures.append(failure)
+                continue
+
+            resolved = Path(path_val).resolve()
+            try:
+                resolved.relative_to(video_dir)
+            except ValueError:
+                failure["failureCode"] = "SEGMENT_PATH_OUTSIDE_JOB"
+                failures.append(failure)
+                continue
+
+            if not resolved.is_file():
+                failure["failureCode"] = "SEGMENT_FILE_MISSING"
+                failures.append(failure)
+                continue
+
+    # Also check scene-level selected flag
+    for sn, asset_entry in asset_by_scene.items():
+        selected = asset_entry.get("selected")
+        if selected is not True:
+            scene = _find_scene_by_number(scenes, sn)
+            if scene:
+                vsl = (scene.get("visualPlan") or {}).get("visualSequence") or []
+                if vsl:
+                    failures.append({
+                        "sceneNumber": sn,
+                        "segmentIndex": None,
+                        "requestedAssetType": None,
+                        "path": None,
+                        "validationStatus": None,
+                        "error": f"Scene not selected (selected={selected!r})",
+                        "failureCode": "SCENE_NOT_SELECTED",
+                    })
+
+    return failures
+
+
+def _find_scene_by_number(scenes: list, sn: int) -> dict | None:
+    for s in scenes:
+        if s.get("sceneNumber") == sn:
+            return s
+    return None
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('metadata_path')
@@ -477,6 +597,23 @@ def main() -> int:
         subtitle_style = "shorts_upper_dynamic"
 
     scenes_dir.mkdir(parents=True, exist_ok=True)
+
+    # ─── Asset completion validation ─────────────────────────────────────
+    asset_failures = _validate_asset_completion(data, video_dir)
+    if asset_failures:
+        # Invalidate stale derived artifacts
+        _invalidate_derived_artifacts(data, video_dir)
+        data["status"] = "ASSET_UNRESOLVED"
+        data["assetFailures"] = asset_failures
+        data["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        metadata_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        print(json.dumps({
+            "jobId": job_id,
+            "status": "ASSET_UNRESOLVED",
+            "failures": len(asset_failures),
+            "details": asset_failures[:10],
+        }))
+        return 1
 
     audio_config = data.get('audio', {})
     is_continuous = audio_config.get('continuous', False)

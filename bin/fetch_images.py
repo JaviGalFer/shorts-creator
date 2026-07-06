@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from editorial_asset_contract import EDITORIAL_ROLE_PREFERENCES, is_asset_type_allowed
+
 # ---------------------------------------------------------------------------
 # Scoring weights (centralized)
 # ---------------------------------------------------------------------------
@@ -144,44 +146,10 @@ STRATEGY_VISUAL_QUERIES: dict[str, list[str]] = {
 CANDIDATES_PER_PROVIDER = 5
 MIN_SCORE = 30
 
-EDITORIAL_ROLE_PREFERENCES: dict[str, dict[str, set[str]]] = {
-    "context_map": {
-        "preferred": {"map", "document", "historical_map"},
-        "forbidden": {"atmospheric_broll", "generated_reconstruction", "broll", "historical_photograph"},
-    },
-    "character_portrait": {
-        "preferred": {"portrait", "historical_photograph", "painting"},
-        "forbidden": {"atmospheric_broll", "broll"},
-    },
-    "military_technology": {
-        "preferred": {"historical_photograph", "painting", "document"},
-        "forbidden": {"generated_reconstruction", "atmospheric_broll"},
-    },
-    "civilian_impact": {
-        "preferred": {"historical_photograph", "historical_art"},
-        "forbidden": {"atmospheric_broll", "generated_reconstruction", "broll"},
-    },
-    "battle_or_assault": {
-        "preferred": {"historical_photograph", "historical_art"},
-        "forbidden": {"atmospheric_broll", "broll", "generated_reconstruction"},
-    },
-    "border_closure_construction": {
-        "preferred": {"historical_photograph", "historical_art"},
-        "forbidden": {"atmospheric_broll", "broll", "generated_reconstruction"},
-    },
-    "document_or_date": {
-        "preferred": {"document", "newspaper", "historical_map"},
-        "forbidden": {"generated_reconstruction", "atmospheric_broll", "broll", "historical_photograph"},
-    },
-    "consequence_or_legacy": {
-        "preferred": {"historical_photograph", "historical_art"},
-        "forbidden": {"atmospheric_broll", "broll", "generated_reconstruction"},
-    },
-    "atmospheric_transition": {
-        "preferred": {"atmospheric_broll", "broll"},
-        "forbidden": {"generated_reconstruction"},
-    },
-}
+# ---------------------------------------------------------------------------
+
+# (EDITORIAL_ROLE_PREFERENCES and is_asset_type_allowed imported from
+#  editorial_asset_contract.py — shared with generate_script.py)
 
 SCENE_PAUSE_SEC = 0.5
 
@@ -853,6 +821,8 @@ def _fetch_one_asset(
     fallback_reason = None
     best_score = None
     ok = False
+    _download_attempted = False
+    _failure_classification = None
 
     for provider in provider_chain:
         provider_attempt_order.append(provider)
@@ -928,26 +898,16 @@ def _fetch_one_asset(
         scored = []
         for c in candidates:
             s, reasons = score_candidate(c, visual_plan, scene_num, previous_entity_pool, anti_rep_context)
-            if visual_plan:
-                er = visual_plan.get("editorialRole")
-                er_score, er_reasons = score_editorial_role(c.get("strategy", ""), er)
-                s += er_score
-                reasons.extend(er_reasons)
             scored.append((s, reasons, c))
 
         scored.sort(key=lambda x: x[0], reverse=True)
 
         # Stage 1: Filter candidates before download selection
-        # Reject: negative score, score < MIN_SCORE, forbidden asset type,
+        # Reject: negative score, score < MIN_SCORE,
         # unsupported dimensions, Pexels for hard historical roles.
+        # (Requested-type compatibility is verified by the final
+        #  shared validator, not by candidate strategy.)
         editorial_role_str = (visual_plan.get("editorialRole") if visual_plan else None) or ""
-        role_prefs = EDITORIAL_ROLE_PREFERENCES.get(editorial_role_str, {})
-        forbidden_types = set(role_prefs.get("forbidden", set()))
-        if (editorial_role_str == "consequence_or_legacy"
-                and scene is not None
-                and _classify_temporal_intent(scene) == "legacy_or_commemoration"):
-            forbidden_types.discard("atmospheric_broll")
-            forbidden_types.discard("broll")
 
         valid_scored = []
         for s, reasons, c in scored:
@@ -955,9 +915,6 @@ def _fetch_one_asset(
                 continue  # reject negative score
             if s < MIN_SCORE:
                 continue  # reject below minimum threshold
-            c_type = c.get("strategy", "")
-            if c_type in forbidden_types:
-                continue  # reject incompatible asset type
             provider = c.get("provider", "")
             if provider == "pexels" and editorial_role_str in HARD_HISTORICAL_ROLES:
                 continue  # reject Pexels for hard historical roles
@@ -1092,6 +1049,7 @@ def _fetch_one_asset(
             else:
                 source_url = bcandidate.get("sourceUrl") or bcandidate.get("thumbnailUrl", "")
                 if source_url:
+                    _download_attempted = True
                     ok = download(source_url, dest)
                     if ok:
                         best_score = bs
@@ -1131,8 +1089,6 @@ def _fetch_one_asset(
                     reject.append("negative_score")
                 if s < MIN_SCORE and s >= 0:
                     reject.append(f"score_{s}_below_min_{MIN_SCORE}")
-                if c_type in forbidden_types:
-                    reject.append(f"type_{c_type}_forbidden_for_{editorial_role_str}")
                 if prov == "pexels" and editorial_role_str in HARD_HISTORICAL_ROLES:
                     reject.append("pexels_not_allowed_for_hard_historical")
                 c_w = c.get("width", 0) or 0
@@ -1150,6 +1106,9 @@ def _fetch_one_asset(
         fallback_used = provider_chain[0]
         fallback_reason = "primary provider succeeded"
 
+    if not ok and not selected_candidate:
+        _failure_classification = "download_failed" if _download_attempted else "resolution_exhausted"
+
     return {
         "ok": ok,
         "selected_candidate": selected_candidate,
@@ -1160,6 +1119,7 @@ def _fetch_one_asset(
         "fallback_used": fallback_used,
         "fallback_reason": fallback_reason,
         "candidates_count": len(candidates) if candidates else 0,
+        "failure_classification": _failure_classification,
     }
 
 
@@ -1801,13 +1761,13 @@ def _check_semantic_evidence(candidate: dict, scene: dict, topic: str) -> dict:
     }
 
 
-def score_editorial_role(asset_type: str, editorial_role: str | None) -> tuple[int, list[str]]:
+def score_editorial_role(asset_type: str, editorial_role: str | None,
+                         temporal_intent: str | None = None) -> tuple[int, list[str]]:
     if not editorial_role:
         return 0, []
     prefs = EDITORIAL_ROLE_PREFERENCES.get(editorial_role, {})
     preferred = prefs.get("preferred", set())
-    forbidden = prefs.get("forbidden", set())
-    if asset_type in forbidden:
+    if not is_asset_type_allowed(editorial_role, asset_type, temporal_intent):
         return -20, [f"Asset type {asset_type} forbidden for role {editorial_role}"]
     if asset_type in preferred:
         return 15, [f"Asset type {asset_type} preferred for role {editorial_role}"]
@@ -1863,8 +1823,6 @@ def _try_hard_role_fallback(
     scored = []
     for c in all_cands:
         s, reasons = score_candidate(c, visual_plan, scene_num, previous_entity_pool, anti_rep_context)
-        er_score, er_reasons = score_editorial_role(c.get("strategy", ""), editorial_role)
-        s += er_score; reasons.extend(er_reasons)
         sem_ev = _check_semantic_evidence(c, scene or {}, "")
         c["semanticEvidence"] = sem_ev
         temporal_intent = _classify_temporal_intent(scene or {})
@@ -1933,8 +1891,10 @@ def _try_hard_role_fallback(
         "provenanceType": "illustrative",
         "fallbackReason": f"Wikimedia returned no candidates for editorialRole={editorial_role}",
         "originalEditorialRole": editorial_role,
+        "queryUsed": bc.get("queryUsed", seg_query) if seg_query else bc.get("queryUsed", ""),
     }
-    er_s, er_r = score_editorial_role(seg_at, editorial_role)
+    er_s, er_r = score_editorial_role(seg_at, editorial_role,
+                                        _classify_temporal_intent(scene or {}))
     if seg_entry["score"] is not None:
         seg_entry["score"] += er_s
     seg_entry["scoreReasons"] = (seg_entry.get("scoreReasons") or []) + er_r
@@ -2049,47 +2009,160 @@ def _get_source_role(asset_or_seg):
 
 
 def _validate_segment_for_role(seg_at, editorial_role, candidate=None,
-                               semantic_ev=None, temporal_intent=None, source_role=None):
+                               semantic_ev=None, temporal_intent=None, source_role=None,
+                               visual_plan=None):
+    """Authoritative shared validator for segment acceptance.
+
+    Called from normal fetching, hard-role fallback, and reuse paths.
+    Returns {ok, status, reasons, requestedAssetType, sceneEditorialRole,
+             sourceEditorialRole, effectiveAssetType}.
+    """
+    reasons: list[str] = []
     role_prefs = EDITORIAL_ROLE_PREFERENCES.get(editorial_role, {})
-    forbidden = role_prefs.get("forbidden", set())
-    if seg_at in forbidden:
+    se = semantic_ev or (candidate or {}).get("semanticEvidence") or {}
+    vp = visual_plan or {}
+
+    # ── 1. Forbidden requested type (shared contract) ───────────────────
+    if seg_at and not is_asset_type_allowed(editorial_role, seg_at, temporal_intent):
         return {"ok": False, "status": "REJECTED_FORBIDDEN_TYPE",
                 "reasons": [f"requested={seg_at} forbidden for {editorial_role}"],
                 "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
                 "sourceEditorialRole": source_role, "effectiveAssetType": None}
+
+    # ── 2. Effective candidate type (shared contract) ───────────────────
+    eff = None
     if candidate:
-        declared = candidate.get("declaredAssetType") or ""
+        declared = candidate.get("declaredAssetType") or vp.get("primaryAssetType", "")
         eff = candidate.get("effectiveAssetType") or _infer_effective_asset_type(candidate, declared)
-        if eff and eff in forbidden:
+        if eff and not is_asset_type_allowed(editorial_role, eff, temporal_intent):
             return {"ok": False, "status": "REJECTED_FORBIDDEN_EFFECTIVE_TYPE",
                     "reasons": [f"effective={eff} forbidden for {editorial_role}"],
                     "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
                     "sourceEditorialRole": source_role, "effectiveAssetType": eff}
-    if temporal_intent == "event_depiction":
-        atm = (candidate or {}).get("assetTemporalMatch", "")
-        if atm in ("unknown", "modern_legacy"):
-            return {"ok": False, "status": "REJECTED_TEMPORAL_MATCH",
-                    "reasons": [f"event_depiction needs archival_context, got {atm}"],
+
+    # ── 3. Event depiction temporal guard ────────────────────────────────
+    atm = (candidate or {}).get("assetTemporalMatch", "")
+    if temporal_intent == "event_depiction" and atm in ("unknown", "modern_legacy"):
+        return {"ok": False, "status": "REJECTED_TEMPORAL_MATCH",
+                "reasons": [f"event_depiction needs archival_context, got {atm}"],
+                "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
+                "sourceEditorialRole": source_role, "effectiveAssetType": eff}
+
+    # ── 4. context_map hard rule ─────────────────────────────────────────
+    if editorial_role == "context_map":
+        allowed_ct = {"map", "historical_map", "document", "newspaper",
+                      "map_or_document", "historical_map_or_document"}
+        ct_eff = eff or (vp.get("primaryAssetType", ""))
+        if ct_eff not in allowed_ct:
+            return {"ok": False, "status": "REJECTED_CONTEXT_MAP_TYPE",
+                    "reasons": [f"context_map requires map/document, got {ct_eff}"],
                     "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
-                    "sourceEditorialRole": source_role, "effectiveAssetType": None}
+                    "sourceEditorialRole": source_role, "effectiveAssetType": ct_eff}
+        role_ev = se.get("roleEvidence", [])
+        if not role_ev:
+            return {"ok": False, "status": "REJECTED_CONTEXT_MAP_EVIDENCE",
+                    "reasons": ["context_map requires map/document roleEvidence"],
+                    "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
+                    "sourceEditorialRole": source_role, "effectiveAssetType": ct_eff}
+        if atm == "unknown":
+            return {"ok": False, "status": "REJECTED_CONTEXT_MAP_TEMPORAL",
+                    "reasons": ["context_map requires clear temporal match"],
+                    "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
+                    "sourceEditorialRole": source_role, "effectiveAssetType": ct_eff}
+
+    # ── 5. document_or_date hard rule ────────────────────────────────────
+    if editorial_role == "document_or_date":
+        allowed_doc = {"map", "historical_map", "document", "newspaper",
+                       "map_or_document", "historical_map_or_document"}
+        doc_eff = eff or (vp.get("primaryAssetType", ""))
+        if doc_eff not in allowed_doc:
+            return {"ok": False, "status": "REJECTED_DOCUMENT_TYPE",
+                    "reasons": [f"document_or_date requires map/document, got {doc_eff}"],
+                    "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
+                    "sourceEditorialRole": source_role, "effectiveAssetType": doc_eff}
+        role_ev = se.get("roleEvidence", [])
+        cd_title = (candidate or {}).get("title", "") or ""
+        cd_desc = (candidate or {}).get("description", "") or (candidate or {}).get("sourceDescription", "") or ""
+        if not role_ev and not cd_title and not cd_desc:
+            return {"ok": False, "status": "REJECTED_DOCUMENT_EVIDENCE",
+                    "reasons": ["document_or_date requires title or description"],
+                    "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
+                    "sourceEditorialRole": source_role, "effectiveAssetType": doc_eff}
+
+    # ── 6. consequence_or_legacy event_depiction date/fall check ─────────
+    if temporal_intent == "event_depiction" and editorial_role == "consequence_or_legacy":
+        depicted = se.get("sourceDepictedDateEvidence", [])
+        fall_open = se.get("fallOpeningSubjectEvidence", [])
+        division_subj = se.get("divisionSubjectEvidence", [])
+        target_years = set()
+        for tok in (vp.get("period", "") or "").split():
+            if tok.isdigit() and len(tok) == 4:
+                target_years.add(tok)
+        if not target_years:
+            period_raw = vp.get("period", "")
+            for m in re.findall(r"\b(\d{4})\b", period_raw):
+                target_years.add(m)
+        has_overlap = bool(target_years) and bool(set(depicted) & target_years)
+        if not (has_overlap or fall_open):
+            return {"ok": False, "status": "REJECTED_CONSEQUENCE_EVENT",
+                    "reasons": ["consequence_or_legacy event_depiction needs depicted-date overlap or fall/opening evidence"],
+                    "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
+                    "sourceEditorialRole": source_role, "effectiveAssetType": eff}
+        if division_subj and not has_overlap and not fall_open:
+            return {"ok": False, "status": "REJECTED_CONSEQUENCE_DIVISION",
+                    "reasons": ["division/family asset incompatible with distinct event"],
+                    "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
+                    "sourceEditorialRole": source_role, "effectiveAssetType": eff}
+
+    # ── 7. Construction / border-closure evidence ────────────────────────
     if editorial_role in ("battle_or_assault", "military_technology", "border_closure_construction"):
-        if semantic_ev:
-            cbj = semantic_ev.get("constructionSubjectEvidence", [])
-            bsj = semantic_ev.get("borderClosureSubjectEvidence", [])
-            if editorial_role == "border_closure_construction" and not bsj:
+        cbj = se.get("constructionSubjectEvidence", [])
+        bsj = se.get("borderClosureSubjectEvidence", [])
+        if editorial_role == "border_closure_construction":
+            if not bsj:
                 return {"ok": False, "status": "REJECTED_CONSTRUCTION_EVIDENCE",
-                        "reasons": [f"role={editorial_role} requires border evidence"],
+                        "reasons": ["border_closure_construction requires border evidence"],
                         "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
-                        "sourceEditorialRole": source_role, "effectiveAssetType": None}
-            if editorial_role != "border_closure_construction" and not cbj:
-                return {"ok": False, "status": "REJECTED_CONSTRUCTION_EVIDENCE",
-                        "reasons": [f"role={editorial_role} requires constructionEvidence"],
+                        "sourceEditorialRole": source_role, "effectiveAssetType": eff}
+            c_title = (candidate or {}).get("title", "") or ""
+            c_desc = (candidate or {}).get("description", "") or (candidate or {}).get("sourceDescription", "") or ""
+            c_combined = f"{c_title} {c_desc}"
+            c_combined_u = _unaccent(c_combined)
+            reject_border = any(
+                _unaccent(ind) in c_combined_u or ind in c_combined
+                for ind in _BORDER_CLOSURE_REJECT_INDICATORS
+            )
+            if reject_border:
+                return {"ok": False, "status": "REJECTED_BORDER_CLOSURE_SUBJECT",
+                        "reasons": ["border_closure_construction rejected: family/checkpoint/commemoration subject"],
                         "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
-                        "sourceEditorialRole": source_role, "effectiveAssetType": None}
+                        "sourceEditorialRole": source_role, "effectiveAssetType": eff}
+        elif not cbj:
+            return {"ok": False, "status": "REJECTED_CONSTRUCTION_EVIDENCE",
+                    "reasons": [f"{editorial_role} requires constructionEvidence"],
+                    "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
+                    "sourceEditorialRole": source_role, "effectiveAssetType": eff}
+
+    # ── 8. Renderability ─────────────────────────────────────────────────
+    rend = (candidate or {}).get("renderabilityStatus", "")
+    if rend == "FAIL":
+        return {"ok": False, "status": "REJECTED_RENDERABILITY",
+                "reasons": (candidate or {}).get("renderabilityReasons", ["renderability failed"]),
+                "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
+                "sourceEditorialRole": source_role, "effectiveAssetType": eff}
+
+    # ── 9. Semantic confidence floor ─────────────────────────────────────
+    sem_conf = se.get("semanticConfidence", "low")
+    if sem_conf == "low" and editorial_role in HARD_HISTORICAL_ROLES:
+        return {"ok": False, "status": "REJECTED_LOW_CONFIDENCE",
+                "reasons": [f"hard historical role {editorial_role} requires medium+ confidence"],
+                "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
+                "sourceEditorialRole": source_role, "effectiveAssetType": eff}
+
     return {"ok": True, "status": "PASS", "reasons": [],
             "requestedAssetType": seg_at, "sceneEditorialRole": editorial_role,
             "sourceEditorialRole": source_role,
-            "effectiveAssetType": candidate.get("effectiveAssetType") if candidate else None}
+            "effectiveAssetType": eff}
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -2169,13 +2242,37 @@ def main() -> int:
                 should_reuse = False
                 print(f"  scene {scene_num}: reuse BLOCKED (src={src_role} incompatible with dst={dst_role})")
             if should_reuse:
-                rprefs = EDITORIAL_ROLE_PREFERENCES.get(dst_role, {})
-                ftypes = rprefs.get("forbidden", set())
                 for pseg in previous_valid_asset.get("segments") or []:
-                    if pseg.get("assetType", "") in ftypes:
+                    if not is_asset_type_allowed(dst_role, pseg.get("assetType", ""), reuse_temporal_intent):
                         should_reuse = False
                         print(f"  scene {scene_num}: reuse BLOCKED (seg type={pseg.get('assetType')} forbidden for {dst_role})")
                         break
+
+        if should_reuse:
+            reuse_temporal_intent = _classify_temporal_intent(scene)
+            dst_role = editorial_role or ""
+
+            # ── Shared validator for reused segments ─────────────────────
+            reuse_validation_failed = False
+            reuse_validation_reasons: list[str] = []
+            for pseg in (previous_valid_asset.get("segments") or []):
+                pseg_at = pseg.get("assetType", "")
+                pseg_se = pseg.get("semanticEvidence", {})
+                src_r = _get_source_role(previous_valid_asset)
+                rsv = _validate_segment_for_role(
+                    pseg_at, dst_role,
+                    candidate=pseg,
+                    semantic_ev=pseg_se,
+                    temporal_intent=reuse_temporal_intent,
+                    source_role=src_r,
+                    visual_plan=visual_plan)
+                if not rsv["ok"]:
+                    reuse_validation_failed = True
+                    reuse_validation_reasons.append(
+                        f"seg {pseg.get('segmentIndex', '?')}: {rsv['status']}")
+            if reuse_validation_failed:
+                should_reuse = False
+                print(f"  scene {scene_num}: reuse BLOCKED by validator ({' / '.join(reuse_validation_reasons[:3])})")
 
         if should_reuse:
             reuse_temporal_intent = _classify_temporal_intent(scene)
@@ -2369,109 +2466,197 @@ def main() -> int:
 
                 cand = result["selected_candidate"]
                 dur_frac = seg.get("durationFraction", 1.0 / len(visual_sequence))
-                seg_entry = {
-                    "segmentIndex": seg_idx,
-                    "path": str(seg_dest) if result["ok"] else None,
-                    "assetType": seg_at,
-                    "durationSec": round(scene["targetDurationSec"] * dur_frac, 1),
-                    "transition": seg.get("transition", "cut"),
-                    "provider": cand.get("provider") if cand else None,
-                    "sourceUrl": cand.get("sourceUrl") if cand else None,
-                    "license": cand.get("license") if cand else None,
-                    "author": cand.get("author") if cand else None,
-                    "score": cand.get("score") if cand else None,
-                    "scoreReasons": cand.get("scoreReasons") if cand else None,
-                    "width": cand.get("width") if cand else None,
-                    "height": cand.get("height") if cand else None,
-                    "editorialReason": seg.get("editorialReason", ""),
-                    "downloadedAt": datetime.now(timezone.utc).isoformat() if result["ok"] else None,
-                    # Anti-repetition metadata
-                    "duplicateRisk": "none",
-                    "previousSimilarAssets": [],
-                    "reuseAllowed": False,
-                    "reuseReason": "",
-                    "focalRegion": seg.get("focalRegion", "center"),
-                    "cropMode": seg.get("cropMode", "full_map"),
-                    "overlayText": seg.get("overlayText", ""),
-                    "mapReadabilityScore": None,
-                    "visualAuthenticityRisk": None,
-                    "semanticEvidence": cand.get("semanticEvidence") if cand else None,
-                    "visualTemporalIntent": cand.get("visualTemporalIntent") if cand else None,
-                    "assetTemporalMatch": cand.get("assetTemporalMatch") if cand else None,
-                    "declaredAssetType": cand.get("declaredAssetType") if cand else None,
-                    "effectiveAssetType": cand.get("effectiveAssetType") if cand else None,
-                    "assetTypeValidationStatus": cand.get("assetTypeValidationStatus") if cand else None,
-                    "renderabilityStatus": cand.get("renderabilityStatus") if cand else None,
-                    "renderabilityReasons": cand.get("renderabilityReasons") if cand else None,
-                    "mapReadabilityScore": cand.get("mapReadabilityScore") if cand else None,
-                    "originalSceneNumber": None,
-                    "originalEditorialRole": None,
-                    "originalVisualTemporalIntent": None,
-                    "reuseCompatibilityReason": None,
-                }
-
-                if seg_at in ("historical_map", "map", "document"):
-                    w = seg_entry.get("width", 0) or 0
-                    h = seg_entry.get("height", 0) or 0
-                    if w and h and w > h:
-                        readability = min(w / 1080, h / 1920) * (1 - abs(w / h - 9 / 16) / 2)
-                        seg_entry["mapReadabilityScore"] = round(min(readability, 1.0), 2)
-
-                # Segment-level type validation
                 editorial_role = visual_plan.get("editorialRole") if visual_plan else None
-                if editorial_role and result["ok"]:
-                    rprefs = EDITORIAL_ROLE_PREFERENCES.get(editorial_role, {})
-                    ftypes = rprefs.get("forbidden", set())
-                    if seg_at in ftypes:
-                        seg_entry["error"] = f"Seg type {seg_at} forbidden for role {editorial_role}"
-                        seg_entry["segmentValidationStatus"] = "REJECTED_FORBIDDEN_TYPE"
-                        seg_entry["segmentValidationReasons"] = [f"{seg_at} forbidden for {editorial_role}"]
-                        seg_entry["requestedAssetType"] = seg_at
-                        seg_entry["sceneEditorialRole"] = editorial_role
-                        seg_entry["sourceEditorialRole"] = editorial_role
-                        print(f"  scene {scene_num} seg {seg_idx}: REJECTED ({seg_at} forbidden for {editorial_role})")
-                        segments.append(seg_entry)
-                        segment_results.append(False)
-                        continue
-                    seg_entry["segmentValidationStatus"] = "PASS"
-                    seg_entry["segmentValidationReasons"] = []
-                    seg_entry["requestedAssetType"] = seg_at
-                    seg_entry["sceneEditorialRole"] = editorial_role
-                    seg_entry["sourceEditorialRole"] = editorial_role
-                # Editorial role scoring
-                editorial_role = visual_plan.get("editorialRole") if visual_plan else None
-                if editorial_role and result["ok"]:
-                    er_score, er_reasons = score_editorial_role(seg_at, editorial_role)
+
+                def _build_seg_entry(c, ok_flag, path_override=None):
+                    p = path_override or str(seg_dest)
+                    return {
+                        "segmentIndex": seg_idx,
+                        "path": p if ok_flag else None,
+                        "assetType": seg_at,
+                        "durationSec": round(scene["targetDurationSec"] * dur_frac, 1),
+                        "transition": seg.get("transition", "cut"),
+                        "provider": c.get("provider") if c else None,
+                        "sourceUrl": c.get("sourceUrl") if c else None,
+                        "license": c.get("license") if c else None,
+                        "author": c.get("author") if c else None,
+                        "score": c.get("score") if c else None,
+                        "scoreReasons": c.get("scoreReasons") if c else None,
+                        "width": c.get("width") if c else None,
+                        "height": c.get("height") if c else None,
+                        "editorialReason": seg.get("editorialReason", ""),
+                        "downloadedAt": datetime.now(timezone.utc).isoformat() if ok_flag else None,
+                        "duplicateRisk": "none",
+                        "previousSimilarAssets": [],
+                        "reuseAllowed": False,
+                        "reuseReason": "",
+                        "focalRegion": seg.get("focalRegion", "center"),
+                        "cropMode": seg.get("cropMode", "full_map"),
+                        "overlayText": seg.get("overlayText", ""),
+                        "mapReadabilityScore": c.get("mapReadabilityScore") if c else None,
+                        "visualAuthenticityRisk": None,
+                        "semanticEvidence": c.get("semanticEvidence") if c else None,
+                        "visualTemporalIntent": c.get("visualTemporalIntent") if c else None,
+                        "assetTemporalMatch": c.get("assetTemporalMatch") if c else None,
+                        "declaredAssetType": c.get("declaredAssetType") if c else None,
+                        "effectiveAssetType": c.get("effectiveAssetType") if c else None,
+                        "assetTypeValidationStatus": c.get("assetTypeValidationStatus") if c else None,
+                        "renderabilityStatus": c.get("renderabilityStatus") if c else None,
+                        "renderabilityReasons": c.get("renderabilityReasons") if c else None,
+                        "originalSceneNumber": None,
+                        "originalEditorialRole": None,
+                        "originalVisualTemporalIntent": None,
+                        "reuseCompatibilityReason": None,
+                    }
+
+                seg_entry = _build_seg_entry(cand, result["ok"])
+
+                # ── Shared validator ─────────────────────────────────────
+                segment_accepted = False
+                if result["ok"] and cand:
+                    temporal_intent = _classify_temporal_intent(scene)
+                    sv = _validate_segment_for_role(
+                        seg_at, editorial_role, candidate=cand,
+                        temporal_intent=temporal_intent,
+                        source_role=editorial_role, visual_plan=visual_plan)
+                    seg_entry["segmentValidationStatus"] = sv["status"]
+                    seg_entry["segmentValidationReasons"] = sv["reasons"]
+                    seg_entry["requestedAssetType"] = sv["requestedAssetType"]
+                    seg_entry["sceneEditorialRole"] = sv["sceneEditorialRole"]
+                    seg_entry["sourceEditorialRole"] = sv["sourceEditorialRole"]
+                    seg_entry["effectiveAssetType"] = sv.get("effectiveAssetType")
+                    if sv["ok"]:
+                        segment_accepted = True
+                    else:
+                        seg_entry["error"] = f"Validation rejected: {sv['status']}"
+                        seg_entry["path"] = None
+                        print(f"  scene {scene_num} seg {seg_idx}: REJECTED ({sv['status']})")
+
+                # ── Hard-role fallback ────────────────────────────────────
+                if (not segment_accepted
+                        and editorial_role in HARD_HISTORICAL_ROLES
+                        and result.get("failure_classification") == "resolution_exhausted"):
+                    fb_entry = _try_hard_role_fallback(
+                        seg_query=seg_query,
+                        visual_plan=visual_plan,
+                        strategy=strategy,
+                        scene_num=scene_num,
+                        seg_dest=seg_dest,
+                        dest_exists=seg_exists,
+                        previous_entity_pool=previous_entity_pool,
+                        args=args,
+                        pexels_key=pexels_key,
+                        pixabay_key=pixabay_key,
+                        visual_prompt=visual_prompt,
+                        image_prompt=image_prompt,
+                        anti_rep_context=anti_rep_context,
+                        scene=scene,
+                        seg_at=seg_at,
+                        dur_frac=dur_frac,
+                        seg=seg,
+                        editorial_role=editorial_role,
+                        seg_idx=seg_idx,
+                    )
+                    if fb_entry is not None:
+                        # Build candidate-like dict for validator
+                        fb_cand = {
+                            "provider": fb_entry.get("provider"),
+                            "sourceUrl": fb_entry.get("sourceUrl"),
+                            "title": "",
+                            "description": "",
+                            "width": fb_entry.get("width"),
+                            "height": fb_entry.get("height"),
+                            "score": fb_entry.get("score"),
+                            "scoreReasons": fb_entry.get("scoreReasons"),
+                            "semanticEvidence": fb_entry.get("semanticEvidence"),
+                            "visualTemporalIntent": fb_entry.get("visualTemporalIntent"),
+                            "assetTemporalMatch": fb_entry.get("assetTemporalMatch"),
+                            "declaredAssetType": fb_entry.get("declaredAssetType"),
+                            "effectiveAssetType": fb_entry.get("effectiveAssetType"),
+                            "assetTypeValidationStatus": fb_entry.get("assetTypeValidationStatus"),
+                            "renderabilityStatus": fb_entry.get("renderabilityStatus"),
+                            "renderabilityReasons": fb_entry.get("renderabilityReasons"),
+                            "mapReadabilityScore": fb_entry.get("mapReadabilityScore"),
+                        }
+                        temporal_intent = _classify_temporal_intent(scene)
+                        fsv = _validate_segment_for_role(
+                            seg_at, editorial_role, candidate=fb_cand,
+                            temporal_intent=temporal_intent,
+                            source_role=editorial_role, visual_plan=visual_plan)
+                        if fsv["ok"]:
+                            fb_entry["segmentValidationStatus"] = fsv["status"]
+                            fb_entry["segmentValidationReasons"] = fsv["reasons"]
+                            fb_entry["requestedAssetType"] = fsv["requestedAssetType"]
+                            fb_entry["sceneEditorialRole"] = fsv["sceneEditorialRole"]
+                            fb_entry["sourceEditorialRole"] = fsv["sourceEditorialRole"]
+                            fb_entry["effectiveAssetType"] = fsv.get("effectiveAssetType")
+                            seg_entry = fb_entry
+                            segment_accepted = True
+                        else:
+                            seg_entry["error"] = f"Fallback rejected: {fsv['status']}"
+                            seg_entry["path"] = None
+                            print(f"  scene {scene_num} seg {seg_idx}: fallback REJECTED ({fsv['status']})")
+
+                if not segment_accepted and editorial_role in HARD_HISTORICAL_ROLES and result.get("provider_attempt_order") == ["wikimedia_commons"]:
+                    seg_entry["error"] = seg_entry.get("error") or "ASSET_UNRESOLVED"
+                    print(f"  scene {scene_num} seg {seg_idx}: ASSET_UNRESOLVED ({seg_query[:50]})")
+                elif not segment_accepted and not result["ok"]:
+                    seg_entry["error"] = seg_entry.get("error") or "Download failed"
+                    print(f"  scene {scene_num} seg {seg_idx}: FAILED ({seg_query[:50]})")
+
+                if segment_accepted:
+                    segment_results.append(True)
+
+                    # ── Canonical accepted candidate ──────────────────
+                    is_fallback = seg_entry.get("provenanceType") == "illustrative"
+                    if is_fallback:
+                        accepted_candidate = {
+                            "sourceUrl": seg_entry.get("sourceUrl") or "",
+                            "author": seg_entry.get("author") or "",
+                            "provider": seg_entry.get("provider") or "",
+                            "queryUsed": seg_entry.get("queryUsed") or seg_query or "",
+                        }
+                    else:
+                        accepted_candidate = cand if cand else {}
+
+                    source_url = (accepted_candidate.get("sourceUrl") or "").rstrip("/")
+                    if source_url:
+                        used_urls.add(source_url)
+                    author = (accepted_candidate.get("author") or "").strip()
+                    provider = accepted_candidate.get("provider", "")
+                    author_key = f"{provider}|{author}" if author and provider else ""
+                    if author_key:
+                        used_authors[author_key] = scene_num
+                    q_used = (accepted_candidate.get("queryUsed") or "").lower().strip()
+                    if q_used:
+                        used_queries.append((scene_num, q_used))
+                    if seg_at:
+                        used_asset_types.append(seg_at)
+                    actual_provider = seg_entry.get("provider", accepted_candidate.get("provider", "?"))
+                    actual_score = seg_entry.get("score", accepted_candidate.get("score", "?"))
+                    print(f"  scene {scene_num} seg {seg_idx}: OK ({actual_provider}) score={actual_score}")
+                else:
+                    segment_results.append(False)
+                    seg_entry["segmentValidationStatus"] = seg_entry.get("segmentValidationStatus", "REJECTED")
+                    seg_entry["segmentValidationReasons"] = seg_entry.get("segmentValidationReasons", [str(seg_entry.get("error", "unknown failure"))])
+
+                # Editorial role scoring (on accepted segments)
+                if editorial_role and segment_accepted:
+                    er_score, er_reasons = score_editorial_role(seg_at, editorial_role,
+                                                                _classify_temporal_intent(scene))
                     if seg_entry["score"] is not None:
                         seg_entry["score"] = seg_entry["score"] + er_score
                     seg_entry["scoreReasons"] = (seg_entry.get("scoreReasons") or []) + er_reasons
                     seg_entry["editorialScore"] = er_score
                     seg_entry["editorialRole"] = editorial_role
 
-                if not result["ok"]:
-                    segment_results.append(False)
-                    if editorial_role in HARD_HISTORICAL_ROLES and result.get("provider_attempt_order") == ["wikimedia_commons"]:
-                        seg_entry["error"] = "ASSET_UNRESOLVED"
-                        print(f"  scene {scene_num} seg {seg_idx}: ASSET_UNRESOLVED ({seg_query[:50]})")
-                    else:
-                        seg_entry["error"] = "Download failed"
-                        print(f"  scene {scene_num} seg {seg_idx}: FAILED ({seg_query[:50]})")
-                else:
-                    segment_results.append(True)
-                    source_url = (cand.get("sourceUrl") or "").rstrip("/")
-                    if source_url:
-                        used_urls.add(source_url)
-                    author = (cand.get("author") or "").strip()
-                    provider = cand.get("provider", "")
-                    author_key = f"{provider}|{author}" if author and provider else ""
-                    if author_key:
-                        used_authors[author_key] = scene_num
-                    q_used = (cand.get("queryUsed") or "").lower().strip()
-                    if q_used:
-                        used_queries.append((scene_num, q_used))
-                    if seg_at:
-                        used_asset_types.append(seg_at)
-                    print(f"  scene {scene_num} seg {seg_idx}: OK ({cand.get('provider')}) score={cand.get('score')}")
+                # Map readability for map-type assets
+                if seg_at in ("historical_map", "map", "document"):
+                    w = seg_entry.get("width", 0) or 0
+                    h = seg_entry.get("height", 0) or 0
+                    if w and h and w > h:
+                        readability = min(w / 1080, h / 1920) * (1 - abs(w / h - 9 / 16) / 2)
+                        seg_entry["mapReadabilityScore"] = round(min(readability, 1.0), 2)
 
                 segments.append(seg_entry)
                 time.sleep(SCENE_PAUSE_SEC)
