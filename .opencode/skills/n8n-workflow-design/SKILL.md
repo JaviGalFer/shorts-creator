@@ -1,3 +1,8 @@
+---
+name: n8n-workflow-design
+description: Diseñar y documentar workflows de n8n robustos
+---
+
 # Skill: n8n-workflow-design
 
 ## Cuándo usarla

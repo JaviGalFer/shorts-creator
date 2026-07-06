@@ -1,3 +1,8 @@
+---
+name: video-rendering-ffmpeg
+description: Diseñar y validar renders de vídeo vertical con FFmpeg
+---
+
 # Skill: video-rendering-ffmpeg
 
 ## Cuándo usarla

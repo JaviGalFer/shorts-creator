@@ -1,3 +1,8 @@
+---
+name: media-rights-and-safety
+description: Verificar licencias y atribuciones de recursos visuales, musicales y de audio
+---
+
 # Skill: media-rights-and-safety
 
 ## Cuándo usarla

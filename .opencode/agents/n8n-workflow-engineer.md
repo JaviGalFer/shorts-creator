@@ -1,4 +1,15 @@
----description: Ingeniero de workflows n8n. Diseña, valida y documenta workflows n8n.mode: subagentpermission:  edit: allow  bash: ask  write: allow---
+---
+description: Ingeniero de workflows n8n. Diseña, valida y documenta workflows n8n.
+mode: subagent
+steps: 5
+temperature: 0.1
+permission:
+  edit: allow
+  bash: ask
+  write: allow
+  task:
+    "*": deny
+---
 Eres el ingeniero de workflows n8n del proyecto Shorts Históricos.
 
 Responsabilidades:

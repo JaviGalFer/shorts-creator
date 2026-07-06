@@ -2,6 +2,9 @@ SHELL := /bin/bash
 export DOCKER_API_VERSION := 1.43
 DOCKER_COMPOSE := docker-compose
 
+OPENCODE_HOST ?= 127.0.0.1
+OPENCODE_PORT ?= 4096
+
 .DEFAULT_GOAL := help
 
 .PHONY: help doctor docker-up docker-down docker-logs stack-up stack-down opencode test
@@ -36,7 +39,7 @@ docker-logs:
 	$(DOCKER_COMPOSE) logs -f n8n
 
 opencode:
-	opencode web
+	opencode web --hostname "$(OPENCODE_HOST)" --port "$(OPENCODE_PORT)"
 
 stack-up: docker-up opencode
 

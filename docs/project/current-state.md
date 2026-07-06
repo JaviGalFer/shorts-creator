@@ -1,48 +1,68 @@
-# Estado actual
+# Estado actual del proyecto
 
-## Lo que ya funciona
+**Última actualización:** 2026-07-05
 
-- `n8n` local operativo en `http://localhost:5679`
-- Scripts en `bin/` para pipeline completo:
-  - `bin/generate_audio.py` — Edge TTS por escena
-  - `bin/fetch_images.py` — descarga imágenes (Pollinations/FreeAI/Wikimedia)
-  - `bin/prepare_job.py` — genera subtítulos (ASS/SRT) + consolida metadata
-  - `bin/render_job.py` — render vertical MP4 con FFmpeg en Docker
-- ASS subtitles con estilo profesional (fuente grande 65px, caja semitransparente)
-- Render con `ass=` filter validado (libass 0.17.5)
-- Script `review_job.py` para aprobar/rechazar videos desde terminal
-- Servicio `render-worker` en docker-compose
+## Estado global
 
-## Estructura de datos
+Pipeline funcional de vídeos cortos verticales históricos (9:16, ~1 min). Scripts en `bin/` operativos. n8n como orquestador legacy. Docker para render.
+
+**Cambio OpenSpec activo:** `improve-historical-visual-pipeline` (mejora de pipeline visual histórico)
+
+## Arquitectura del pipeline
 
 ```
-data/videos/{jobId}/
-  video.mp4           <- Render final
-  metadata.json       <- Job metadata
-  subtitle.ass        <- Subtítulos
-  scenes/
-    scene-01.jpg      <- Imagen escena
-    scene-01.mp3      <- Audio escena
-    ...
+generate_audio → fetch_images → prepare_job → render_job → review_job
 ```
 
-## Pipeline completo (flujo actual)
+### Scripts del pipeline
 
-```bash
-python3 bin/generate_audio.py data/videos/{jobId}/metadata.json
-python3 bin/fetch_images.py data/videos/{jobId}/metadata.json
-python3 bin/prepare_job.py data/videos/{jobId}/metadata.json
-python3 bin/render_job.py data/videos/{jobId}/metadata.json
+| Script | Responsabilidad |
+|--------|----------------|
+| `bin/generate_audio.py` | Edge TTS por escena, genera MP3 |
+| `bin/fetch_images.py` | Descarga imágenes (Pollinations/FreeAI/Wikimedia) |
+| `bin/prepare_job.py` | Subtítulos ASS/SRT + consolida metadata |
+| `bin/render_job.py` | Render MP4 vertical con FFmpeg en Docker |
+
+### Servicios Docker
+
+| Servicio | Puerto | Imagen | Propósito |
+|----------|--------|--------|-----------|
+| `postgres` | 5433 | postgres:16-alpine | BD de n8n |
+| `n8n` | 5679 | n8nio/n8n:latest | Orquestador (legacy) |
+| `render-worker` | 8580 | python:3-alpine | Servidor HTTP para render |
+
+## Flujo de ejecución
+
+1. Guion generado por n8n → metadata.json en `data/videos/{jobId}/`
+2. `generate_audio` produce MP3 por escena
+3. `fetch_images` descarga imágenes (576×1024)
+4. `prepare_job` genera subtítulos ASS estilo profesional (Arial Bold 65px)
+5. `render_job` ensambla vídeo final con FFmpeg Docker
+6. `review_job` para aprobación/rechazo
+
+### Estructura de datos
+
+```
+data/videos/{jobId}/video.mp4, metadata.json, subtitle.ass, scenes/
 ```
 
-## Limitaciones actuales
+## Última validación conocida
 
-- Pollinations.ai rate-limited (429), imágenes de baja calidad
-- Sin API key de Free.ai configurada (alternativa gratuita)
-- Voz Edge TTS AlvaroNeural funcional pero usuario discrepa
-- n8n workflows desconectados del pipeline CLI (usar Manual Trigger + JSON export)
+Pipeline validado con múltiples jobs históricos (~14 renders). Subtítulos ASS profesionales funcionales. Render con `ass=` filter (libass 0.17.5). Duración y contratos validados con perfiles configurables.
+
+## Problemas actuales
+
+- Pollinations.ai rate-limited (429), imágenes calidad baja
+- FreeAI sin API key configurada
+- Voz Edge TTS AlvaroNeural funcional pero calidad cuestionada por usuario
+- n8n workflows desconectados del pipeline CLI
 
 ## Próximos pasos
 
-1. Registrar Free.ai para imágenes de calidad gratuitas
+1. Registrar FreeAI para imágenes de calidad gratuitas
 2. Validar pipeline completo con vídeo desde cero
+3. Mejorar prompts de imagen en generación LLM
+
+## Contexto legacy
+
+Para historial extenso, sesiones pasadas y decisiones previas, consultar `HANDOVER.md` (contexto frío, no cargar por defecto).

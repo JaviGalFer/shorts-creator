@@ -1,7 +1,12 @@
+---
+name: project-session-management
+description: Iniciar y cerrar sesiones, crear bitácoras de trabajo en docs/sessions/
+---
+
 # Skill: project-session-management
 
 ## Cuándo usarla
-Al inicio y cierre de cada sesión de trabajo en este proyecto.
+Bajo demanda, para iniciar o cerrar una sesión de trabajo.
 
 ## Entradas
 - Fecha y hora actual.

@@ -1,3 +1,8 @@
+---
+name: secrets-and-environment
+description: Gestionar .env, .env.example, secretos y configuración del proyecto
+---
+
 # Skill: secrets-and-environment
 
 ## Cuándo usarla

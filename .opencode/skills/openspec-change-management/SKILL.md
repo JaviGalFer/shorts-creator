@@ -1,3 +1,8 @@
+---
+name: openspec-change-management
+description: Crear, revisar y cerrar cambios OpenSpec en openspec/changes/
+---
+
 # Skill: openspec-change-management
 
 ## Cuándo usarla

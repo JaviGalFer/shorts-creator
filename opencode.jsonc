@@ -1,0 +1,28 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "instructions": [
+    "docs/project/current-state.md"
+  ],
+
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 3000
+  },
+
+  "watcher": {
+    "ignore": [
+      ".git/**",
+      "data/**",
+      "logs/**",
+      "node_modules/**",
+      ".venv/**",
+      "dist/**",
+      "**/__pycache__/**",
+      "**/*.pyc",
+      "docs/sessions/**",
+      ".pytest_cache/**"
+    ]
+  }
+}

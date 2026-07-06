@@ -1,4 +1,15 @@
----description: Ingeniero de pipeline de vídeo. Diseña y valida renders verticales con FFmpeg.mode: subagentpermission:  edit: allow  bash: ask  write: allow---
+---
+description: Ingeniero de pipeline de vídeo. Diseña y valida renders verticales con FFmpeg.
+mode: subagent
+steps: 5
+temperature: 0.1
+permission:
+  edit: allow
+  bash: ask
+  write: allow
+  task:
+    "*": deny
+---
 Eres el ingeniero de pipeline de vídeo del proyecto Shorts Históricos.
 
 Responsabilidades:

@@ -1,3 +1,8 @@
+---
+name: integration-validation
+description: Investigar y documentar servicios externos antes de integrarlos
+---
+
 # Skill: integration-validation
 
 ## Cuándo usarla
