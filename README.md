@@ -102,10 +102,27 @@ Para generar un video manualmente:
 
 ```bash
 pip install -r requirements.txt
+
+# Opción 1: runner unificado (recomendado)
+python bin/run_job.py --topic "La caida de Constantinopla" --duration 42
+
+# Opción 2: etapas individuales
 python bin/generate_script.py "La caida de Constantinopla"
 python bin/generate_audio.py
 python bin/fetch_images.py
 python bin/render_job.py
+```
+
+Ver plan sin ejecutar:
+
+```bash
+python bin/run_job.py --topic "Prueba" --duration 35 --dry-run
+```
+
+Ejecutar solo hasta generar el guion:
+
+```bash
+python bin/run_job.py --topic "Prueba" --duration 35 --stop-after script
 ```
 
 ## Navegacion rapida

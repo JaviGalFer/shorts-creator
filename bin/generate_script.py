@@ -11,6 +11,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from duration_profiles import add_duration_profile_args, resolve_requested_duration, calculate_word_budget
+
 DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 
 # Speech rate (Edge TTS Spanish, ~AlvaroNeural):
@@ -28,18 +30,17 @@ ESTIMATED_SCENE_PAUSE_MS = 350
 # 10 micro-scenes inflate effective duration via cumulative pauses.
 # With 5 transitions (6 scenes): 5 * 350ms = 1.75s pause overhead.
 # With 9 transitions (10 scenes): 9 * 350ms = 3.15s pause overhead.
-MAX_SCENES_FOR_SHORT = 6
+MAX_SCENES = 6
 MIN_WORDS_PER_SCENE = 7
 
 SYSTEM_PROMPT = """Eres un guionista senior especializado en Shorts/TikTok/Reels históricos con obsesión por la retención y la calidad visual documental.
 
 Devuelve SOLO JSON válido, sin markdown, sin explicaciones.
 
-## Reglas de ritmo para Short (<30s)
+## Reglas de ritmo
 - Máximo 6 escenas (normalmente 4-6). Prefiere 5 escenas.
-- Duración total: 25-30 segundos
-- Cada escena: 4-7 segundos (mínimo 3.5s, evita micro-escenas)
-- Palabras totales: ~45-55
+- La duración total, palabras totales y palabras por escena se especifican en las instrucciones dinámicas. Respeta esos valores.
+- Las instrucciones dinámicas también especifican palabras mínimas, preferidas y máximas. Respétalas estrictamente.
 - Mínimo 7 palabras por escena
 - Frases contundentes, sin relleno
 - El hook (primera escena) debe abrir con algo sorprendente (paradoja, amenaza, cifra, pregunta fuerte)
@@ -74,7 +75,7 @@ Cada escena debe tener un plan visual estructurado. NO uses prompts genéricos.
 1. Evitar prompts genéricos como "chaotic battlefield", "soldiers marching", "devastated city"
 2. Proponer recursos visualmente específicos y variados entre escenas
 3. Identificar entidades históricas reales cuando corresponda
-4. Proponer searchQueries en inglés para buscar imágenes reales
+4. Proponer searchQueries en inglés para buscar imágenes reales en Wikimedia Commons. Las queries deben incluir nombres propios de personas, lugares específicos, eventos históricos con año, o combinaciones exactas. Ejemplos válidos: "Brandenburg Gate Berlin 1989", "Map of Constantinople siege 1453", "Portrait of Francisco Pizarro". Ejemplos a evitar: "Berlin Wall fall footage", "old war photograph", "historical battle scene" — son demasiado genéricos para encontrar contenido en archivos.
 5. Priorizar archivo histórico, mapas, documentos, carteles y retratos
 6. Usar allowGeneratedImage=true solo cuando no exista material histórico razonable
 7. Incluir negativePrompt cuando allowGeneratedImage=true
@@ -83,6 +84,8 @@ Cada escena debe tener un plan visual estructurado. NO uses prompts genéricos.
 10. Alternar tipos de asset entre escenas: no repetir el mismo tipo en escenas consecutivas
 11. Para generated_image, usar imageGenerationPrompt en inglés con descripción visual detallada (iluminación, encuadre, colores, composición)
 12. visualPrompt debe ser un fallback en INGLÉS con descripción fotográfica realista para banco de imágenes
+13. Incluir al menos 2 searchQueries por escena en visualPlan.searchQueries. La primera debe ser la más específica (evento + lugar + año). La segunda debe ser alternativa con distinta formulación. Ejemplo: ["Berlin Wall being torn down at Brandenburg Gate November 1989", "crowd celebrating fall of Berlin Wall 1989"]
+14. Cada searchQuery debe contener al menos un nombre propio (persona, lugar, evento) Y un año o período concreto. Las queries sin nombre propio ni año serán rechazadas por el sistema de búsqueda.
 
 ## Secuenciación visual (visualSequence)
 Cada escena debe tener una microsecuencia de 1-3 segmentos visuales.
@@ -106,26 +109,50 @@ Cada escena debe tener una microsecuencia de 1-3 segmentos visuales.
 - transition posible: "cut" (corte seco) o "fade" (fundido de 0.5s)
 
 ### Reglas de rol editorial (editorialRole)
-Cada escena debe tener un editorialRole que define el propósito visual:
+Cada escena debe tener un editorialRole que define el propósito visual. La selección debe seguir las reglas deterministas a continuación. NO usar context_map como valor por defecto.
 
-Roles disponibles:
-- context_map: cuando el guion menciona geografía, territorio, fronteras. AssetType preferido: map, document.
-- character_portrait: cuando el guion menciona una persona específica. AssetType preferido: portrait, historical_photograph, painting.
-- military_technology: cuando el guion menciona armas, fortificaciones, barcos. AssetType preferido: historical_photograph, painting, document.
-- civilian_impact: cuando el guion describe sufrimiento, vida cotidiana, refugiados. AssetType preferido: historical_photograph, document.
-- battle_or_assault: cuando el guion describe combate, asedio, ataque. AssetType preferido: painting, historical_photograph.
-- document_or_date: cuando el guion menciona un tratado, fecha, ley, carta. AssetType preferido: document, map.
-- consequence_or_legacy: cuando el guion describe impacto histórico duradero. AssetType preferido: historical_photograph, painting.
-- atmospheric_transition: solo para escenas puente sin contenido narrativo denso. Máximo 20% de escenas del vídeo. AssetType preferido: atmospheric_broll.
+#### Árbol de decisión (evaluar en orden):
+1. ¿La escena menciona una persona real específica? → character_portrait
+2. ¿La escena describe combate, asedio, ataque o caída violenta? → battle_or_assault
+3. ¿La escena describe armas, fortificaciones o tecnología militar? → military_technology
+4. ¿La escena describe sufrimiento, vida cotidiana, refugiados o celebración popular? → civilian_impact
+5. ¿La escena menciona un tratado, fecha con año, ley o carta? → document_or_date
+6. ¿La escena describe geografía, territorio, fronteras, zonas de ocupación o rutas? → context_map
+7. ¿La escena reflexiona sobre legado, memoria o impacto duradero? → consequence_or_legacy
+8. ¿La escena es puente sin contenido narrativo denso? → atmospheric_transition (máx 20%)
 
-Reglas:
-- atmospheric_transition NO puede usarse en más del 20% de las escenas del vídeo.
-- generated_reconstruction no puede usarse en escenas consecutivas.
-- Si el guion menciona una persona real, el rol debe ser character_portrait. No usar atmospheric_transition.
-- Si el guion menciona una batalla o asedio, el rol debe ser battle_or_assault. No usar atmospheric_transition.
-- Si el guion menciona una fecha o documento, el rol debe ser document_or_date.
+#### Reglas de exclusión (NO usar estos roles si aplica lo siguiente):
+- **context_map**: NO usar para escenas que describen un evento (caída, batalla, protesta, celebración). context_map es solo para contexto geográfico. Para eventos, usar civilian_impact, battle_or_assault o consequence_or_legacy según corresponda. Ejemplo: "El Muro de Berlín cayó en 1989" → battle_or_assault o civilian_impact, NO context_map.
+- **character_portrait**: NO usar si no hay una persona histórica específica mencionada en la escena.
+- **atmospheric_transition**: NO usar en más del 20% de escenas. NO usar si la escena tiene contenido narrativo sustancial.
+
+#### Descripción detallada por rol:
+- context_map: EXCLUSIVAMENTE para escenas donde el propósito visual principal es entender geografía, territorio, fronteras, zonas de ocupación, rutas o extensiones. El voiceover debe mencionar explícitamente lugares, regiones o extensiones territoriales. AssetType preferido: map, document.
+- character_portrait: Una persona histórica específica es nombrada o implícita. AssetType preferido: portrait, historical_photograph, painting.
+- military_technology: Armas, fortificaciones, barcos, vehículos militares. AssetType preferido: historical_photograph, painting, document.
+- civilian_impact: Impacto en personas: sufrimiento, vida cotidiana, refugiados, celebraciones populares, reuniones familiares. AssetType preferido: historical_photograph, document.
+- battle_or_assault: Combate activo, asedio, ataque, asalto, caída violenta de una ciudad/muro/régimen. AssetType preferido: painting, historical_photograph.
+- document_or_date: Tratados, leyes, cartas, proclamas, fechas clave. AssetType preferido: document, map.
+- consequence_or_legacy: Impacto histórico duradero, memoria, legado moderno, reflexión. AssetType preferido: historical_photograph, painting.
+- atmospheric_transition: Escenas puente sin contenido narrativo denso. Máximo 20% de escenas. AssetType preferido: atmospheric_broll.
+
+#### Reglas adicionales:
 - Alternar editorialRole entre escenas: no repetir el mismo rol en escenas consecutivas.
 - Para mapas, incluir focalRegion (center|north|south|east|west), cropMode (full_map|region_zoom|detail), y overlayText (fecha/lugar).
+- generated_reconstruction no puede usarse en escenas consecutivas.
+
+### Reglas de intent temporal (visualTemporalIntent)
+Cada escena debe tener un visualTemporalIntent que clasifica si la escena describe un evento histórico concreto o un legado moderno:
+
+Valores disponibles:
+- "event_depiction" — La escena describe un evento histórico específico que ocurrió en el pasado (una batalla, una caída, una protesta, una construcción, un descubrimiento). Voiceover usa verbos en pasado y años/fechas concretas.
+- "legacy_or_commemoration" — La escena reflexiona sobre el impacto duradero, memoria moderna, o legado actual. Voiceover usa presente o "hoy", "actualmente", "recuerda", "legado".
+- "context_or_setup" — La escena proporciona contexto geográfico, político o social sin describir un evento específico.
+
+Reglas:
+- Si el editorialRole está en {context_map, character_portrait, battle_or_assault, military_technology, civilian_impact, document_or_date}, el visualTemporalIntent debe ser "event_depiction".
+- Si el editorialRole es "consequence_or_legacy" y el voiceover describe el evento (verbos en pasado, año del evento), usar "event_depiction". Si describe el legado actual (presente, "hoy", "monumento"), usar "legacy_or_commemoration".
+- Para escenas de transición atmosférica, usar "context_or_setup".
 
 ## Narrative Beats (narrativeBeats)
 Cada escena DEBE incluir un array narrativeBeats que divide el voiceover en unidades semánticas.
@@ -181,6 +208,7 @@ Reglas de motionType:
       "voiceover": "Texto narrado en español de España (12-18 palabras)",
       "subtitle": "Texto corto para subtítulo (máx 7 palabras)",
       "targetDurationSec": 6,
+      "visualTemporalIntent": "event_depiction|legacy_or_commemoration|context_or_setup",
       "visualPrompt": "English description of a realistic photographic image for stock photo fallback",
       "imagePrompt": "3-5 keywords in Spanish for image search",
       "narrativeBeats": [
@@ -303,34 +331,109 @@ def _estimate_narration_duration_sec(word_count: int, scene_count: int) -> tuple
     return total_sec, spoken_sec, pause_sec
 
 
-def _build_duration_prompt_instruction(target_sec: int, min_sec: int, max_sec: int,
-                                       strictness: str, retry: int = 0) -> str:
-    word_budget_high = int(max_sec * SPOKEN_WORDS_PER_SECOND)
-    word_budget_low = int(min_sec * SPOKEN_WORDS_PER_SECOND)
-    target_words = int(target_sec * SPOKEN_WORDS_PER_SECOND)
-    pause_ms = ESTIMATED_SCENE_PAUSE_MS
+def _build_duration_prompt_instruction(budget: dict, strictness: str) -> str:
+    target_sec = None
+    min_sec = None
+    max_sec = None
+    for dur_field in ("targetSec", "target_sec", "target"):
+        if dur_field in budget:
+            target_sec = budget.get(dur_field)
+            break
+    for dur_field in ("minSec", "min_sec", "min"):
+        if dur_field in budget:
+            min_sec = budget.get(dur_field)
+            break
+    for dur_field in ("maxSec", "max_sec", "max"):
+        if dur_field in budget:
+            max_sec = budget.get(dur_field)
+            break
+    min_w = budget.get("minimumWords", 0)
+    pref_w = budget.get("preferredWords", 0)
+    max_w = budget.get("maximumWords", 0)
+    pause_ms = budget.get("estimatedScenePauseMs", 350)
+    per_scene_low = max(1, min_w // budget.get("sceneCount", 5)) if budget.get("sceneCount", 5) else 7
+    per_scene_high = max(per_scene_low + 2, 7)
     lines = [
         f"## Restricción de duración ({strictness})",
-        f"- Duración objetivo: {target_sec} segundos",
-        f"- Ventana aceptable: {min_sec}-{max_sec} segundos",
-        f"- Presupuesto de palabras: aproximadamente {target_words} palabras habladas (más pausas entre escenas de ~{pause_ms}ms cada una)",
-        f"- Escenas: entre 4 y 6 (máximo 6 para vídeos <30s)",
-        f"- Mínimo 7 palabras por escena. Prefiere 7-10 palabras.",
-        f"- El CTA debe incluirse dentro de la voz en off de la última escena, no como escena separada.",
-        f"- NO uses frases de relleno. Añade detalles narrativos concretos: años, cifras, nombres propios.",
-        f"- Incluye al menos una fecha con año y al menos un nombre propio relevante.",
     ]
-    if retry > 0:
-        lines.append("")
-        lines.append("## Intento anterior insuficiente")
-        lines.append("El guion anterior no cumplía los requisitos. Debes corregirlo:")
-        lines.append("- Añade más contexto histórico, descripciones visuales y detalles narrativos.")
-        lines.append("- Cada escena debe tener 7-10 palabras en voiceover, mínimo 7.")
-        lines.append("- DEBEN SER ENTRE 4 Y 6 ESCENAS. Máximo 6.")
-        lines.append("- El CTA debe estar DENTRO de la última escena, nunca como escena  aparte.")
-        lines.append("- Usa datos concretos: años, cifras, nombres propios.")
-        lines.append("- Incluye al menos una fecha con año y un nombre propio relevante.")
+    if target_sec is not None:
+        lines.append(f"- Duración objetivo: {target_sec} segundos (ventana {min_sec}-{max_sec})")
+    else:
+        lines.append(f"- Ventana de duración: {min_sec}-{max_sec} segundos")
+    lines.append(
+        f"- El total de palabras habladas debe estar entre {min_w} y {max_w}, "
+        f"con aproximadamente {pref_w} palabras objetivo "
+        f"(pausas entre escenas de ~{pause_ms}ms cada una)"
+    )
+    lines.append(f"- Escenas: entre 4 y 6. Prefiere 5 escenas.")
+    lines.append(f"- Mínimo 7 palabras por escena. Aproximadamente {per_scene_low}-{per_scene_high} palabras por escena.")
+    lines.append(f"- El CTA debe incluirse dentro de la voz en off de la última escena, no como escena separada.")
+    lines.append(f"- Distribuye los detalles históricos naturales entre las escenas: contexto, causas, desarrollo, consecuencias.")
+    lines.append(f"- NO uses frases de relleno, CTA repetido, oraciones duplicadas ni pausas dramáticas falsas.")
+    lines.append(f"- Incluye al menos una fecha con año y al menos un nombre propio relevante.")
     return "\n".join(lines)
+
+
+def _build_retry_instruction(
+    budget: dict,
+    actual_word_count: int,
+    actual_scene_count: int,
+    estimated_dur: float,
+) -> str:
+    min_w = budget.get("minimumWords", 0)
+    pref_w = budget.get("preferredWords", 0)
+    max_w = budget.get("maximumWords", 0)
+    missing = max(0, min_w - actual_word_count)
+    excess = max(0, actual_word_count - max_w)
+    pause_ms = budget.get("estimatedScenePauseMs", 350)
+    dur_min = budget.get("minSec", 0)
+    dur_max = budget.get("maxSec", 0)
+    dur_target = budget.get("targetSec", 0)
+
+    lines = [
+        f"## Corrección de duración — intento anterior insuficiente",
+        f"",
+        f"El guion anterior tiene {actual_word_count} palabras habladas "
+        f"en {actual_scene_count} escenas y estima {estimated_dur:.1f} segundos.",
+        f"",
+        f"El trabajo requiere:",
+        f"- Duración: {dur_target}s objetivo, ventana {dur_min}-{dur_max}s",
+        f"- Palabras totales: mínimo {min_w}, preferidas ~{pref_w}, máximo {max_w}",
+        f"- Pausas entre escenas: ~{pause_ms}ms cada una",
+    ]
+
+    if missing > 0:
+        lines.append("")
+        lines.append(
+            f"El guion se queda corto por aproximadamente {missing} palabras. "
+            f"Añade aproximadamente entre {missing} y {missing + 5} palabras "
+            f"significativas distribuidas naturalmente entre las escenas existentes. "
+            f"Puedes expandir el contexto histórico, las causas, detalles del evento, "
+            f"consecuencias o explicaciones. "
+            f"No repitas el CTA, no insertes frases de relleno ni pausas artificiales."
+        )
+    elif excess > 0:
+        lines.append("")
+        lines.append(
+            f"El guion excede por aproximadamente {excess} palabras. "
+            f"Reduce aproximadamente {excess} palabras del contenido "
+            f"manteniendo los datos históricos clave. "
+            f"No uses frases de relleno."
+        )
+
+    lines.append("")
+    lines.append("Reglas:")
+    lines.append("- DEBEN SER ENTRE 4 Y 6 ESCENAS. Máximo 6.")
+    lines.append("- El CTA debe estar DENTRO de la última escena, nunca como escena aparte.")
+    lines.append("- Cada escena debe tener al menos 7 palabras.")
+    lines.append("- Usa datos concretos: años, cifras, nombres propios.")
+    lines.append("- No inventar datos históricos.")
+    lines.append("- Incluye al menos una fecha con año y un nombre propio relevante.")
+
+    return "\n".join(lines)
+
+
+PROVISIONAL_SCENE_COUNT = 5
 
 
 def main() -> int:
@@ -339,12 +442,7 @@ def main() -> int:
     parser.add_argument("--output", help="Output path for metadata.json (default: data/videos/{jobId}/metadata.json)")
     parser.add_argument("--dry-run", action="store_true", help="Print prompt and exit without calling API")
     parser.add_argument("--model", help="LLM model override")
-    parser.add_argument("--duration-target", type=int, default=28, help="Target duration in seconds")
-    parser.add_argument("--duration-min", type=int, default=25, help="Minimum duration in seconds")
-    parser.add_argument("--duration-max", type=int, default=30, help="Maximum duration in seconds")
-    parser.add_argument("--strictness", default="balanced",
-                        choices=["strict", "balanced", "relaxed"],
-                        help="Duration strictness level")
+    add_duration_profile_args(parser)
     args = parser.parse_args()
 
     env = load_env()
@@ -356,13 +454,38 @@ def main() -> int:
         print("ERROR: LLM_API_KEY not found in .env or environment")
         return 1
 
-    target_dur = args.duration_target
-    min_sec = args.duration_min
-    max_sec = args.duration_max
-    strictness = args.strictness
+    try:
+        resolved = resolve_requested_duration(
+            requested_sec=args.duration,
+            requested_profile=args.duration_profile,
+            explicit_target=args.duration_target,
+            explicit_min=args.duration_min,
+            explicit_max=args.duration_max,
+            explicit_strictness=args.strictness,
+        )
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        return 1
 
-    duration_instruction = _build_duration_prompt_instruction(target_dur, min_sec, max_sec,
-                                                               strictness, retry=0)
+    duration_profile_name = resolved["profile_name"]
+    target_dur = resolved["targetSec"]
+    min_sec = resolved["minSec"]
+    max_sec = resolved["maxSec"]
+    strictness = resolved["strictness"]
+    requested_sec = resolved.get("requestedSec")
+    requested_profile = resolved.get("requestedProfile")
+
+    # ── Provisional word budget (before any LLM call) ──────────────────
+    provisional_budget = calculate_word_budget(
+        target_sec=target_dur,
+        min_sec=min_sec,
+        max_sec=max_sec,
+        spoken_words_per_minute=SPOKEN_WORDS_PER_MINUTE,
+        scene_count=PROVISIONAL_SCENE_COUNT,
+        estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
+    )
+
+    duration_instruction = _build_duration_prompt_instruction(provisional_budget, strictness)
 
     user_prompt = (
         f"Genera un guion histórico muy atractivo para vídeo vertical sobre: {args.topic}. "
@@ -395,17 +518,28 @@ def main() -> int:
     max_attempts = 2
     retry_history = []
     current_prompt = user_prompt
+    final_budget = dict(provisional_budget)
 
     while retries < max_attempts:
         if retries > 0:
-            dur_inst_retry = _build_duration_prompt_instruction(
-                target_dur, min_sec, max_sec, strictness, retry=retries
+            word_count = _count_voiceover_words(script_data)
+            scene_count = len(script_data.get("scenes", []))
+            estimated_dur, _, _ = _estimate_narration_duration_sec(word_count, scene_count)
+            retry_budget = calculate_word_budget(
+                target_sec=target_dur,
+                min_sec=min_sec,
+                max_sec=max_sec,
+                spoken_words_per_minute=SPOKEN_WORDS_PER_MINUTE,
+                scene_count=scene_count,
+                estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
             )
+            retry_inst = _build_retry_instruction(retry_budget, word_count, scene_count, estimated_dur)
             current_prompt = (
                 f"Genera un guion histórico muy atractivo para vídeo vertical sobre: {args.topic}. "
-                f"Quiero que el arranque tenga máxima retención.\n\n{dur_inst_retry}"
+                f"Quiero que el arranque tenga máxima retención.\n\n{retry_inst}"
             )
-            print(f"Retry {retries}/{max_attempts - 1}: generating more detailed script...")
+            print(f"Retry {retries}/{max_attempts - 1}: generated {word_count} words, "
+                  f"estimated {estimated_dur:.1f}s, need {retry_budget['minimumWords']}-{retry_budget['maximumWords']} words")
 
         try:
             content = call_llm(current_prompt, api_key, model, provider)
@@ -423,16 +557,20 @@ def main() -> int:
         word_count = _count_voiceover_words(script_data)
         scene_count = len(script_data.get("scenes", []))
         estimated_dur, spoken_sec, pause_sec = _estimate_narration_duration_sec(word_count, scene_count)
-        retry_history.append({
-            "retry": retries,
-            "wordCount": word_count,
-            "sceneCount": scene_count,
-            "spokenDurationSec": round(spoken_sec, 1),
-            "pauseDurationSec": round(pause_sec, 1),
-            "estimatedDurationSec": round(estimated_dur, 1),
-        })
+
+        # Recalculate budget with actual scene count
+        final_budget = calculate_word_budget(
+            target_sec=target_dur,
+            min_sec=min_sec,
+            max_sec=max_sec,
+            spoken_words_per_minute=SPOKEN_WORDS_PER_MINUTE,
+            scene_count=scene_count,
+            estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
+        )
+
         print(f"  Attempt {retries + 1}: {word_count} words, estimated {estimated_dur:.1f}s "
-              f"(target {target_dur}s, range {min_sec}-{max_sec}s)")
+              f"(target {target_dur}s, range {min_sec}-{max_sec}s, "
+              f"budget {final_budget['minimumWords']}-{final_budget['preferredWords']}-{final_budget['maximumWords']})")
 
         # Check duration
         if strictness == "strict":
@@ -443,6 +581,32 @@ def main() -> int:
         else:
             duration_ok = True  # relaxed
 
+        # Determine reason for retry history
+        if duration_ok:
+            retry_reason = "in_range"
+            retry_instruction = "none_needed"
+        elif word_count < final_budget["minimumWords"]:
+            retry_reason = "below_minimum_words"
+            retry_instruction = "expand_factual_content"
+        elif word_count > final_budget["maximumWords"]:
+            retry_reason = "above_maximum_words"
+            retry_instruction = "reduce_content"
+        else:
+            retry_reason = "duration_out_of_range"
+            retry_instruction = "expand_content"
+
+        retry_entry = {
+            "retry": retries,
+            "reason": retry_reason,
+            "actualWordCount": word_count,
+            "minimumWords": final_budget["minimumWords"],
+            "preferredWords": final_budget["preferredWords"],
+            "maximumWords": final_budget["maximumWords"],
+            "estimatedDurationSec": round(estimated_dur, 1),
+            "instructionType": retry_instruction,
+        }
+        retry_history.append(retry_entry)
+
         if duration_ok:
             print(f"  Duration OK ({estimated_dur:.1f}s within range)")
             break
@@ -452,18 +616,24 @@ def main() -> int:
     job_id = generate_job_id(args.topic)
 
     # ── Build request with full subtitle schema ────────────────────────
+    duration_dict = {
+        "targetSec": target_dur,
+        "minSec": min_sec,
+        "maxSec": max_sec,
+        "strictness": strictness,
+        "spokenWordsPerMinute": SPOKEN_WORDS_PER_MINUTE,
+        "estimatedScenePauseMs": ESTIMATED_SCENE_PAUSE_MS,
+    }
+    if requested_sec is not None:
+        duration_dict["requestedSec"] = requested_sec
+    if requested_profile is not None:
+        duration_dict["requestedProfile"] = requested_profile
     request = {
         "topic": args.topic,
         "language": "es-ES",
         "format": "shorts-9x16",
-        "duration": {
-            "targetSec": target_dur,
-            "minSec": min_sec,
-            "maxSec": max_sec,
-            "strictness": strictness,
-            "spokenWordsPerMinute": SPOKEN_WORDS_PER_MINUTE,
-            "estimatedScenePauseMs": ESTIMATED_SCENE_PAUSE_MS,
-        },
+        "durationProfile": duration_profile_name,
+        "duration": duration_dict,
         "voice": {
             "provider": "edge_tts",
             "voiceId": "es-ES-AlvaroNeural",
@@ -501,7 +671,7 @@ def main() -> int:
     scene_count = len(script_data.get("scenes", []))
     estimated_dur, spoken_sec, pause_sec = _estimate_narration_duration_sec(word_count, scene_count)
 
-    scene_count_ok = 4 <= scene_count <= MAX_SCENES_FOR_SHORT
+    scene_count_ok = 4 <= scene_count <= MAX_SCENES
 
     duration_ok_after_retries = False
     if strictness == "strict":
@@ -525,10 +695,22 @@ def main() -> int:
     if not scene_count_ok:
         review_reasons.append(
             f"SCENE_COUNT_OUT_OF_RANGE: got {scene_count} scenes, "
-            f"expected 4-{MAX_SCENES_FOR_SHORT}"
+            f"expected 4-{MAX_SCENES}"
         )
 
     status = "SCRIPT_DRAFT" if all_ok else "REVIEW_REQUIRED"
+
+    resolved_config = {
+        "duration": {
+            "targetSec": target_dur,
+            "minSec": min_sec,
+            "maxSec": max_sec,
+            "strictness": strictness,
+            "spokenWordsPerMinute": SPOKEN_WORDS_PER_MINUTE,
+            "estimatedScenePauseMs": ESTIMATED_SCENE_PAUSE_MS,
+        },
+        "durationProfile": duration_profile_name,
+    }
 
     metadata = {
         "jobId": job_id,
@@ -538,7 +720,9 @@ def main() -> int:
         "language": "es-ES",
         "format": "shorts-9x16",
         "targetDurationSeconds": target_dur,
+        "durationProfile": duration_profile_name,
         "request": request,
+        "resolvedConfig": resolved_config,
         "script": script_data,
         "durationContract": {
             "targetSec": target_dur,
@@ -552,6 +736,10 @@ def main() -> int:
             "spokenDurationSec": round(spoken_sec, 1),
             "pauseDurationSec": round(pause_sec, 1),
             "estimatedDurationSec": round(estimated_dur, 1),
+            "minimumWords": final_budget["minimumWords"],
+            "preferredWords": final_budget["preferredWords"],
+            "maximumWords": final_budget["maximumWords"],
+            "pauseSec": final_budget["pauseSec"],
             "retries": retries,
             "retryHistory": retry_history,
             "status": "PASS" if all_ok else "FAIL",

@@ -286,11 +286,297 @@
 
 El qualityGate FAIL se debe a `subtitleCoverageValidation: FAIL` por diferencia exacta de texto entre los cues de TTS y el voiceover original (espacios/puntuación). La cobertura real de subtítulos es 99.6%.
 
-### Próximas mejoras recomendadas
+## Fase 20 — Duration profiles and subtitle quality-gate consistency
 
-1. **Obtener FREEAI_API_KEY** — Prioridad máxima. Las escenas `generated_reconstruction` pasarían de Pollinations (score -15/15) a FLUX Schnell con control de estilo.
-2. **Mejorar variedad de queries Pexels/Pixabay** — Rotar entre múltiples queries visuales para cada escena, no elegir siempre la primera.
-3. **Añadir visión artificial para scoring** — Evaluar si la imagen contiene elementos relevantes (personas, mapas, texto, etc.) mediante clasificación básica.
-4. **Añadir evaluación de calidad post-render** — Revisar el video.mp4 generado y permitir approve/reject por escena.
-5. **Instalar edge-tts documentado** — Comando reproducible: `.venv/bin/pip install -r requirements.txt`
-6. **Refinar reutilización de assets** — Un asset 1961 reutilizado para una escena 1989 puede pasar el filtro de años si su metadata contiene ambos años; debería preferirse búsqueda fresca para eventos distintos.
+### Duration profiles
+
+Implementado un sistema centralizado de perfiles de duración reutilizables:
+
+```python
+DURATION_PROFILES = {
+    "short_25_30":    {"targetSec": 28, "minSec": 25, "maxSec": 30, "strictness": "balanced"},
+    "standard_32_38": {"targetSec": 35, "minSec": 32, "maxSec": 38, "strictness": "balanced"},
+    "extended_50_60": {"targetSec": 55, "minSec": 50, "maxSec": 60, "strictness": "balanced"},
+}
+```
+
+- Definidos en `bin/duration_profiles.py` (único punto central).
+- `--duration-profile short_25_30|standard_32_38|extended_50_60` como argumento CLI en `generate_script.py`.
+- Los valores explícitos `--duration-target/--duration-min/--duration-max` sobreescriben el perfil.
+- Por defecto: `short_25_30` para compatibilidad backward.
+- Se persiste `durationProfile` tanto en `request` como en `resolvedConfig` de `metadata.json` y `job-manifest.json`.
+- Tests: 7 tests en `tests/test_duration_profiles.py` (todos pasan).
+
+### Subtitle quality-gate consistency
+
+Reemplazada la comparación carácter-exacta de texto de subtítulos con comparación normalizada por tokens:
+
+- Nueva función central `normalize_subtitle_text()` en `bin/subtitle_normalize.py`:
+  - lowercase, trim y collapse whitespace
+  - punctuation-insensitive (elimina todo carácter no-word)
+  - accent-insensitive (NFKD decompose + remove combining marks)
+  - normaliza puntuación española invertida (¿¡)
+- `cue_text_matches_narration()`: comparación por tokens con umbral configurable (0.95).
+- Actualizado `coverage_validation.py`: `validate_cue_text` usa `compare_cue_vs_narration_bulk`.
+- Actualizado `validate_job.py`: `_check_subtitle_alignment` usa `normalize_subtitle_text`.
+- Añadido `validate_job.py --update-manifest` para re-evaluar quality gates post-fix.
+
+La validación semántica (canonical, cross-scene) y la cobertura temporal permanecen bloqueantes.
+
+### Tareas implementadas
+
+- [x] Crear `bin/duration_profiles.py` con perfiles y función `resolve_duration_config()`.
+- [x] Añadir `--duration-profile` CLI arg a `generate_script.py`.
+- [x] Persistir `durationProfile` y `resolvedConfig` en metadata y manifest.
+- [x] Crear `bin/subtitle_normalize.py` con normalización centralizada.
+- [x] Actualizar `coverage_validation.py` para usar nueva normalización.
+- [x] Actualizar `validate_job.py` para usar nueva normalización.
+- [x] Añadir `validate_job.py --update-manifest` para refrescar gates.
+- [x] Tests de perfiles de duración (7 tests, todos pasan).
+- [x] Tests de normalización de subtítulos (17 tests, todos pasan).
+- [x] Ejecutar validación completa (105/105 tests pasan).
+- [x] Re-evaluar v9: qualityGate=PASS tras normalización.
+- [x] Session log: `docs/sessions/2026-07-05-1800-duration-profiles-and-subtitle-gate-consistency.md`
+
+### Validación
+
+- Tests: `python3 -m pytest tests/ -v` → 105/105 passed
+- Job v9 quality gates tras fix:
+  - technicalValidation=PASS
+  - subtitleCoverageValidation=PASS
+  - assetValidation=PASS
+  - qualityGate=PASS
+
+## Fase 21 — Generic duration-to-word-budget enforcement
+
+### Tareas implementadas
+
+- [x] Crear `calculate_word_budget()` en `bin/duration_profiles.py` con fórmula genérica (no atada a perfiles).
+- [x] La función acepta cualquier valor numérico: targetSec, minSec, maxSec, WPM, sceneCount, pauseMs.
+- [x] Retorna minimumWords/preferredWords/maximumWords, pauseSec, y metadatos.
+- [x] Preparada para recibir valores de `--duration`/`requestedSec` futuros sin cambios.
+- [x] `generate_script.py` usa `calculate_word_budget()` para presupuesto provisional (5 escenas) antes del primer LLM.
+- [x] El prompt inicial ahora incluye minimumWords, preferredWords, maximumWords y rango por escena.
+- [x] Tras cada LLM, se recalcula el presupuesto con el número real de escenas generadas.
+- [x] `_build_retry_instruction()` genera prompt correctivo con word count real, faltante/excedente, y guía de expansión/reducción.
+- [x] `retryHistory` incluye reason, minimumWords/preferredWords/maximumWords, estimatedDurationSec, instructionType.
+- [x] `durationContract` incluye minimumWords, preferredWords, maximumWords, pauseSec.
+- [x] Tests: 12 tests de word budget (todos pasan, 117/117 total).
+- [x] Eliminar reglas fijas de duración/palabras de SYSTEM_PROMPT (25-30s, ~45-55 palabras, <30s).
+- [x] SYSTEM_PROMPT ahora contiene solo reglas editoriales y de esquema independientes de duración.
+- [x] La única fuente de verdad para duración, presupuesto de palabras y escenas es `_build_duration_prompt_instruction()`.
+- [x] Tests de consistencia prompt-contract: 6 tests (sin "25-30", sin "45-55", cada perfil recibe valores dinámicos).
+- [x] Session log: `docs/sessions/2026-07-05-1930-generic-duration-word-budget-enforcement.md`
+
+### Validación
+
+- Tests: `python3 -m pytest tests/ -v` → 123/123 passed
+- Nuevos tests en `tests/test_duration_profiles.py`:
+  - Budget para short_25_30 (28s, 5 scenes)
+  - Budget para standard_32_38 (35s, 5 scenes) — min=57, pref=62, max=67
+  - Budget para extended_50_60 (55s, 6 scenes)
+  - Budget con valores explícitos no relacionados a perfiles (42s, 130 WPM)
+  - Budget para 40s, 6 scenes
+  - Provisional scene count (1-8 escenas) — fórmula no hardcodeada
+  - Overrides explícitos
+  - Zero pause para 1 escena
+  - Clasificación below_minimum (54 words < 57)
+  - Clasificación in_range (62 words in 57-67)
+   - Prompt instruction contiene budget numérico
+   - Retry instruction contiene corrección con word count, missing words, budgets
+   - SYSTEM_PROMPT sin "25-30" fijo
+   - SYSTEM_PROMPT sin "45-55" fijo
+   - standard_32_38 prompt tiene 32-38 y 57-67
+   - extended_50_60 prompt tiene su propio budget dinámico
+   - short_25_30 prompt tiene su propio rango 25-30 y budget
+   - Prompt dinámico no tiene referencias a "<30s" ni "25-30" fijo
+
+### Limitaciones restantes
+
+1. **FREEAI_API_KEY no configurada** — `generated_reconstruction` sigue cayendo a Pollinations.
+2. **Mejorar variedad de queries Pexels/Pixabay** — Rotación de queries para evitar mismo autor.
+3. **Visión artificial para scoring** — Evaluación cualitativa de imágenes sigue siendo metadata-textual.
+4. **Calidad post-render** — No hay approve/reject por escena automatizado.
+5. **Refinar reutilización de assets** — Asset 1961 puede pasar filtro de años si metadata contiene ambos años; debería preferirse búsqueda fresca.
+6. **validate_job coverage 81%** — La cobertura de subtítulos en validate_job (20.6s/25.3s) es menor que la del manifest (99.6%) porque validate_job mide cobertura bruta de cues vs manifest usa sceneTimings extendidos. No hay gaps reales.
+7. **Scene 2 oscura** — Foto CIA 930x1234 es inherentemente low-contrast. Una foto más brillante mejoraría escena 2.
+8. **Riesgo factual en cifras del LLM** — El guion de Stalingrad usó "Más de 2 millones de personas murieron" sin fuente verificada. Las cifras históricas deben redactarse de forma conservativa (ej. "Alrededor de 2 millones") a menos que el prompt exija explícitamente verificación. No hay verificador externo implementado.
+
+## Fase 22 — Approximate duration resolution (`--duration` flag)
+
+### Tareas implementadas
+
+- [x] Añadir `SUPPORTED_DURATION_MIN=20` y `SUPPORTED_DURATION_MAX=60` en `bin/duration_profiles.py`.
+- [x] Añadir `_auto_select_profile()` para mapear segundos a perfil (20-30→short, 31-45→standard, 46-60→extended).
+- [x] Añadir `resolve_requested_duration()` con prioridad: overrides > --duration > --duration-profile > default.
+- [x] Añadir `--duration` CLI arg en `add_duration_profile_args()`.
+- [x] Tolerance dinámica: `clamp(round(N * 0.10), min=2, max=5)`.
+- [x] Clamping condicional: perfil explícito siempre constrain; auto-selección constrain solo si min ≤ target ≤ max.
+- [x] Rechazar --duration < 20 o > 60 con error claro.
+- [x] Rechazar combinaciones incompatibles --duration + --duration-profile.
+- [x] Rechazar min > target o target > max.
+- [x] Persistir `requestedSec` y `requestedProfile` en `request.duration`.
+- [x] Renombrar `MAX_SCENES_FOR_SHORT` → `MAX_SCENES` en `generate_script.py`.
+- [x] Mantener `resolve_duration_config()` para backward compat en tests legacy.
+- [x] Toda la lógica de resolución en `bin/duration_profiles.py` — no duplicada en `generate_script.py`.
+- [x] Tests: 11 tests nuevos para `resolve_requested_duration()` (134/134 total).
+
+### Validación
+
+- Tests: `python3 -m pytest tests/ -v` → 134/134 passed
+- Dry-run verification:
+  - `--duration 28` → short_25_30, window 25-30
+  - `--duration 42` → standard_32_38, window 38-46
+  - `--duration 55` → extended_50_60, window 50-60
+  - `--duration 19` → ERROR: below minimum
+  - `--duration 61` → ERROR: exceeds maximum
+  - `--duration 42 --duration-profile short_25_30` → ERROR: incompatible combo
+
+## Fase 23 — Unified job runner and orchestration state
+
+### Tareas implementadas
+
+- [x] Crear `bin/run_job.py` — orquestador unificado que ejecuta scripts existentes como subprocesos.
+- [x] Stage order: script → assets → audio → prepare → render → validate (descubierto del repositorio).
+- [x] `--topic`, `--duration`, `--duration-profile`, `--duration-target/min/max`, `--strictness`, `--model` forwardeados a `generate_script.py`.
+- [x] `--stop-after <stage>` para detener en cualquier etapa.
+- [x] `--dry-run` imprime plan de ejecución sin invocar subprocesos.
+- [x] `--verbose` para output detallado de subprocesos.
+- [x] Job ID extraído del JSON estructurado de `generate_script.py`, no adivinado.
+- [x] Stages posteriores reciben `metadata_path` como argumento posicional.
+- [x] Estado `orchestration` persistido en `metadata.json` con `runnerVersion`, `currentStage`, `statusHistory[]`.
+- [x] Estados de etapa: SCRIPT_GENERATING → SCRIPT_DRAFT, ASSETS_FETCHING → ASSETS_READY, etc.
+- [x] Stage `REVIEW_REQUIRED` bloquea etapas posteriores.
+- [x] Failure metadata: `failedStage`, `error`, `childCommand`, `exitCode`, `timestamp`.
+- [x] `subprocess.run()` con `shell=False`, `cwd=project_root`, timeout 600s.
+- [x] Errores truncados a 1000 chars, sin secrets en metadata.
+- [x] Summary JSON final con jobId, jobPath, status, lastCompletedStage, outputVideoPath, validationStatus.
+- [x] 34 tests nuevos (168/168 total):
+  - Command construction for all options
+  - Script output parsing (valid, missing fields, empty)
+  - Metadata load/save preserves fields
+  - Dry-run prints plan for all stages
+  - Dry-run stop-after script shows only script
+  - Invalid duration shows error in dry-run
+  - Script stage extracts jobId from JSON
+  - Missing script output fails safely
+  - REVIEW_REQUIRED stops before assets
+  - Non-zero exit produces FAILED with failedStage
+  - Stop-after script does not run later stages
+  - Stop-after assets does not run audio
+  - Asset failure stops before audio
+  - Metadata preservation across stages
+  - No secrets in failure metadata
+
+### Validación
+
+- Tests: `python3 -m pytest tests/ -v` → 195/195 passed (61 in test_run_job.py)
+- Dry-run: todos los stages se muestran con comandos correctos
+- Script-only real: `--stop-after script` genera jobId=prueba-2026-07-05-182309, metadata, orchestration, summary JSON
+- Duration 35 → profile standard_32_38, requestedSec y requestedProfile en metadata
+- Real-run bounded through prepare: **Blocked at assets stage** (see below)
+
+### Real-run verification (2026-07-05)
+
+Two attempts with `bin/run_job.py --topic "La caída del Muro de Berlín" --stop-after prepare --verbose`:
+
+**Attempt 1: `--duration 28`** — script stage blocked at `REVIEW_REQUIRED` (duration contract FAIL: estimated 30.5s > max 30s, 54 words > 53 max). Runner correctly handled REVIEW_REQUIRED gate.
+
+**Attempt 2: `--duration 30 --duration-max 31`** — script ✅ (duration contract PASS, 53 words/5 scenes), assets ❌ (fetch_images.py exit 1: scenes 1–4 unresolvable, scene 5 OK via Wikimedia Commons). Runner correctly handled non-zero exit, set FAILED metadata with failedStage="assets", stopped before audio.
+
+**Root cause of assets failure (corrected 2026-07-05)**: The `editorialRole` field IS populated by the LLM (it was already in the prompt schema). The actual failure: scenes 1–4 have hard historical roles (`context_map`, `civilian_impact`, `battle_or_assault`) which restrict provider chains to **only** `["wikimedia_commons"]` (`fetch_images.py:73-75`). Wikimedia Commons didn't return matching results for the generated queries. Scene 5 with soft role `consequence_or_legacy` succeeded via full provider chain.
+
+**Prompt fix applied**: Added `visualTemporalIntent` (scene-level field + rules) and improved Wikimedia Commons query guidance (specific named entities + year requirement, 2+ queries per scene).
+
+**Runner verdict through script stage: VERIFIED.** Runner correctly handles SCRIPT_DRAFT, REVIEW_REQUIRED, and ASSETS_FETCHING → FAILED paths. Contract verification for assets/audio/prepare remains unit-tested only (195/195 pass).
+
+- Session log: `docs/sessions/2026-07-05-1849-runner-real-staged-verification.md`
+- Job: `la-2026-07-05-185053` (FAILED at assets)
+- Job: `la-2026-07-05-184917` (REVIEW_REQUIRED at script)
+
+### Phase 23 follow-up: prompt + fallback improvements (2026-07-05)
+
+After correcting the original root-cause diagnosis (editorialRole WAS populated by LLM; real issue was hard historical roles restrict to Wikimedia Commons only), made three improvements:
+
+1. **generate_script.py prompt**: Added `visualTemporalIntent` field + rules section, improved Wikimedia Commons query guidance (named entity + year required, 2+ queries per scene), added editorialRole decision tree with explicit context_map exclusion rule (NO use for events like "Muro cayó en 1989").
+
+2. **fetch_images.py fallback**: Added `_try_hard_role_fallback()` (lines 1806-1990) — when Wikimedia Commons exhausts queries for hard historical roles, tries Pexels then Pixabay with strict relevance filters. Fallback assets carry `provenanceType="illustrative"`, `fallbackReason`, and `originalEditorialRole` metadata. Preserves ASSET_UNRESOLVED blocking state if no acceptable fallback.
+
+3. **Tests**: 10 new prompt tests in `test_generate_script.py`, 4 new fallback tests in `test_semantic_asset_validation.py`. Total 209/209 pass.
+
+**Real-run verification (job la-2026-07-05-193524)**: Improved from 1/5 → 3/5 scenes resolved. Scene 1 (context_map for actual map content) succeeded via Wikimedia. Scenes 2 (civilian_impact) and 3 (battle_or_assault) succeeded via Pexels fallback with `provenanceType=illustrative`. Scenes 4-5 (atmospheric_broll, soft role) failed on download (not a hard-role issue).
+
+### Soft-role temporal intent defect (2026-07-05, segunda iteración)
+
+Diagnóstico de scenes 4-5 del job `la-2026-07-05-193524`: el fallo NO era en API search (60 candidatos recibidos por escena con keywords relevantes), sino en stage 1 filtering:
+
+1. `_classify_temporal_intent()` ignoraba el campo LLM `scene.visualTemporalIntent` y usaba solo heurística de substring sobre voiceover. Para `consequence_or_legacy` con "caída..." o sin indicadores, devolvía `event_depiction` (default). La hard rule "event_depiction + assetTemporalMatch ∈ {unknown, modern_legacy} → reject" descartaba los 60 candidatos modernos legítimos de legado.
+2. `EDITORIAL_ROLE_PREFERENCES["consequence_or_legacy"].forbidden = {atmospheric_broll, broll, generated_reconstruction}` combinado con `c["strategy"]` copy en `_fetch_one_asset` rechazaba cualquier candidato si la escena tenía strategy=atmospheric_broll.
+
+Corrección mínima en `bin/fetch_images.py`:
+
+1. `_classify_temporal_intent()` respeta el campo LLM `visualTemporalIntent` cuando válido; cae a la heurística solo si el campo falta (backward compatibility con jobs antiguos y tests existentes).
+2. `_fetch_one_asset` stage 1: `forbidden_types` mutable; descartar `atmospheric_broll`/`broll` cuando `editorialRole=consequence_or_legacy` y `visualTemporalIntent=legacy_or_commemoration`. Scenes de event_depiction mantienen set estricto original.
+3. Stage 1 low-confidence rejection reinforced: si `semanticConfidence=="low"` Y no `topicTermsMatched` Y no `locationTermsMatched` → reject (antes solo se rechazaba si no había sourceTitle).
+
+Tests nuevos en `tests/test_semantic_asset_validation.py` (8 tests): cubren classify honour LLM field, fallback behaviour, weak-relevance rejection, exhaustion blocking state. Suite: **216/216 pass**.
+
+#### Real-run verification: job la-2026-07-05-203359
+
+Comando:
+
+```
+python3 bin/run_job.py --topic "La caída del Muro de Berlín" \
+  --duration 30 --duration-max 35 --stop-after prepare --verbose
+```
+
+Resultado: **pipeline completó script → assets → audio → prepare**.
+
+Stage-by-stage (orchestration statusHistory, 7 entries, truthful):
+
+1. script: SCRIPT_DRAFT
+2. assets: ASSETS_FETCHING
+3. assets: ASSETS_READY
+4. audio: AUDIO_GENERATING
+5. audio: AUDIO_READY
+6. prepare: PREPARING
+7. prepare: SUBTITLES_READY
+
+Provider/provenance distribution (5 scenes):
+
+| Scene | editorialRole | visualTemporalIntent | Provider | provenanceType |
+|-------|---------------|----------------------|----------|----------------|
+| 1 | battle_or_assault | event_depiction | pexels (fallback) | illustrative |
+| 2 | context_map | event_depiction | wikimedia_commons | documentary |
+| 3 | civilian_impact | event_depiction | pexels (fallback) | illustrative |
+| 4 | consequence_or_legacy | legacy_or_commemoration | wikimedia_commons | documentary |
+| 5 | consequence_or_legacy | legacy_or_commemoration | wikimedia_commons (reuse scene 4) | documentary |
+
+3 documentary + 2 illustrative. 0 Pixabay, 0 FreeAI, 0 Pollinations.
+
+Cross-job path check: 0 violations. All asset/audio/timeline renderTimeline paths inside `data/videos/la-2026-07-05-203359/`. Scene 5 reuses scene-04-01.jpg (allowed: última escena + consequence_or_legacy).
+
+Artefactos:
+- `metadata.json` (63907 bytes)
+- `subtitle.ass` (1661 bytes)
+- `renderTimeline` 5 events, startSec 0.0 → endSec 30.0 (covers full narration)
+- `render.path` planeado (vídeo.mp4 NO existe, `--stop-after prepare`)
+- 5 narration MP3s (Edge TTS), 4 unique JPG assets
+
+render, validate, review_job NOT ejecutados. OpenSpec change NO se cierra.
+
+- Bitácora completa: `docs/sessions/2026-07-05-1945-prompt-and-hard-role-fallback.md`
+
+### Limitaciones restantes
+
+1. **FREEAI_API_KEY no configurada** — `generated_reconstruction` sigue cayendo a Pollinations.
+2. **Mejorar variedad de queries Pexels/Pixabay** — Rotación de queries para evitar mismo autor.
+3. **Visión artificial para scoring** — Evaluación cualitativa de imágenes sigue siendo metadata-textual.
+4. **Calidad post-render** — No hay approve/reject por escena automatizado.
+5. **Refinar reutilización de assets** — Asset 1961 puede pasar filtro de años si metadata contiene ambos años; debería preferirse búsqueda fresca.
+6. **validate_job coverage 81%** — La cobertura de subtítulos en validate_job (20.6s/25.3s) es menor que la del manifest (99.6%) porque validate_job mide cobertura bruta de cues vs manifest usa sceneTimings extendidos. No hay gaps reales.
+7. **Scene 2 oscura** — Foto CIA 930x1234 es inherentemente low-contrast. Una foto más brillante mejoraría escena 2.
+8. **Riesgo factual en cifras del LLM** — El guion de Stalingrad usó "Más de 2 millones de personas murieron" sin fuente verificada. Las cifras históricas deben redactarse de forma conservativa (ej. "Alrededor de 2 millones") a menos que el prompt exija explícitamente verificación. No hay verificador externo implementado.
+9. **Pipeline completo no verificado con e2e real** — El runner se verificó solo hasta script stage. Los stages assets/audio/prepare/render/validate no se ejecutaron en esta fase.
+10. **Sin resume/retry-from-stage** — `--stop-after` permite detener pero no reanudar desde una etapa.
+11. **Assets y audio secuenciales** — Podrían ejecutarse en paralelo para reducir tiempo total.

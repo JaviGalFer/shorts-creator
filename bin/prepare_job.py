@@ -265,6 +265,7 @@ def build_render_timeline(scenes: list, assets: list, scenes_dir: Path,
     asset_by_scene = {a['sceneNumber']: a for a in assets} if assets else {}
     is_continuous = audio_path is not None and scene_timings is not None
     timing_by_scene = {st["sceneNumber"]: st for st in (scene_timings or [])}
+    accumulated_time = 0.0
 
     for scene in scenes:
         sn = int(scene['sceneNumber'])
@@ -276,7 +277,7 @@ def build_render_timeline(scenes: list, assets: list, scenes_dir: Path,
             scene_offset = st_entry.get("startSec", 0.0)
         else:
             seg_audio_path = str(scenes_dir / f"scene-{sn:02}.mp3")
-            scene_offset = 0.0
+            scene_offset = accumulated_time
             st_entry = {}
 
         beats = scene.get("narrativeBeats", [])
@@ -302,8 +303,8 @@ def build_render_timeline(scenes: list, assets: list, scenes_dir: Path,
                 end_cue_idx = beat.get("endCueIndex", 0)
 
                 if all_cue_indices_valid and start_cue_idx < len(cues) and end_cue_idx < len(cues):
-                    start_sec = cues[start_cue_idx]["startSec"]
-                    end_sec = cues[end_cue_idx]["endSec"]
+                    start_sec = scene_offset + cues[start_cue_idx]["startSec"]
+                    end_sec = scene_offset + cues[end_cue_idx]["endSec"]
                 else:
                     beat_share = 1.0 / len(beats)
                     beat_start = (bi - 1) * scene_duration * beat_share
@@ -410,6 +411,8 @@ def build_render_timeline(scenes: list, assets: list, scenes_dir: Path,
                 "focalRegion": "center",
                 "cropMode": "full_map",
             })
+
+        accumulated_time += scene_duration
 
     return render_timeline
 
