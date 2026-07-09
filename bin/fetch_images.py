@@ -83,64 +83,16 @@ SOFT_ROLES: set[str] = {
 
 # ---------------------------------------------------------------------------
 # Query adaptation per provider
-# Maps strategy -> list of visual/generic query templates for stock photo APIs
+# Visual/generic query templates for stock photo APIs.
+# These are intentionally EMPTY: provider queries are composed exclusively
+# from scene metadata (searchQueries, entities, location, period,
+# visualPrompt, imagePrompt). No hardcoded genre or era templates.
 # ---------------------------------------------------------------------------
 STRATEGY_VISUAL_QUERIES: dict[str, list[str]] = {
-    "historical_archive": [
-        "old historical photograph",
-        "vintage documentary photo",
-        "archival historical image",
-        "retro black and white scene",
-        "historical event photography",
-        "19th century engraving",
-        "old military portrait",
-        "vintage war photograph",
-        "historical battle scene painting",
-        "ancient manuscript illustration",
-        "old newspaper front page",
-        "historical map archive",
-        "vintage propaganda poster",
-        "antique portrait painting",
-        "old city panoramic view",
-    ],
-    "map_or_document": [
-        "old map historical",
-        "ancient manuscript document",
-        "vintage cartography",
-        "historical letter document",
-        "old parchment map",
-        "medieval illuminated manuscript",
-        "antique world map",
-        "18th century navigation chart",
-        "old treaty document",
-        "renaissance map engraving",
-        "ancient papyrus scroll",
-        "medieval castle blueprint",
-        "old military campaign map",
-    ],
-    "atmospheric_broll": [
-        "old ruins dramatic sky",
-        "candlelight dark room",
-        "ancient stone texture",
-        "smoke fog atmosphere",
-        "medieval castle storm",
-        "ancient military camp",
-        "old fortress walls",
-        "historical siege scene",
-        "battlefield mist morning",
-        "medieval armor weapon display",
-        "ancient city gate medieval",
-        "old harbor medieval town",
-        "cathedral interior dark",
-        "ancient cobblestone street",
-        "old cannon fortress defense",
-    ],
-    "generated_reconstruction": [
-        "historical reconstruction",
-        "ancient city landscape",
-        "medieval fortress concept",
-        "historical scene illustration",
-    ],
+    "historical_archive": [],
+    "map_or_document": [],
+    "atmospheric_broll": [],
+    "generated_reconstruction": [],
 }
 
 CANDIDATES_PER_PROVIDER = 5
@@ -262,7 +214,7 @@ def _determine_asset_temporal_match(candidate: dict, visual_plan: dict, scene: d
 
     # Accent-insensitive matching for period/entity terms
     # Combined text is checked in both original and unaccented forms
-    # to handle Spanish terms (e.g. "Berlín") vs English text ("Berlin")
+    # to handle Spanish terms vs English text matching
     def _match_term(term: str) -> bool:
         """Check term against combined text with accent-insensitive matching."""
         term_lower = term.lower()
@@ -287,8 +239,8 @@ def _determine_asset_temporal_match(candidate: dict, visual_plan: dict, scene: d
             "guerra fria": ["cold war", "kalter krieg", "post-war", "coldwar"],
             "segunda guerra mundial": ["world war ii", "wwii", "second world war", "zweiter weltkrieg"],
             "posguerra": ["post-war", "postwar", "nachkriegszeit"],
-            "post-guerra fría": ["cold war", "post-war", "postwar", "1989", "1990", "fall of the berlin wall"],
-            "post-guerra fria": ["cold war", "post-war", "postwar", "1989", "1990", "fall of the berlin wall"],
+            "post-guerra fría": ["cold war", "post-war", "postwar"],  # generic post-Cold-War translations
+            "post-guerra fria": ["cold war", "post-war", "postwar"],
             "entreguerras": ["interwar", "between wars", "zwischenkriegszeit"],
         }
         for eq in period_equivalents.get(pr, period_equivalents.get(pr_u, [])):
@@ -304,16 +256,13 @@ def _determine_asset_temporal_match(candidate: dict, visual_plan: dict, scene: d
         if _match_term(lr):
             return True
         lr_u = _unaccent(lr)
-        # Check individual location tokens (e.g. "Berlín" in text containing "berlin")
+        # Check individual location tokens (e.g. a town name in text containing the same stem)
         for token in lr_u.split():
             if len(token) > 2 and token in combined_u:
                 return True
-        # German location equivalents
+        # Generic location translation equivalents (no topic-specific locations)
         location_equivalents = {
-            "berlín": ["berlin", "berliner"],
-            "berlin": ["berlin", "berliner"],
             "alemania": ["germany", "deutschland", "german"],
-            "berlín, alemania": ["berlin germany", "berlin deutschland"],
         }
         for eq in location_equivalents.get(lr, location_equivalents.get(lr_u, [])):
             if eq in combined or _unaccent(eq) in combined_u:
@@ -332,11 +281,8 @@ def _determine_asset_temporal_match(candidate: dict, visual_plan: dict, scene: d
         ent_tokens = set(er_u.split())
         if len(ent_tokens) >= 1 and ent_tokens.intersection(combined_u.split()):
             return True
-        # Entity equivalents
+        # Generic entity translation equivalents (no topic-specific entities)
         entity_equivalents = {
-            "muro de berlín": ["berlin wall", "berliner mauer", "the wall"],
-            "muro de berlin": ["berlin wall", "berliner mauer", "the wall"],
-            "berlín": ["berlin", "berliner"],
             "familias": ["family", "families", "familie"],
             "familia": ["family", "families", "familie"],
         }
@@ -372,7 +318,7 @@ def _determine_asset_temporal_match(candidate: dict, visual_plan: dict, scene: d
         return "archival_context"
     # Maps and archival documents with entity/location match are archival context
     # even without an explicit year (e.g., 1945 occupation-zone maps are relevant
-    # to Berlin Wall context)
+    # to border context)
     if _map_or_doc_in_title and (has_entity_term or has_location_term):
         return "archival_context"
     return "unknown"
@@ -397,13 +343,13 @@ def _build_scene_query_variants(scene: dict, visual_plan: dict) -> list[str]:
             seen.add(qs.lower())
             queries.append(qs)
 
-    # Role-specific term maps for Berlin Wall
+    # Role-specific term maps for each editorial role
     role_terms = {
         "context_map": ["map", "cartography", "atlas", "occupation zones", "division", "sectors"],
         "battle_or_assault": ["construction", "building", "barbed wire", "barricades",
                              "concrete", "border guards", "military", "soldiers"],
         "border_closure_construction": ["barbed wire", "barricades", "road block",
-                                       "border closure", "Stacheldraht", "Mauerbau",
+                                       "border closure", "Stacheldraht",
                                        "Abriegelung", "Grenzsperre", "Sperranlagen",
                                        "construction", "building", "concrete barrier"],
         "civilian_impact": ["families", "family separation", "border crossing",
@@ -427,32 +373,6 @@ def _build_scene_query_variants(scene: dict, visual_plan: dict) -> list[str]:
         for term in extra_terms:
             add(f"{location} {period} {term}")
         add(f"{period} {location}")
-
-    # German variants (for Wikimedia Commons)
-    german_period = ""
-    if "1961" in (period or ""):
-        german_period = "1961"
-    if "1989" in (period or ""):
-        german_period = "1989"
-    german_loc = "Berlin"
-    german_terms = {
-        "context_map": ["Berliner Mauer Karte", "Berlin geteilt Karte",
-                        "Besatzungszonen Berlin", "Berliner Mauer Plan"],
-        "battle_or_assault": ["Berliner Mauer Bau", "Mauerbau Berlin",
-                             "Grenzsoldaten Berlin", "Stacheldraht Berlin"],
-        "border_closure_construction": ["Berliner Mauer Bau", "Mauerbau Berlin",
-                                       "Stacheldraht Berlin", "Grenzsperre Berlin",
-                                       "Abriegelung Berlin", "Sperranlagen Berlin"],
-        "civilian_impact": ["Berliner Mauer Familie", "Familientrennung Berlin",
-                           "Grenzübergang Berlin", "Flucht Berliner Mauer"],
-        "consequence_or_legacy": ["Mauerfall Berlin", "Berliner Mauer Fall",
-                                 "Maueröffnung 1989", "Berliner Mauer Feier"],
-    }
-    for gt in german_terms.get(role, []):
-        add(gt)
-    if german_period:
-        add(f"Berliner Mauer {german_period}")
-        add(f"Berlin Wall {german_period}")
 
     # Primary asset type queries
     if primary_at == "historical_map":
@@ -843,6 +763,12 @@ def _fetch_one_asset(
             pqs = resolve_queries_for_provider(
                 provider, visual_plan, strategy, visual_prompt, image_prompt
             )
+            if not pqs:
+                provider_failures.append({
+                    "provider": provider,
+                    "reason": f"{provider}: MISSING_VISUAL_METADATA (empty visualPlan or no searchQueries/prompts)",
+                })
+                continue
 
         all_candidates: list[dict[str, Any]] = []
         for q in pqs[:6]:
@@ -876,8 +802,11 @@ def _fetch_one_asset(
                 else:
                     failure_reason = "freeai: no API key"
             elif provider == "pollinations":
-                poll_prompt = q or visual_prompt or image_prompt or f"historical {strategy} scene"
-                batch = generate_pollinations(poll_prompt, scene_num)
+                poll_prompt = q or visual_prompt or image_prompt
+                if poll_prompt:
+                    batch = generate_pollinations(poll_prompt, scene_num)
+                else:
+                    failure_reason = "pollinations: MISSING_VISUAL_METADATA (no prompt available)"
 
             for c in batch:
                 c["strategy"] = strategy
@@ -1131,35 +1060,38 @@ def resolve_queries_for_provider(
     image_prompt: str,
 ) -> list[str]:
     if not visual_plan:
-        return [visual_prompt or image_prompt or "historical scene"]
+        result = visual_prompt or image_prompt
+        return [result] if result else []
 
     if provider == "wikimedia_commons":
         qs = list(visual_plan.get("searchQueries", []))
         if visual_prompt:
             qs.append(visual_prompt[:200])
-        if not qs:
-            qs.append(f"historical {strategy.replace('_', ' ')}")
         return qs[:3]
 
     if provider in ("pexels", "pixabay"):
-        visual_templates = STRATEGY_VISUAL_QUERIES.get(strategy, [])
-        qs = list(visual_templates)
-        for sq in visual_plan.get("searchQueries", [])[:2]:
-            qs.append(f"historical {sq}"[:200])
+        qs = []
+        for sq in visual_plan.get("searchQueries", [])[:3]:
+            qs.append(sq[:200])
         if image_prompt:
             qs.append(image_prompt[:200])
+        if visual_prompt:
+            qs.append(visual_prompt[:200])
         return qs[:3]
 
     if provider == "freeai":
         gen_prompt = visual_plan.get("imageGenerationPrompt", "") or visual_prompt
         if gen_prompt:
             return [gen_prompt[:500]]
-        return [visual_prompt or f"historical {strategy} scene"][:1]
+        result = visual_prompt
+        return [result] if result else []
 
     if provider == "pollinations":
-        return [visual_prompt or image_prompt or f"historical {strategy} scene"]
+        result = visual_prompt or image_prompt
+        return [result] if result else []
 
-    return [visual_prompt or image_prompt or "historical scene"]
+    result = visual_prompt or image_prompt
+    return [result] if result else []
 
 
 # ---------------------------------------------------------------------------
@@ -1296,14 +1228,13 @@ def score_candidate(
 # Terms that identify a map/plan/diagram/division document vs ordinary photographs
 _MAP_INDICATORS = [
     "map", "karte", "cartography", "cartografía", "atlas", "plan",
-    "diagram", "diagrama", "occupation zones", "besatzungszonen",
-    "sectors of berlin", "sectors of", "sektoren", "sector map",
+    "diagram", "diagrama",
+    "occupation zones", "besatzungszonen",
+    "sectors", "sektoren", "sector map",
     "division of", "divided city", "dividing line", "boundary",
-    "east berlin west berlin", "east west berlin", "east and west berlin",
-    "berlin sectors", "allied sectors", "soviet sector",
-    "annexation", "partition", "teilung", "vier sektoren",
-    "zones of berlin", "berlin zones", "zone map", "four zones",
-]
+    "annexation", "partition", "teilung",
+    "four zones", "zone map",
+]  # Generic map/division/sector indicators — no topic-specific locations
 _DOCUMENT_INDICATORS = [
     "document", "dokument", "treaty", "vertrag", "newspaper",
     "zeitung", "decree", "dekret", "letter", "brief",
@@ -1314,14 +1245,14 @@ _DOCUMENT_INDICATORS = [
 _PHOTO_INDICATORS = [
     "photograph", "photography", "photo", "fotografie", "foto",
     "taken in", "image of the", "picture of", "view of",
-    "aufgenommen", "blick auf", "ansicht", "berlin wall in",
+    "aufgenommen", "blick auf", "ansicht",
     "this image", "this photo",
     "families separated", "separated by the wall", "separated families",
     "construction workers", "building the wall",
     "border guards", "checkpoint", "crossing the",
     "night view of", "front of the",
     "wasserturm", "restaurant", "hotel",
-]
+]  # Generic photo/description indicators — no topic-specific terms
 
 
 def _infer_effective_asset_type(candidate: dict, declared_type: str) -> str:
@@ -1409,21 +1340,21 @@ _BORDER_CLOSURE_REJECT_INDICATORS = [
     "familientrennung", "separated by the wall", "separated families",
     "clinging hands", "farewell", "goodbye", "wedding", "bride", "groom",
     "commemoration", "commemorative", "anniversary", "celebration",
-    "celebrating", "checkpoint charlie", "border crossing", "grenzübergang",
-]
+    "celebrating",
+    "border crossing", "grenzübergang",
+]  # Generic reject indicators — no topic-specific locations or names
 
-# Direct subject indicators that the fall/opening of the Berlin Wall (1989) is
+# Direct subject indicators that the fall/opening of a wall/border is
 # actually depicted in the image — required when target event year is 1989 and
 # the candidate must show that event (not a retrospective/contextual mention).
 _FALL_OPENING_SUBJECT_INDICATORS = [
-    "fall of the wall", "fall of the berlin wall", "fall of the berlin",
-    "mauerfall", "öffnung", "maueröffnung", "wall opening",
-    "people on the wall", "people atop the wall", "atop the berlin wall",
+    "fall of the wall", "fall of the",
+    "wall opening",
+    "people on the wall", "people atop the wall", "atop the",
     "crowd celebrating", "crowd on the", "celebrations at",
     "wall coming down", "wall being dismantled", "dismantling the wall",
     "border open", "border opening", "opening of the wall",
-    "juggling on the berlin wall",
-]
+]  # Generic fall/demolition indicators — no topic-specific location names
 
 # Subject indicators that the image is about family separation / 1961 border
 # closure — used to reject reuse for distinct events (e.g. the 1989 fall).
@@ -1446,7 +1377,7 @@ def _classify_date_evidence(candidate: dict) -> tuple[list[str], list[str]]:
       - A bare year embedded in the descriptive narrative (after a period or in
         a clause describing what the photo shows) is treated as depicted.
       - A year that is part of a dashed range (e.g. '1961 - 1989') or that
-        appears in a retrospective title such as 'The Berlin Wall 1961 - 1989'
+        appears in a retrospective title with a date range
         is treated as context-only.
       - Years appearing only in the URL are context-only unless the URL slug
         contains the year adjacent to depicted-subject keywords (weak signal,
@@ -1470,16 +1401,16 @@ def _classify_date_evidence(candidate: dict) -> tuple[list[str], list[str]]:
 
     # 2. Title-only year mentions where the title is a collection/retrospective
     #    phrase → context. Heuristic: title tokens '1961', '1989' adjacent to
-    #    'berlin wall'/'berliner mauer' without depicting verbs.
+    #    retrospective without depicting verbs.
     # A year may also appear in a depicting sentence elsewhere in the title; in
     # that case it must be classified as depicted (cannot short-circuit on
     # context_years from a range).
     title_lower = title.lower()
     retrospective_cues = [
         "1961 - 1989", "1961–1989", "1961—1989",
-        "1961-1989", "the berlin wall", "berliner mauer",
+        "1961-1989",
         "a city torn apart", "booklet", "collection",
-    ]
+    ]  # Generic retrospective/collection indicator cues — no topic-specific terms
     # Collect all year matches in title; classify each by its window.
     title_year_matches = list(_YEAR_RE.finditer(title_lower))
     for m in title_year_matches:
@@ -1504,18 +1435,17 @@ def _classify_date_evidence(candidate: dict) -> tuple[list[str], list[str]]:
             "taken in", "photographed", "aufgenommen", "shows",
             "depicts", "depicts the", "in this photo", "this image",
             "this photo", "is seen", "celebrating", "people on",
-            "atop", "juggling", "wall coming down", "dismantling",
-            "construction of the wall", "construction of the berlin",
+            "atop",
+            "wall coming down", "dismantling",
+            "construction of the wall",
             "erecting", "building the wall", "barbed wire",
-            # Date-anchored depiction cues (the photo was taken at that moment)
             "congratulate", "married", "marriage", "newly wed", "newlyweds",
             "from the window", "families separated", "family separated",
             "wedding", "on 8 september", "september 1961", "in 1961",
             "in 1989", "november 1989", "16. november", "on 16",
-            # Generic photo subject clue
             "of the bride", "of the groom", "of a young",
             "smiles", "waving", "waved", "look on",
-        ]
+        ]  # Generic depiction cues — dates serve as anchors for any topic period
         context_cues = [
             "for more information", "booklet", "collection",
             "historical collections", "cia's historical",
@@ -1575,8 +1505,7 @@ def _check_semantic_evidence(candidate: dict, scene: dict, topic: str) -> dict:
         topic_terms.add(ent.lower())
     for sq in vp.get("searchQueries", []):
         topic_terms.add(sq.lower())
-    topic_terms.update({"berlin wall", "berliner mauer", "muro de berlín", "muro de berlin",
-                        "cold war", "guerra fría", "post-war", "posguerra"})
+    # Topic terms derived exclusively from scene metadata (no hardcoded topic vocabulary)
 
     # Location terms from scene visualPlan
     location_raw = vp.get("location", "")
@@ -1585,7 +1514,7 @@ def _check_semantic_evidence(candidate: dict, scene: dict, topic: str) -> dict:
         location_terms.add(location_raw.lower())
         for part in location_raw.replace(",", " ").split():
             location_terms.add(part.lower())
-    location_terms.update(["berlin", "berlín", "germany", "alemania"])
+    # Location terms derived exclusively from scene visualPlan.location (no hardcoded locations)
 
     # Period terms from scene visualPlan
     period_raw = vp.get("period", "")
@@ -1594,8 +1523,7 @@ def _check_semantic_evidence(candidate: dict, scene: dict, topic: str) -> dict:
         period_terms.add(period_raw.lower())
         for part in period_raw.split():
             period_terms.add(part.lower())
-    period_terms.update({"1961", "1960s", "1960", "1989", "1980s",
-                         "division", "divided", "fall of the wall", "caída del muro"})
+    # Period terms derived exclusively from scene visualPlan.period (no hardcoded dates/periods)
 
     # Accent-insensitive matching
     def _matches(term: str, text: str, text_u: str) -> bool:
@@ -1639,8 +1567,8 @@ def _check_semantic_evidence(candidate: dict, scene: dict, topic: str) -> dict:
     # Role-specific evidence: match editorial role terms against candidate
     role_terms_by_role = {
         "context_map": ["map", "cartography", "zones", "divided", "division", "occupation",
-                        "boundary", "sector", "berlin sectors", "east berlin", "west berlin",
-                        "karte", "besatzungszonen", "sektoren", "teilung"],
+                        "boundary", "sector",
+                        "karte", "besatzungszonen", "sektoren", "teilung"],  # German generic: occupation zones, sectors, division
         "civilian_impact": ["family", "families", "familie", "civilian", "zivilist",
                            "refugee", "flüchtling", "escape", "flucht",
                            "border crossing", "grenzübergang", "checkpoint",
@@ -1651,10 +1579,10 @@ def _check_semantic_evidence(candidate: dict, scene: dict, topic: str) -> dict:
         "border_closure_construction": ["barbed wire", "stacheldraht", "barricade", "barrikaden",
                                        "road block", "roadblock", "road blockade", "strassensperre",
                                        "border closure", "border closed", "grenzsperre",
-                                       "abriegelung", "sperranlagen", "mauerbau",
+                                       "abriegelung", "sperranlagen",
                                        "construction", "bau", "building", "erecting",
                                        "concrete barrier", "beton", "wall construction"],
-        "consequence_or_legacy": ["fall", "mauerfall", "opening", "öffnung", "celebration",
+        "consequence_or_legacy": ["fall", "opening", "öffnung", "celebration",
                                   "feier", "crowd", "menge", "wall coming down",
                                   "border open", "freedom", "freiheit", "1989"],
         "character_portrait": ["portrait", "porträt", "leader", "führer", "president",
@@ -1672,7 +1600,7 @@ def _check_semantic_evidence(candidate: dict, scene: dict, topic: str) -> dict:
     if editorial_role == "context_map" and role_evidence and sem_conf == "low":
         # A candidate with explicit map/document terms in its title warrants at least
         # medium confidence even if topic/period matches were only generic words.
-        # e.g., "1945 Berlin Zones" has role=zones but topic=berlin(generic)
+        # e.g., occupation-zone maps with division/zones terms in title but generic location words
         sem_conf = "medium"
 
     # Asset type evidence
@@ -1688,9 +1616,9 @@ def _check_semantic_evidence(candidate: dict, scene: dict, topic: str) -> dict:
         "pour concrete", "laying bricks", "digging trench",
         "separated families", "family separated", "goodbye",
         "farewell", "clinging hands", "crossing the border",
-        "juggling", "people atop", "crowd celebrating", "crowd on the",
+        "people atop", "crowd celebrating", "crowd on the",
         "celebrations at", "fall of the", "opening of the",
-    ]
+    ]  # Generic direct visual indicators — no topic-specific actions or names
     # Construction-specific subject indicators (narrower, for battle_or_assault role)
     _construction_subject_indicators = [
         "construction workers", "building the wall", "erecting barrier",
@@ -1709,12 +1637,11 @@ def _check_semantic_evidence(candidate: dict, scene: dict, topic: str) -> dict:
         "grenzsperre", "grenze abgeriegelt",
         "abriegelung", "abriegelungen",
         "sperranlagen", "sperrzone",
-        "mauerbau", "berliner mauer bau", "bau der mauer",
         "construction workers", "building the wall", "erecting barrier",
         "erecting", "construction of the wall",
         "concrete barrier", "concrete wall", "wall construction",
         "wall segment", "border fortification",
-    ]
+    ]  # Generic border-closure indicators — no topic-specific German compound nouns
     _contextual_indicators = [
         "booklet about", "book about", "story of the", "history of the",
         "description of", "account of", "chronicle of", "cover of",
@@ -1786,7 +1713,7 @@ ASSET_TYPE_QUERY_TERMS: dict[str, list[str]] = {
     "historical_map": ["map", "cartography", "atlas"],
     "historical_photograph": ["portrait", "photograph", "illustration", "painting", "miniature"],
     "historical_art_or_document": ["painting", "engraving", "manuscript", "document", "miniature", "drawing"],
-    "atmospheric_broll": ["walls", "fortress", "city", "landscape", "architecture"],
+    "atmospheric_broll": ["city", "landscape", "architecture", "view", "scene", "atmosphere"],
     "document": ["document", "manuscript", "letter", "scroll"],
     "map": ["map", "atlas", "cartography"],
     "illustration": ["illustration", "drawing", "engraving", "miniature"],
@@ -1914,7 +1841,8 @@ def build_historical_queries(
 ) -> list[str]:
     queries: list[str] = []
     if not visual_plan:
-        return [visual_prompt or image_prompt or "historical scene"]
+        result = visual_prompt or image_prompt
+        return [result] if result else []
 
     entities = visual_plan.get("entities", [])
     period = visual_plan.get("period", "")
@@ -1984,7 +1912,7 @@ def build_historical_queries(
 
     # Level 7: entity + documentary fallback
     for ent in entities:
-        q = f"historical {ent} illustration".strip()
+        q = f"{ent} illustration".strip()
         if q and q not in queries:
             queries.append(q)
 
@@ -2214,7 +2142,7 @@ def main() -> int:
         else:
             strategy = "legacy"
             provider_chain = ["pollinations"]
-            visual_prompt = visual_prompt or image_prompt or "historical scene"
+            visual_prompt = visual_prompt or image_prompt or ""
             image_prompt = ""
 
         editorial_role = visual_plan.get("editorialRole") if visual_plan else None
