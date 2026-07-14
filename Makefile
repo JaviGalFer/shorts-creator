@@ -1,5 +1,4 @@
 SHELL := /bin/bash
-export DOCKER_API_VERSION := 1.43
 DOCKER_COMPOSE := docker-compose
 
 OPENCODE_HOST ?= 127.0.0.1

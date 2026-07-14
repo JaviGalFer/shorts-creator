@@ -625,7 +625,7 @@ def test_prepare_job_regenerates_paths_under_current_job_dir(tmp_path):
     ]
 
     timeline = build_timeline(scenes, assets, video_dir, scenes_dir)
-    render_timeline = build_render_timeline(scenes, assets, scenes_dir)
+    render_timeline = build_render_timeline(scenes, assets, scenes_dir, scene_audio_durations={1: 4.65, 2: 4.65})
 
     for entry in timeline:
         img = Path(entry["imagePath"])
@@ -1520,7 +1520,7 @@ def test_render_timeline_per_scene_sequential_continuity():
     ]
     scenes_dir = Path("/tmp")
 
-    rt = build_render_timeline(scenes, assets, scenes_dir)
+    rt = build_render_timeline(scenes, assets, scenes_dir, scene_audio_durations={1: 5.65, 2: 5.65, 3: 5.65})
 
     assert len(rt) >= 3, f"Expected at least 3 entries, got {len(rt)}"
     starts = [e["startSec"] for e in rt]

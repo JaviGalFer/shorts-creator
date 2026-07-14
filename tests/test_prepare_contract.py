@@ -440,6 +440,15 @@ class TestMainAssetGate:
                      ],
                  }},
             ]},
+            "audio": {
+                "provider": "edge-tts",
+                "continuous": False,
+                "duration_estimated": False,
+                "scenes": [
+                    {"sceneNumber": 1, "path": str(mp3), "exists": True,
+                     "durationSec": 6.0, "durationSource": "ffprobe_local"},
+                ],
+            },
             "assets": [{
                 "sceneNumber": 1, "selected": True,
                 "segments": [

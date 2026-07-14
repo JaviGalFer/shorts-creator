@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import subprocess
 import re
 import math
@@ -23,13 +24,21 @@ def _to_workspace_path(local_path: Path, project_root: Path) -> str:
     return f"/workspace/{local_path.relative_to(project_root)}"
 
 
+def _to_docker_asset_path(project_root: Path, video_rel: str, asset_path: str) -> str:
+    p = Path(asset_path)
+    if p.is_absolute():
+        return f"/workspace/{p.relative_to(project_root)}"
+    return f"{video_rel}/{asset_path}"
+
+
 def _docker_ffmpeg(args: list[str], project_root: Path, timeout: int = 120) -> subprocess.CompletedProcess:
     cmd = [
         'docker', 'run', '--rm',
         '-v', f'{project_root}:/workspace',
         'linuxserver/ffmpeg:latest',
     ] + args
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    env = {**os.environ, "DOCKER_API_VERSION": "1.43"}
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
 
 
 def _docker_ffprobe_duration(ws_path: str, project_root: Path, timeout: int = 30) -> float:
@@ -228,6 +237,100 @@ def validate_no_cross_job_paths(data: dict, video_dir: Path, project_root: Path)
 # Preflight validation
 # ---------------------------------------------------------------------------
 
+def build_per_scene_audio_filter(
+    input_index: int,
+    scene_number: int,
+    scene_window_sec: float,
+    active_audio_sec: float | None = None,
+) -> str:
+    """Build FFmpeg audio filter chain for a per-scene MP3 input.
+
+    Chain: aresample=44100 → asetpts=PTS-STARTPTS →
+           (atrim=duration=active_audio if provided) →
+           apad → atrim=duration=window
+
+    When active_audio_sec is provided, the audio is first trimmed to
+    that duration (removing room tone), then apad adds the configured
+    tail pause.
+    """
+    if not isinstance(input_index, int) or isinstance(input_index, bool):
+        raise TypeError(f"input_index must be int, got {type(input_index).__name__}")
+    if input_index < 0:
+        raise ValueError(f"input_index must be non-negative, got {input_index}")
+    if not isinstance(scene_number, int) or isinstance(scene_number, bool):
+        raise TypeError(f"scene_number must be int, got {type(scene_number).__name__}")
+    if scene_number <= 0:
+        raise ValueError(f"scene_number must be positive, got {scene_number}")
+    if not isinstance(scene_window_sec, (int, float)) or isinstance(scene_window_sec, bool):
+        raise TypeError(
+            f"scene_window_sec must be numeric, got {type(scene_window_sec).__name__}"
+        )
+    if not math.isfinite(scene_window_sec):
+        raise ValueError(f"scene_window_sec must be finite, got {scene_window_sec}")
+    if scene_window_sec <= 0:
+        raise ValueError(f"scene_window_sec must be positive, got {scene_window_sec}")
+
+    if active_audio_sec is not None:
+        if not isinstance(active_audio_sec, (int, float)) or isinstance(active_audio_sec, bool):
+            raise TypeError(f"active_audio_sec must be numeric, got {type(active_audio_sec).__name__}")
+        if not math.isfinite(active_audio_sec) or active_audio_sec <= 0:
+            raise ValueError(f"active_audio_sec must be finite and positive, got {active_audio_sec}")
+        if active_audio_sec > scene_window_sec:
+            raise ValueError(
+                f"active_audio_sec={active_audio_sec} must not exceed scene_window_sec={scene_window_sec}"
+            )
+        return (
+            f'[{input_index}:a]aresample=44100,asetpts=PTS-STARTPTS,'
+            f'atrim=duration={active_audio_sec},apad,atrim=duration={scene_window_sec}[a{scene_number}]'
+        )
+
+    return (
+        f'[{input_index}:a]aresample=44100,asetpts=PTS-STARTPTS,'
+        f'apad,atrim=duration={scene_window_sec}[a{scene_number}]'
+    )
+
+
+def resolve_expected_duration(
+    render_timeline: list[dict],
+    *,
+    is_continuous_audio: bool,
+    continuous_duration_sec: float | None = None,
+) -> float:
+    """Return expected video duration from the render timeline.
+
+    Non-continuous: max(endSec) from timeline entries.
+    Continuous: uses the provided continuous_duration_sec.
+    """
+    if is_continuous_audio:
+        if continuous_duration_sec is None:
+            raise ValueError("continuous_duration_sec is required for continuous audio")
+        if not isinstance(continuous_duration_sec, (int, float)) or isinstance(continuous_duration_sec, bool):
+            raise TypeError(
+                f"continuous_duration_sec must be numeric, got {type(continuous_duration_sec).__name__}"
+            )
+        if not math.isfinite(continuous_duration_sec):
+            raise ValueError(f"continuous_duration_sec must be finite, got {continuous_duration_sec}")
+        if continuous_duration_sec <= 0:
+            raise ValueError(f"continuous_duration_sec must be positive, got {continuous_duration_sec}")
+        return float(continuous_duration_sec)
+
+    if not render_timeline:
+        raise ValueError("render_timeline must be non-empty for non-continuous audio")
+
+    end_values = []
+    for entry in render_timeline:
+        end = entry.get("endSec", 0)
+        if not isinstance(end, (int, float)) or isinstance(end, bool):
+            raise TypeError(f"endSec must be numeric, got {type(end).__name__}")
+        if not math.isfinite(end):
+            raise ValueError(f"endSec must be finite, got {end}")
+        if end < 0:
+            raise ValueError(f"endSec must be non-negative, got {end}")
+        end_values.append(float(end))
+
+    return round(max(end_values), 3)
+
+
 def preflight_validate(render_timeline: list[dict], scenes: list[dict], project_root: Path, video_dir: Path,
                        expected_total: float | None = None,
                        is_continuous_audio: bool = False,
@@ -259,13 +362,23 @@ def preflight_validate(render_timeline: list[dict], scenes: list[dict], project_
             ends.append(entry.get("endSec", 0))
         total_video_sec = max(ends) - min(starts) if ends else 0.0
     else:
-        total_video_sec = 0.0
+        total_video_sec = max(
+            (entry.get("endSec", 0) for entry in render_timeline),
+            default=0.0,
+        )
 
     for i, entry in enumerate(render_timeline):
         prefix = f"  entry[{i}] scene={entry.get('sceneNumber')} beat={entry.get('beatIndex')}"
         dur = entry.get("durationSec", 0)
         start = entry.get("startSec", 0)
         end = entry.get("endSec", 0)
+
+        if not isinstance(start, (int, float)) or isinstance(start, bool) or not math.isfinite(start):
+            errors.append(f"{prefix}: startSec={start} is not a finite number")
+        if not isinstance(end, (int, float)) or isinstance(end, bool) or not math.isfinite(end):
+            errors.append(f"{prefix}: endSec={end} is not a finite number")
+        if not isinstance(dur, (int, float)) or isinstance(dur, bool) or not math.isfinite(dur):
+            errors.append(f"{prefix}: durationSec={dur} is not a finite number")
 
         if start < 0:
             errors.append(f"{prefix}: startSec={start} < 0")
@@ -275,27 +388,108 @@ def preflight_validate(render_timeline: list[dict], scenes: list[dict], project_
             errors.append(f"{prefix}: durationSec={dur} <= 0")
         if dur > MAX_SEGMENT_DURATION:
             errors.append(f"{prefix}: durationSec={dur} > {MAX_SEGMENT_DURATION}s (max segment)")
+        expected_dur = end - start
+        if abs(dur - expected_dur) > 0.05:
+            errors.append(f"{prefix}: durationSec={dur:.3f} != end-start={expected_dur:.3f}")
 
         asset_path = entry.get("assetPath") or ""
         if not asset_path:
             errors.append(f"{prefix}: assetPath is empty/null — unresolved asset")
-        elif asset_path.startswith("scenes/"):
-            full_path = video_dir / asset_path
-            if not full_path.exists():
-                errors.append(f"{prefix}: assetPath={asset_path} not found")
         else:
-            full_path = Path(asset_path)
+            p = Path(asset_path)
+            if p.is_absolute():
+                full_path = p
+            else:
+                full_path = video_dir / asset_path
             if not full_path.exists():
                 errors.append(f"{prefix}: assetPath={asset_path} not found")
 
-        if not is_continuous_audio:
-            total_video_sec += dur
+    # ── Per-scene aggregate audio validation (non-continuous) ────────
+    if not is_continuous_audio:
+        scene_entries: dict[int, list[dict]] = {}
+        for entry in render_timeline:
+            sn = entry.get("sceneNumber")
+            if sn is not None:
+                scene_entries.setdefault(sn, []).append(entry)
 
-        sn = entry.get("sceneNumber")
-        if sn in audio_durations:
-            scene_audio_dur = audio_durations[sn]
-            if dur > scene_audio_dur + 1.0:
-                errors.append(f"{prefix}: video={dur:.2f}s > audio={scene_audio_dur:.2f}s + 1s")
+        for sn, entries in scene_entries.items():
+            entries.sort(key=lambda e: e.get("startSec", 0))
+            scene_start = min(e.get("startSec", 0) for e in entries)
+            scene_end = max(e.get("endSec", 0) for e in entries)
+            scene_window = scene_end - scene_start
+
+            # Check contiguous: gaps and overlaps between entries
+            for i in range(len(entries) - 1):
+                curr_end = entries[i].get("endSec", 0)
+                next_start = entries[i + 1].get("startSec", 0)
+                delta = next_start - curr_end
+                if delta > 0.05:
+                    errors.append(
+                        f"scene {sn}: non-contiguous gap: "
+                        f"entry[{i}] end={curr_end:.3f}s → entry[{i+1}] start={next_start:.3f}s "
+                        f"(gap={delta:.3f}s)"
+                    )
+                elif delta < -0.05:
+                    errors.append(
+                        f"scene {sn}: overlapping segments: "
+                        f"entry[{i}] end={curr_end:.3f}s → entry[{i+1}] start={next_start:.3f}s "
+                        f"(overlap={-delta:.3f}s)"
+                    )
+
+            # Check audio paths consistent within scene
+            audio_paths = {e.get("audioPath", "") for e in entries}
+            if len(audio_paths) > 1:
+                errors.append(
+                    f"scene {sn}: inconsistent audio paths: {audio_paths}"
+                )
+
+            # Resolve audio path from entries (with fallback to canonical)
+            resolved_audio_path = None
+            for e in entries:
+                ap = e.get("audioPath", "")
+                if ap and isinstance(ap, str) and ap.strip():
+                    p = Path(ap)
+                    if p.is_absolute():
+                        resolved_audio_path = p
+                    else:
+                        resolved_audio_path = video_dir / ap
+                    if not resolved_audio_path.exists():
+                        resolved_audio_path = None
+                    else:
+                        break
+            if resolved_audio_path is None:
+                canonical = video_dir / "scenes" / f"scene-{sn:02}.mp3"
+                if canonical.exists():
+                    resolved_audio_path = canonical
+
+            if resolved_audio_path and resolved_audio_path.exists():
+                try:
+                    ws_path = _to_workspace_path(resolved_audio_path.resolve(), project_root)
+                    dur = _docker_ffprobe_duration(ws_path, project_root)
+                    if dur > 0:
+                        audio_durations[sn] = dur
+                except Exception:
+                    pass
+
+            audio_dur = audio_durations.get(sn)
+            if audio_dur is not None and audio_dur > 0:
+                # Use active audio duration when available (room tone is trimmed)
+                effective_audio = audio_dur
+                if metadata is not None:
+                    for ae in metadata.get("audio", {}).get("scenes", []):
+                        if ae.get("sceneNumber") == sn:
+                            act = ae.get("activeAudioDurationSec")
+                            if isinstance(act, (int, float)) and not isinstance(act, bool):
+                                if math.isfinite(act) and act > 0:
+                                    effective_audio = min(effective_audio, float(act))
+                            break
+                tolerance = 0.10
+                if effective_audio > scene_window + tolerance:
+                    errors.append(
+                        f"scene {sn}: audio={audio_dur:.2f}s > "
+                        f"scene_window={scene_window:.2f}s + tolerance={tolerance}s "
+                        f"(audio would be truncated)"
+                    )
 
     if expected_total is None:
         expected_total = sum(
@@ -514,9 +708,33 @@ def detect_freeze_frames(video_path: Path, project_root: Path, threshold: float 
 # Main render
 # ---------------------------------------------------------------------------
 
+def resolve_manifest_scene_audio_duration(
+        audio_config: dict,
+        scene_number: int,
+) -> float | None:
+    """Return the actual audio duration for a scene from metadata.
+
+    Looks up audio.scenes[] by sceneNumber. Returns None if:
+    - scene not found
+    - durationSec is None, NaN, inf, bool, str, zero, or negative
+    - audio is continuous (use audio.durationSec instead)
+    """
+    if audio_config.get("continuous", False):
+        return None
+
+    scenes = audio_config.get("scenes", [])
+    for entry in scenes:
+        if entry.get("sceneNumber") == scene_number:
+            dur = entry.get("durationSec")
+            if not isinstance(dur, (int, float)) or isinstance(dur, bool):
+                return None
+            if not math.isfinite(dur) or dur <= 0:
+                return None
+            return float(dur)
+    return None
+
+
 def main() -> int:
-    import os as _os
-    _os.environ['DOCKER_API_VERSION'] = '1.43'
 
     parser = argparse.ArgumentParser()
     parser.add_argument('metadata_path')
@@ -560,11 +778,19 @@ def main() -> int:
     audio_config = data.get('audio', {})
     is_continuous_audio = audio_config.get('continuous', False)
 
+    # -- Resolve expected duration (single source of truth) --
+    expected_duration = resolve_expected_duration(
+        render_timeline,
+        is_continuous_audio=is_continuous_audio,
+        continuous_duration_sec=(
+            audio_config.get("durationSec") if is_continuous_audio else None
+        ),
+    )
+
     # -- Preflight validation --
     if not args.skip_validation:
-        expected_total = audio_config.get('durationSec', 0) if is_continuous_audio else None
         errors = preflight_validate(render_timeline, data["script"]["scenes"], project_root, video_dir,
-                                    expected_total=expected_total, is_continuous_audio=is_continuous_audio,
+                                    expected_total=expected_duration, is_continuous_audio=is_continuous_audio,
                                     metadata=data)
         if errors:
             print("PREFLIGHT VALIDATION FAILED:")
@@ -597,8 +823,29 @@ def main() -> int:
     filter_parts = []
     input_index = 0
     scene_audio_map = {}
-    expected_duration = 0.0
     narration_audio_ix = None
+
+    # ── Active audio duration map from metadata ────────────────────────
+    active_audio_map: dict[int, float] = {}
+    if not is_continuous_audio:
+        for ae in audio_config.get("scenes", []):
+            sn = ae.get("sceneNumber")
+            active = ae.get("activeAudioDurationSec")
+            if isinstance(sn, int) and isinstance(active, (int, float)) and not isinstance(active, bool):
+                if math.isfinite(active) and active > 0:
+                    active_audio_map[sn] = float(active)
+
+    # ── Per-scene window computation ──────────────────────────────────
+    scene_windows: dict[int, dict[str, float]] = {}
+    for entry in render_timeline:
+        sn = int(entry["sceneNumber"])
+        start = float(entry.get("startSec", 0))
+        end = float(entry.get("endSec", 0))
+        if sn not in scene_windows:
+            scene_windows[sn] = {"startSec": start, "endSec": end}
+        else:
+            scene_windows[sn]["startSec"] = min(scene_windows[sn]["startSec"], start)
+            scene_windows[sn]["endSec"] = max(scene_windows[sn]["endSec"], end)
 
     if is_continuous_audio:
         narration_rel = str(video_dir / "scenes" / "narration.mp3")
@@ -609,14 +856,10 @@ def main() -> int:
             f'[{input_index}:a]aresample=44100,asetpts=PTS-STARTPTS[narration_a]'
         )
         input_index += 1
-        # Expected duration from audio file for continuous mode
-        expected_duration = audio_config.get('durationSec', 0)
 
     for entry in render_timeline:
         sn = entry["sceneNumber"]
         dur = entry["durationSec"]
-        if not is_continuous_audio:
-            expected_duration += dur
         seg_idx = entry.get("segmentIndex", 1)
         asset_path = entry.get("assetPath") or ""
 
@@ -626,16 +869,7 @@ def main() -> int:
             ffmpeg_exit_code = -1
             break
 
-        # Image input: -loop 1 (no -t, infinite stream)
-        if asset_path.startswith("scenes/"):
-            img_rel = f'{video_rel}/{asset_path}'
-        else:
-            # absolute or relative path
-            asset_full = Path(asset_path)
-            if asset_full.is_absolute():
-                img_rel = f'/workspace/{asset_full.relative_to(project_root)}'
-            else:
-                img_rel = f'{video_rel}/scenes/scene-{sn:02}-{seg_idx:02}.jpg'
+        img_rel = _to_docker_asset_path(project_root, video_rel, asset_path)
 
         ffmpeg_args.extend(['-loop', '1', '-i', img_rel])
         video_ix = input_index
@@ -650,9 +884,11 @@ def main() -> int:
                 docker_audio = audio_rel.replace(str(project_root) + "/", "/workspace/")
                 ffmpeg_args.extend(['-i', docker_audio])
                 scene_audio_map[sn] = input_index
+                sw = scene_windows.get(sn, {"startSec": 0, "endSec": dur})
+                scene_window_sec = round(sw["endSec"] - sw["startSec"], 3)
+                active_sec = active_audio_map.get(sn)
                 filter_parts.append(
-                    f'[{input_index}:a]aresample=44100,asetpts=PTS-STARTPTS,'
-                    f'atrim=duration={dur}[a{sn}]'
+                    build_per_scene_audio_filter(input_index, sn, scene_window_sec, active_audio_sec=active_sec)
                 )
                 input_index += 1
 
@@ -684,7 +920,7 @@ def main() -> int:
             filter_parts.append(f"[{video_ix}:v]{motion_filter}[{out_label}]")
 
         # Overlay (only render if explicitly enabled or env var set)
-        overlay_enabled = entry.get("overlayEnabled", False) or _os.environ.get("ENABLE_EDITORIAL_OVERLAYS", "").lower() in ("true", "1")
+        overlay_enabled = entry.get("overlayEnabled", False) or os.environ.get("ENABLE_EDITORIAL_OVERLAYS", "").lower() in ("true", "1")
         overlay_label = f"ov_{sn}_{seg_idx}"
         if overlay_text and overlay_enabled:
             ov_filter = build_overlay_filter(overlay_text, out_label, overlay_label)
@@ -881,7 +1117,8 @@ def main() -> int:
         print(f"FFmpeg filter complex: {len(filter_parts)} filter parts")
 
         try:
-            subprocess.run(ffmpeg_args, check=True, timeout=1800)
+            env = {**os.environ, "DOCKER_API_VERSION": "1.43"}
+            subprocess.run(ffmpeg_args, check=True, timeout=1800, env=env)
             ffmpeg_ok = True
             ffmpeg_exit_code = 0
         except subprocess.CalledProcessError as e:
@@ -939,17 +1176,28 @@ def main() -> int:
         # -- Coverage validation (Fase 6) --
         coverage_result = None
         try:
-            from coverage_validation import run_coverage_validation
-            scene_timings = audio_config.get("sceneTimings", [])
-            audio_dur = audio_config.get("durationSec", 0)
-            cues_by_scene = {}
-            for sc in data["script"]["scenes"]:
-                sn = sc["sceneNumber"]
-                cues_by_scene[sn] = sc.get("subtitleTiming", {}).get("cues", [])
-            narration_units = audio_config.get("narrationUnits", [])
-            coverage_result = run_coverage_validation(
-                scene_timings, audio_dur, cues_by_scene, narration_units
-            )
+            if is_continuous_audio:
+                from coverage_validation import run_coverage_validation
+                scene_timings = audio_config.get("sceneTimings", [])
+                audio_dur = audio_config.get("durationSec", 0)
+                cues_by_scene = {}
+                for sc in data["script"]["scenes"]:
+                    sn = sc["sceneNumber"]
+                    cues_by_scene[sn] = sc.get("subtitleTiming", {}).get("cues", [])
+                narration_units = audio_config.get("narrationUnits", [])
+                coverage_result = run_coverage_validation(
+                    scene_timings, audio_dur, cues_by_scene, narration_units
+                )
+            else:
+                from subtitle_validation_context import build_validation_context
+                ctx = build_validation_context(data, video_dir=video_dir)
+                coverage_result = {
+                    "status": ctx["status"],
+                    "mode": ctx["mode"],
+                    "totalCues": ctx["totalCues"],
+                    "errors": ctx.get("errors", []),
+                    "warnings": ctx.get("warnings", []),
+                }
             validation_result["coverageValidation"] = coverage_result
         except Exception as e:
             validation_result["coverageValidation"] = {"error": str(e)}
@@ -971,13 +1219,40 @@ def main() -> int:
         asset_was_skipped = args.skip_asset_validation
         has_asset_issues = (asset_status == "REVIEW_REQUIRED") or asset_was_skipped
 
+        # ── Pacing validation ────────────────────────────────────────
+        pacing_result = None
+        if not is_continuous_audio:
+            try:
+                from pacing_validation import validate_audio_pacing
+                scene_windows = [
+                    {"sceneNumber": sn, "startSec": sw["startSec"], "endSec": sw["endSec"]}
+                    for sn, sw in scene_windows.items()
+                ]
+                word_count = sum(
+                    len(s.get("voiceover", "").split())
+                    for s in data["script"]["scenes"]
+                )
+                pacing_result = validate_audio_pacing(
+                    video_path=video_path,
+                    scene_windows=scene_windows,
+                    total_duration_sec=expected_duration,
+                    project_root=project_root,
+                    word_count=word_count,
+                )
+                validation_result["pacingValidation"] = pacing_result
+            except Exception as e:
+                validation_result["pacingValidation"] = {"error": str(e)}
+
+        pacing_status = (pacing_result or {}).get("status", "N/A") if pacing_result else "NOT_APPLICABLE"
+
         gates = {
             "technicalValidation": "PASS" if technical_pass else "FAIL",
-            "subtitleCoverageValidation": coverage_status if coverage_status != "N/A" else "NOT_APPLICABLE",
+            "subtitleCoverageValidation": coverage_status,
             "assetValidation": asset_status if asset_status != "N/A" else "NOT_APPLICABLE",
+            "pacingValidation": pacing_status,
         }
         gate_failures = [k for k, v in gates.items() if v == "FAIL"]
-        gate_warnings = [k for k, v in gates.items() if v in ("REVIEW_REQUIRED", "WARNING")]
+        gate_warnings = [k for k, v in gates.items() if v in ("REVIEW_REQUIRED", "WARNING", "PASS_WITH_WARNINGS")]
 
         qualityGate = "FAIL" if gate_failures else ("WARNING" if gate_warnings else "PASS")
         gates["qualityGate"] = qualityGate
@@ -1024,6 +1299,24 @@ def main() -> int:
             "qualityGate": "NOT_APPLICABLE",
         }
         data["status"] = "RENDER_SKIPPED"
+
+        # In non-continuous mode, still run subtitle validation even with --skip-render
+        if not is_continuous_audio:
+            try:
+                from subtitle_validation_context import build_validation_context
+                ctx = build_validation_context(data, video_dir=video_dir)
+                cov_status = ctx["status"]
+                gates = data["validation"]["gates"]
+                gates["subtitleCoverageValidation"] = cov_status
+                sub_gates = {k: v for k, v in gates.items() if k != "qualityGate"}
+                gate_failures = [k for k, v in sub_gates.items() if v == "FAIL"]
+                gate_warnings = [k for k, v in sub_gates.items() if v in ("REVIEW_REQUIRED", "WARNING")]
+                gates["qualityGate"] = (
+                    "FAIL" if gate_failures
+                    else ("WARNING" if gate_warnings else "PASS")
+                )
+            except Exception:
+                pass
 
     # ── Build resolvedConfig from request + actual values ─────────────
     req = data.get("request", {})
@@ -1075,6 +1368,9 @@ def main() -> int:
             "fps": FPS,
         },
     }
+    audio_pacing = data.get("audioPacing", {})
+    if isinstance(audio_pacing, dict) and audio_pacing:
+        resolved["audioPacing"] = dict(audio_pacing)
     data["resolvedConfig"] = resolved
 
     data["render"]["path"] = str(render_path)
@@ -1103,9 +1399,12 @@ def main() -> int:
                     "audioDurationSec": audio_config.get("durationSec", 0),
                 }
             audio_path = sdir / f"scene-{scene_num:02}.mp3"
+            dur = resolve_manifest_scene_audio_duration(audio_config, scene_num)
+            if dur is None:
+                dur = None
             return {
                 "audioPath": str(audio_path.relative_to(project_root)) if audio_path.exists() else "",
-                "audioDurationSec": 0.0,
+                "audioDurationSec": dur,
             }
 
         def _resolve_relative(p: str) -> str:
@@ -1131,9 +1430,12 @@ def main() -> int:
                 raw_path = asset_entry["path"]
 
             vpath = ""
-            # Prefer local asset within this job's scenes directory
             if raw_path:
-                local_file = video_dir / "scenes" / Path(raw_path).name
+                raw = Path(raw_path)
+                if raw.is_absolute():
+                    local_file = raw
+                else:
+                    local_file = video_dir / raw_path
                 if local_file.exists():
                     vpath = str(local_file.relative_to(project_root))
             if not vpath:

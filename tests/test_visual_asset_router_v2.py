@@ -1317,10 +1317,9 @@ class TestExcludedProviderCompleteness:
         s = result["sourcingPlan"]["segments"][0]
         excluded = {e["provider"]: e for e in s["excludedProviders"]}
         assert "pexels" in excluded
-        assert "pixabay" in excluded
+        assert "pixabay" not in excluded
         assert "does not support" in excluded["pexels"]["exclusionReason"]
         assert "diagram" in excluded["pexels"]["exclusionReason"]
-        assert "does not support" in excluded["pixabay"]["exclusionReason"]
 
     def test_stock_excludes_wikimedia_as_unsuitable(self):
         plan = {
@@ -1438,3 +1437,98 @@ class TestRegressionAfterFixes:
         result = _route(_octopus_plan())
         found = _collect_legacy_fields(result)
         assert not found, f"Legacy fields found: {found}"
+    
+    
+    # ── Diagram + Pixabay ────────────────────────────────────────────────
+    
+    def test_diagram_includes_pixabay_as_candidate(self):
+        result = _route(_photosynthesis_plan())
+        s = result["sourcingPlan"]["segments"][0]
+        providers = [c["provider"] for c in s["providerCandidates"]]
+        assert "wikimedia_commons" in providers
+        assert "pixabay" in providers
+    
+    def test_pixabay_diagram_marked_weak_not_strong(self):
+        result = _route(_photosynthesis_plan())
+        s = result["sourcingPlan"]["segments"][0]
+        pix = [c for c in s["providerCandidates"] if c["provider"] == "pixabay"][0]
+        assert pix["supportStrength"] == "weak"
+    
+    def test_pixabay_diagram_conditional_requires_api_key(self):
+        result = _route(_photosynthesis_plan())
+        s = result["sourcingPlan"]["segments"][0]
+        pix = [c for c in s["providerCandidates"] if c["provider"] == "pixabay"][0]
+        assert pix["requiresApiKey"] is True
+        assert pix["availability"] == "conditional"
+    
+    def test_diagram_pixabay_warning_present(self):
+        result = _route(_photosynthesis_plan())
+        s = result["sourcingPlan"]["segments"][0]
+        wms = s.get("warnings", [])
+        relevant = [w for w in wms if "Pixabay" in w]
+        assert len(relevant) >= 1
+    
+    def test_diagram_missing_api_key_not_invalidates_plan(self):
+        result = _route(_photosynthesis_plan())
+        assert result["ok"] is True
+        s = result["sourcingPlan"]["segments"][0]
+        assert s["routingStatus"] == "ROUTABLE_WITH_WARNINGS"
+    
+    def test_allow_stock_assets_false_excludes_pixabay(self):
+        plan = _canonicalize({
+            "_schemaVersion": SCHEMA_VERSION,
+            "visualIntent": "explain",
+            "subjects": ["test"],
+            "searchQueries": ["test query"],
+            "assetPreferences": ["diagram"],
+            "visualSequence": [{
+                "segmentIndex": 1,
+                "assetPreference": "diagram",
+                "searchQuery": "test query",
+                "durationFraction": 1.0,
+                "transition": "cut",
+            }],
+        })
+        result = build_visual_sourcing_plan_v2(
+            plan, request_visuals={"allowStockAssets": False},
+        )
+        s = result["sourcingPlan"]["segments"][0]
+        excluded = {e["provider"] for e in s["excludedProviders"]}
+        candidates = {c["provider"] for c in s["providerCandidates"]}
+        assert "pixabay" in excluded
+        assert "pixabay" not in candidates
+    
+    def test_blocked_providers_pixabay_excludes(self):
+        plan = _canonicalize({
+            "_schemaVersion": SCHEMA_VERSION,
+            "visualIntent": "explain",
+            "subjects": ["test"],
+            "searchQueries": ["test query"],
+            "assetPreferences": ["diagram"],
+            "visualSequence": [{
+                "segmentIndex": 1,
+                "assetPreference": "diagram",
+                "searchQuery": "test query",
+                "durationFraction": 1.0,
+                "transition": "cut",
+            }],
+        })
+        result = build_visual_sourcing_plan_v2(
+            plan, request_visuals={"blockedProviders": ["pixabay"]},
+        )
+        s = result["sourcingPlan"]["segments"][0]
+        excluded = {e["provider"] for e in s["excludedProviders"]}
+        candidates = {c["provider"] for c in s["providerCandidates"]}
+        assert "pixabay" in excluded
+        assert "pixabay" not in candidates
+    
+    def test_diagram_no_legacy_fields_added(self):
+        result = _route(_photosynthesis_plan())
+        found = _collect_legacy_fields(result)
+        assert not found, f"Legacy fields found: {found}"
+    
+    def test_diagram_no_domain_modes_added(self):
+        result = _route(_photosynthesis_plan())
+        s = result["sourcingPlan"]["segments"][0]
+        for c in s["providerCandidates"]:
+            assert "domainMode" not in c

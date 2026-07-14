@@ -124,6 +124,7 @@ ROUTING_MATRIX: dict[str, list[tuple[str, str]]] = {
     ],
     "diagram": [
         ("wikimedia_commons", "weak"),
+        ("pixabay", "weak"),
         ("freeai", "conditional"),
         ("pollinations", "conditional"),
     ],
@@ -169,6 +170,9 @@ MATRIX_WARNINGS: dict[str, dict[str, list[str]]] = {
     "diagram": {
         "wikimedia_commons": [
             "diagram support on Wikimedia is topic-dependent and not guaranteed",
+        ],
+        "pixabay": [
+            "Pixabay illustration/vector fallback may not represent a precise technical diagram",
         ],
     },
     "illustration": {

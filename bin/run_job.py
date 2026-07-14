@@ -44,6 +44,60 @@ STAGE_STATUS_MAP = {
 
 RENDER_SUCCESS_STATUSES = {"RENDERED", "RENDERED_WITH_WARNINGS", "RENDERED_WITH_ASSET_WARNINGS"}
 REVIEW_BLOCKING_STAGES = {"assets", "audio", "prepare", "render", "validate"}
+V2_IMAGE_EXTENSIONS: frozenset[str] = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
+
+
+def _collect_visual_plan_schema_versions(metadata: dict) -> set[int]:
+    """Return set of _schemaVersion values found across visualPlans."""
+    versions: set[int] = set()
+    scenes = metadata.get("script", {}).get("scenes")
+    if not isinstance(scenes, list):
+        return versions
+    for scene in scenes:
+        if not isinstance(scene, dict):
+            continue
+        vp = scene.get("visualPlan")
+        if not isinstance(vp, dict):
+            continue
+        sv = vp.get("_schemaVersion")
+        if isinstance(sv, int) and not isinstance(sv, bool):
+            versions.add(sv)
+    return versions
+
+
+def _uses_v2_visual_assets(metadata: dict) -> bool:
+    """Check if metadata contains any v2 visual plans."""
+    return 2 in _collect_visual_plan_schema_versions(metadata)
+
+
+def _check_mixed_schema_versions(metadata: dict) -> str | None:
+    """Return error code if v2 and non-v2 visualPlans coexist, else None.
+
+    If any scene has v2, every scene that has a visualPlan must also be v2.
+    Scenes without visualPlan are ignored.
+    """
+    versions = _collect_visual_plan_schema_versions(metadata)
+
+    if 2 not in versions:
+        return None
+
+    scenes = metadata.get("script", {}).get("scenes")
+    if not isinstance(scenes, list):
+        return None
+
+    for scene in scenes:
+        if not isinstance(scene, dict):
+            continue
+        vp = scene.get("visualPlan")
+        if not isinstance(vp, dict):
+            continue
+        sv = vp.get("_schemaVersion")
+        if not isinstance(sv, int) or isinstance(sv, bool):
+            return "MIXED_VISUAL_PLAN_SCHEMA_VERSIONS"
+        if sv != 2:
+            return "MIXED_VISUAL_PLAN_SCHEMA_VERSIONS"
+
+    return None
 
 
 def _project_root() -> Path:
@@ -74,7 +128,9 @@ def build_script_command(args) -> list[str]:
     return cmd
 
 
-def build_stage_command(stage: str, metadata_path: str) -> list[str]:
+def build_stage_command(stage: str, metadata_path: str, metadata: dict | None = None) -> list[str]:
+    if stage == "assets" and metadata is not None and _uses_v2_visual_assets(metadata):
+        return [sys.executable, _script_path("fetch_images_v2.py"), metadata_path]
     script = STAGE_SCRIPTS.get(stage)
     if not script:
         raise ValueError(f"Unknown stage: {stage}")
@@ -202,6 +258,33 @@ def _verify_stage_contract(
     actual_status = data.get("status", "UNKNOWN")
 
     if stage == "assets":
+        uses_v2 = _uses_v2_visual_assets(data)
+
+        if uses_v2:
+            assets_dir = video_dir / "assets"
+            images = []
+            if assets_dir.exists():
+                images = [f for f in assets_dir.iterdir()
+                          if f.is_file() and f.suffix.lower() in V2_IMAGE_EXTENSIONS]
+
+            if actual_status == "ASSETS_READY":
+                if images:
+                    return True, "ASSETS_READY", None
+                return False, actual_status, (
+                    "STAGE_OUTPUT_CONTRACT_FAILED: assets exited 0 with status ASSETS_READY "
+                    f"but no images found in {assets_dir}"
+                )
+            if actual_status == "ASSET_UNRESOLVED":
+                return False, "ASSET_UNRESOLVED", None
+            if actual_status == "ASSETS_PARTIAL":
+                return False, "ASSETS_PARTIAL", None
+            if actual_status == "REVIEW_REQUIRED":
+                return False, "REVIEW_REQUIRED", None
+            return False, actual_status, (
+                "STAGE_OUTPUT_CONTRACT_FAILED: assets exited 0 but metadata status is "
+                f"{actual_status} (expected ASSETS_READY, ASSET_UNRESOLVED, or ASSETS_PARTIAL)"
+            )
+
         if actual_status == "ASSETS_READY":
             scenes_dir = video_dir / "scenes"
             images = list(scenes_dir.glob("scene-*.jpg")) if scenes_dir.exists() else []
@@ -448,7 +531,18 @@ def main() -> int:
                 _final_summary(data, metadata_path, stage)
                 return 0
 
-            cmd = build_stage_command(stage, metadata_path)
+            if stage == "assets":
+                mixed_error = _check_mixed_schema_versions(data)
+                if mixed_error:
+                    print(f"ERROR [assets]: {mixed_error}")
+                    started = _utcnow()
+                    set_failure(data, "assets", mixed_error, [], exit_code=0)
+                    append_orchestration(data, "assets", "FAILED", started, _utcnow(), mixed_error)
+                    save_metadata(metadata_path, data)
+                    _final_summary(data, metadata_path, "assets")
+                    return 1
+
+            cmd = build_stage_command(stage, metadata_path, metadata=data)
             started = _utcnow()
             orchestration = data.setdefault("orchestration", {})
             orchestration["currentStage"] = stage

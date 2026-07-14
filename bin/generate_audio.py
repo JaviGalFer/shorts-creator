@@ -3,8 +3,10 @@
 import argparse
 import asyncio
 import json
+import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -31,6 +33,76 @@ def _load_env():
 
 
 _ENV = _load_env()
+
+
+def _get_mp3_duration(audio_path: Path) -> "tuple[float, str] | tuple[None, None]":
+    """Get actual duration of an MP3 file using ffprobe (local then Docker).
+
+    Returns (duration_sec, source) where source is "ffprobe_local" or
+    "ffprobe_docker".  Returns (None, None) if all probing methods fail.
+    """
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe:
+        try:
+            r = subprocess.run(
+                [ffprobe, "-v", "quiet", "-print_format", "json", "-show_format",
+                 str(audio_path)],
+                capture_output=True, text=True, timeout=15,
+            )
+            if r.returncode == 0:
+                dur = float(json.loads(r.stdout)["format"]["duration"])
+                if dur > 0 and math.isfinite(dur):
+                    return dur, "ffprobe_local"
+        except Exception:
+            pass
+
+    docker_env = {**os.environ, "DOCKER_API_VERSION": "1.43"}
+    try:
+        r = subprocess.run(
+            ["docker", "run", "--rm",
+             "-v", f"{audio_path.parents[3]}:/workspace",
+             "--entrypoint", "ffprobe",
+             "linuxserver/ffmpeg:latest",
+             "-v", "quiet", "-print_format", "json", "-show_format",
+             f"/workspace/{audio_path.relative_to(audio_path.parents[3])}"],
+            capture_output=True, text=True, timeout=30,
+            env=docker_env,
+        )
+        if r.returncode == 0:
+            dur = float(json.loads(r.stdout)["format"]["duration"])
+            if dur > 0 and math.isfinite(dur):
+                return dur, "ffprobe_docker"
+    except Exception:
+        pass
+
+    return None, None
+
+
+SPEECH_END_GUARD_SEC = 0.15
+
+
+def _compute_active_audio_duration(
+    scene_data: dict,
+    physical_duration_sec: float | None,
+) -> float | None:
+    """Compute active audio duration from last subtitle cue + guard."""
+    if physical_duration_sec is None or physical_duration_sec <= 0:
+        return None
+    cues = (scene_data.get("subtitleTiming") or {}).get("cues", [])
+    if not cues:
+        return None
+    last_end = max(
+        (c.get("endSec", 0) for c in cues),
+        default=None,
+    )
+    if last_end is None or not isinstance(last_end, (int, float)) or isinstance(last_end, bool):
+        return None
+    if not math.isfinite(last_end) or last_end < 0:
+        return None
+    active = min(physical_duration_sec, last_end + SPEECH_END_GUARD_SEC)
+    if active <= 0:
+        return None
+    return round(active, 3)
 
 
 def video_dir(metadata_path: Path) -> Path:
@@ -1167,7 +1239,6 @@ async def main_continuous(metadata_path: Path, voice: str, join_style: str = "pe
     try:
         import subprocess as _sp
         _env = os.environ.copy()
-        _env["DOCKER_API_VERSION"] = "1.43"
         video_dir_name = metadata_path.parent.name
         r = _sp.run([
             "docker", "run", "--rm",
@@ -1368,17 +1439,39 @@ async def main_per_scene(metadata_path: Path, voice: str) -> int:
         results.append({"sceneNumber": scene_num, "success": ok, "timing": subtitle_timing})
 
     all_ok = all(r["success"] for r in results)
+
+    audio_scenes = []
+    any_duration_missing = False
+    missing_duration_scenes: list[int] = []
+    for r in results:
+        sn = r["sceneNumber"]
+        mp3_path = sdir / f"scene-{sn:02}.mp3"
+        duration_sec = None
+        duration_source = None
+        if r["success"]:
+            dur, source = _get_mp3_duration(mp3_path)
+            if dur is not None:
+                duration_sec = round(dur, 3)
+                duration_source = source
+            else:
+                print(f"WARNING: could not probe duration for {mp3_path.name}")
+                any_duration_missing = True
+                missing_duration_scenes.append(sn)
+        audio_scenes.append({
+            "sceneNumber": sn,
+            "path": str(mp3_path),
+            "exists": r["success"],
+            "durationSec": duration_sec,
+            "durationSource": duration_source,
+        })
+
+    duration_estimated = any_duration_missing
     data["audio"] = {
         "provider": "edge-tts",
+        "voice": voice,
         "continuous": False,
-        "scenes": [
-            {
-                "sceneNumber": r["sceneNumber"],
-                "path": str(sdir / f"scene-{r['sceneNumber']:02}.mp3"),
-                "exists": r["success"],
-            }
-            for r in results
-        ],
+        "scenes": audio_scenes,
+        "duration_estimated": duration_estimated,
     }
 
     for scene_data in data["script"]["scenes"]:
@@ -1388,20 +1481,64 @@ async def main_per_scene(metadata_path: Path, voice: str) -> int:
                 scene_data["subtitleTiming"] = r["timing"]
                 break
 
+    # Compute active audio duration from cues
+    scene_by_num = {s["sceneNumber"]: s for s in data["script"]["scenes"]}
+    for entry in audio_scenes:
+        sn = entry["sceneNumber"]
+        sd = scene_by_num.get(sn)
+        physical = entry.get("durationSec")
+        if sd is not None and physical is not None and physical > 0:
+            active = _compute_active_audio_duration(sd, physical)
+            if active is not None:
+                entry["activeAudioDurationSec"] = active
+                entry["activeDurationSource"] = "edge_tts_last_cue_plus_guard"
+            else:
+                entry["activeAudioDurationSec"] = None
+        else:
+            entry["activeAudioDurationSec"] = None
+
     data["updatedAt"] = datetime.now(timezone.utc).isoformat()
-    if all_ok:
+
+    if all_ok and not any_duration_missing:
         data["status"] = "AUDIO_READY"
+        exit_code = 0
+    elif any_duration_missing and all_ok:
+        data["status"] = "REVIEW_REQUIRED"
+        reasons = data.setdefault("reviewReasons", [])
+        reasons.append(
+            f"AUDIO_DURATION_MISSING: scenes {missing_duration_scenes} lack valid measured duration"
+        )
+        exit_code = 0
+    else:
+        data["status"] = "REVIEW_REQUIRED"
+        reasons = data.setdefault("reviewReasons", [])
+        if any_duration_missing:
+            reasons.append(
+                f"AUDIO_DURATION_MISSING: scenes {missing_duration_scenes} lack valid measured duration"
+            )
+        if not all_ok:
+            failed = [r["sceneNumber"] for r in results if not r["success"]]
+            reasons.append(
+                f"AUDIO_GENERATION_FAILED: scenes {failed} did not produce valid MP3"
+            )
+        exit_code = 1
+
     metadata_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
     cue_counts = {r["sceneNumber"]: len(r["timing"]["cues"]) if r["timing"] else 0 for r in results}
     sources = {r["sceneNumber"]: r["timing"]["timingSource"] if r["timing"] else "none" for r in results}
-    print(json.dumps({"jobId": job_id, "success": all_ok, "cueCounts": cue_counts, "sources": sources}))
-    return 0 if all_ok else 1
+    print(json.dumps({
+        "jobId": job_id,
+        "success": data["status"] == "AUDIO_READY",
+        "status": data["status"],
+        "cueCounts": cue_counts,
+        "sources": sources,
+    }))
+    return exit_code
 
 
 async def main_async() -> int:
     import os as _os
-    _os.environ['DOCKER_API_VERSION'] = '1.43'
     default_voice = _ENV.get("TTS_VOICE", "es-ES-AlvaroNeural")
     default_provider = _ENV.get("TTS_PROVIDER", "edge_tts")
     default_subtitle = _ENV.get("SUBTITLE_TIMING_PROVIDER") or _ENV.get("SUBTITLE_PROVIDER", "auto")

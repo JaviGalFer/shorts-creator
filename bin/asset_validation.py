@@ -50,11 +50,12 @@ def _get_segment_asset(render_entry: dict, assets: list[dict]) -> dict | None:
     return None
 
 
-def validate_asset_file(asset_path: str, project_root: Path, video_dir: Path | None = None) -> list[dict]:
+def validate_asset_file(asset_path: str, project_root: Path, video_dir: Path | None = None,
+                       is_v2: bool = False) -> list[dict]:
     failures = []
     p = Path(asset_path)
     if not p.is_absolute():
-        if video_dir is not None and str(asset_path).startswith("scenes/"):
+        if video_dir is not None:
             p = video_dir / asset_path
         else:
             p = project_root / asset_path
@@ -65,11 +66,22 @@ def validate_asset_file(asset_path: str, project_root: Path, video_dir: Path | N
         from PIL import Image, ImageStat
         with Image.open(p) as img:
             w, h = img.size
-            if w < MIN_ASSET_WIDTH and h < MIN_ASSET_HEIGHT:
-                failures.append({
-                    "rule": "dimensions_too_small",
-                    "message": f"Asset {w}x{h} — both dimensions below min {MIN_ASSET_WIDTH}x{MIN_ASSET_HEIGHT}: {asset_path}"
-                })
+            if is_v2:
+                from visual_asset_renderability_v2 import is_v2_asset_dimension_renderable
+                if not is_v2_asset_dimension_renderable(w, h):
+                    failures.append({
+                        "rule": "dimensions_too_small",
+                        "message": (
+                            f"Asset {w}x{h} — v2 requires both dimensions to be at "
+                            f"least 720x720; {w}x{h} is below the minimum: {asset_path}"
+                        )
+                    })
+            else:
+                if w < MIN_ASSET_WIDTH and h < MIN_ASSET_HEIGHT:
+                    failures.append({
+                        "rule": "dimensions_too_small",
+                        "message": f"Asset {w}x{h} — both dimensions below min {MIN_ASSET_WIDTH}x{MIN_ASSET_HEIGHT}: {asset_path}"
+                    })
             stat = ImageStat.Stat(img)
             stddev = stat.stddev
             if stddev and all(s < 15 for s in stddev):
@@ -84,7 +96,8 @@ def validate_asset_file(asset_path: str, project_root: Path, video_dir: Path | N
     return failures
 
 
-def detect_placeholder_content(render_entry: dict, segment_asset: dict | None, asset_path: str) -> list[dict]:
+def detect_placeholder_content(render_entry: dict, segment_asset: dict | None, asset_path: str,
+                               is_v2: bool = False) -> list[dict]:
     failures = []
     if segment_asset is None:
         failures.append({"rule": "no_asset_metadata", "message": f"No asset metadata for scene {render_entry.get('sceneNumber')} segment {render_entry.get('segmentIndex')}"})
@@ -108,14 +121,21 @@ def detect_placeholder_content(render_entry: dict, segment_asset: dict | None, a
     if score is not None and score < 0:
         failures.append({"rule": "negative_score", "message": f"Asset score {score} < 0 indicates rejection or fallback"})
 
-    query = segment_asset.get("searchQuery")
-    if score is None and query is None:
-        failures.append({"rule": "no_provenance", "message": f"No score or query — asset has no provenance"})
+    if is_v2:
+        has_real_score = score is not None and score != 0.0
+        has_query = bool(segment_asset.get("queryUsed") or segment_asset.get("searchQuery"))
+        if not has_real_score and not has_query:
+            failures.append({"rule": "no_provenance", "message": "No real score or query — asset has no provenance"})
+    else:
+        query = segment_asset.get("searchQuery")
+        if score is None and query is None:
+            failures.append({"rule": "no_provenance", "message": f"No score or query — asset has no provenance"})
 
     return failures
 
 
-def validate_metadata_completeness(segment_asset: dict | None, render_entry: dict) -> list[dict]:
+def validate_metadata_completeness(segment_asset: dict | None, render_entry: dict,
+                                    is_v2: bool = False) -> list[dict]:
     failures = []
     if segment_asset is None:
         failures.append({"rule": "no_metadata", "message": "No metadata found"})
@@ -127,6 +147,9 @@ def validate_metadata_completeness(segment_asset: dict | None, render_entry: dic
         "assetType": "No assetType registered",
         "editorialRole": "No editorialRole registered",
     }
+    if is_v2:
+        del required_fields["editorialRole"]
+
     for field, msg in required_fields.items():
         val = segment_asset.get(field)
         if val is None or (isinstance(val, str) and not val.strip()):
@@ -134,7 +157,8 @@ def validate_metadata_completeness(segment_asset: dict | None, render_entry: dic
 
     score = segment_asset.get("score")
     if score is not None and score < MIN_SCORE:
-        failures.append({"rule": "score_below_minimum", "message": f"Score {score} < minimum {MIN_SCORE}"})
+        if not (is_v2 and score == 0.0):
+            failures.append({"rule": "score_below_minimum", "message": f"Score {score} < minimum {MIN_SCORE}"})
 
     source_url = segment_asset.get("sourceUrl")
     editorial_role = segment_asset.get("editorialRole")
@@ -178,23 +202,33 @@ def check_editorial_coherence(render_entry: dict, segment_asset: dict | None, to
     return failures
 
 
-def check_provider_allowed(segment_asset: dict | None) -> list[dict]:
+V2_LOW_CONFIDENCE_PROVIDERS = {"pollinations"}
+
+
+def check_provider_allowed(segment_asset: dict | None, is_v2: bool = False) -> list[dict]:
     failures = []
     if segment_asset is None:
         return failures
     provider = (segment_asset.get("provider") or "").lower()
-    if provider in LOW_CONFIDENCE_PROVIDERS:
-        failures.append({
-            "rule": "low_confidence_provider",
-            "message": f"Provider '{provider}' is low confidence (score may be unreliable)"
-        })
-    editorial_role = segment_asset.get("editorialRole", "")
-    asset_type = segment_asset.get("assetType", "")
-    if provider == "pollinations" and editorial_role not in ("abstract", "legacy"):
-        failures.append({
-            "rule": "ai_generated_misuse",
-            "message": f"generated_reconstruction used for editorialRole={editorial_role} (only allowed for abstract/legacy)"
-        })
+
+    if is_v2:
+        if provider in V2_LOW_CONFIDENCE_PROVIDERS:
+            failures.append({
+                "rule": "low_confidence_provider",
+                "message": f"Provider '{provider}' is low confidence (score may be unreliable)"
+            })
+    else:
+        if provider in LOW_CONFIDENCE_PROVIDERS:
+            failures.append({
+                "rule": "low_confidence_provider",
+                "message": f"Provider '{provider}' is low confidence (score may be unreliable)"
+            })
+        editorial_role = segment_asset.get("editorialRole", "")
+        if provider == "pollinations" and editorial_role not in ("abstract", "legacy"):
+            failures.append({
+                "rule": "ai_generated_misuse",
+                "message": f"generated_reconstruction used for editorialRole={editorial_role} (only allowed for abstract/legacy)"
+            })
     return failures
 
 
@@ -334,6 +368,8 @@ def validate_job_for_render(metadata: dict, project_root: Path, video_dir: Path 
     failures = []
     per_segment = []
 
+    is_v2 = bool(metadata.get("_visualAssetBridgeV2"))
+
     for entry in render_timeline:
         sn = entry.get("sceneNumber")
         si = entry.get("segmentIndex")
@@ -348,15 +384,19 @@ def validate_job_for_render(metadata: dict, project_root: Path, video_dir: Path 
             "assetType": entry.get("assetType"),
             "editorialRole": seg_asset.get("editorialRole") if seg_asset else None,
             "score": seg_asset.get("score") if seg_asset else None,
-            "query": seg_asset.get("searchQuery") if seg_asset else None,
+            "query": (seg_asset.get("queryUsed") or seg_asset.get("searchQuery")) if seg_asset else None,
             "failures": [],
         }
 
-        file_issues = validate_asset_file(asset_path, project_root, video_dir)
-        placeholder_issues = detect_placeholder_content(entry, seg_asset, asset_path)
-        metadata_issues = validate_metadata_completeness(seg_asset, entry)
-        coherence_issues = check_editorial_coherence(entry, seg_asset, topic)
-        provider_issues = check_provider_allowed(seg_asset)
+        file_issues = validate_asset_file(asset_path, project_root, video_dir, is_v2=is_v2)
+        placeholder_issues = detect_placeholder_content(entry, seg_asset, asset_path, is_v2=is_v2)
+        metadata_issues = validate_metadata_completeness(seg_asset, entry, is_v2=is_v2)
+        provider_issues = check_provider_allowed(seg_asset, is_v2=is_v2)
+
+        if not is_v2:
+            coherence_issues = check_editorial_coherence(entry, seg_asset, topic)
+        else:
+            coherence_issues = []
 
         # Renderability status check (from fetch_images pre-check)
         renderability_status = (seg_asset or {}).get("renderabilityStatus")
@@ -365,24 +405,39 @@ def validate_job_for_render(metadata: dict, project_root: Path, video_dir: Path 
             reasons = (seg_asset or {}).get("renderabilityReasons", [])
             renderability_issues.append({"rule": "renderability_fail", "message": f"Asset marked as unrenderable: {reasons}"})
 
-        scene_data = scene_by_num.get(sn, {})
-        beat_text = " ".join(
-            b.get("text", "") for b in scene_data.get("narrativeBeats", [])
-        ).strip() or scene_data.get("voiceover", "") or ""
-        editorial_role = (seg_asset.get("editorialRole") if seg_asset else
-                          entry.get("assetType", ""))
-        # Role evidence / reuse compatibility checks (Fase 19)
-        role_evidence_issues = check_role_evidence(seg_asset or {}, editorial_role)
-        scene_data_for_reuse = scene_by_num.get(sn, {})
-        reuse_issues = check_reuse_compatibility(seg_asset or {}, scene_data_for_reuse)
+        # v2: segment validation status check
+        seg_val_issues: list[dict] = []
+        if is_v2:
+            seg_val_status = (seg_asset or {}).get("segmentValidationStatus")
+            if seg_val_status == "FAIL":
+                seg_error = (seg_asset or {}).get("error", "")
+                seg_val_issues.append({
+                    "rule": "segment_validation_fail",
+                    "message": f"Segment validation failed{f': {seg_error}' if seg_error else ''}",
+                })
 
-        modern_issues = check_modern_asset_context(
-            seg_asset or {}, beat_text, editorial_role
-        )
+        if not is_v2:
+            scene_data = scene_by_num.get(sn, {})
+            beat_text = " ".join(
+                b.get("text", "") for b in scene_data.get("narrativeBeats", [])
+            ).strip() or scene_data.get("voiceover", "") or ""
+            editorial_role = (seg_asset.get("editorialRole") if seg_asset else
+                              entry.get("assetType", ""))
+            role_evidence_issues = check_role_evidence(seg_asset or {}, editorial_role)
+            scene_data_for_reuse = scene_by_num.get(sn, {})
+            reuse_issues = check_reuse_compatibility(seg_asset or {}, scene_data_for_reuse)
+            modern_issues = check_modern_asset_context(
+                seg_asset or {}, beat_text, editorial_role
+            )
+        else:
+            editorial_role = ""
+            role_evidence_issues = []
+            reuse_issues = []
+            modern_issues = []
 
         all_issues = (file_issues + placeholder_issues + metadata_issues
                        + coherence_issues + provider_issues + modern_issues + renderability_issues
-                       + role_evidence_issues + reuse_issues)
+                       + role_evidence_issues + reuse_issues + seg_val_issues)
         seg_result["failures"] = all_issues
         if all_issues:
             seg_result["valid"] = False
@@ -397,25 +452,45 @@ def validate_job_for_render(metadata: dict, project_root: Path, video_dir: Path 
     has_modern_fail = any(f["rule"].startswith("modern_asset_") for f in failures)
     score_below = any(f["rule"] == "score_below_minimum" for f in failures)
 
-    if has_placeholder or has_file_invalid:
-        status = "BLOCKED"
-    elif has_modern_fail:
-        status = "BLOCKED"
-    elif metadata_fail_count >= 2 or has_editorial_fail:
-        status = "BLOCKED"
-    elif any(f["rule"] in ("missing_border_closure_evidence",
-                           "reuse_civilian_impact_for_distinct_event",
-                           "reuse_division_subject_for_distinct_event")
-             for f in failures):
-        status = "BLOCKED"
-    elif any(f["rule"] == "reused_asset_no_event_evidence" for f in failures):
-        status = "REVIEW_REQUIRED"
-    elif metadata_fail_count == 1:
-        status = "REVIEW_REQUIRED"
-    elif score_below:
-        status = "REVIEW_REQUIRED"
+    if is_v2:
+        _v2_blocking_rules = {
+            "segment_validation_fail", "renderability_fail", "negative_score",
+            "file_not_found", "not_decodable", "dimensions_too_small",
+            "placeholder_provider", "placeholder_filename",
+            "no_asset_metadata", "missing_provider", "no_provenance",
+        }
+        _v2_review_rules = {"low_confidence_provider", "score_below_minimum"}
+        has_v2_blocking = any(f["rule"] in _v2_blocking_rules for f in failures)
+        has_v2_review = any(f["rule"] in _v2_review_rules for f in failures)
+
+        if has_v2_blocking:
+            status = "BLOCKED"
+        elif has_v2_review:
+            status = "REVIEW_REQUIRED"
+        elif failures:
+            status = "REVIEW_REQUIRED"
+        else:
+            status = "PASS"
     else:
-        status = "PASS"
+        if has_placeholder or has_file_invalid:
+            status = "BLOCKED"
+        elif has_modern_fail:
+            status = "BLOCKED"
+        elif metadata_fail_count >= 2 or has_editorial_fail:
+            status = "BLOCKED"
+        elif any(f["rule"] in ("missing_border_closure_evidence",
+                               "reuse_civilian_impact_for_distinct_event",
+                               "reuse_division_subject_for_distinct_event")
+                 for f in failures):
+            status = "BLOCKED"
+        elif any(f["rule"] == "reused_asset_no_event_evidence" for f in failures):
+            status = "REVIEW_REQUIRED"
+        elif metadata_fail_count == 1:
+            status = "REVIEW_REQUIRED"
+        elif score_below:
+            status = "REVIEW_REQUIRED"
+        else:
+            status = "PASS"
 
     valid_count = sum(1 for s in per_segment if s["valid"])
     invalid_count = sum(1 for s in per_segment if not s["valid"])

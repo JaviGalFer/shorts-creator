@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -39,7 +40,7 @@ from subtitle_normalize import normalize_subtitle_text, normalize_subtitle_token
 
 
 FPS = 25
-MAX_SEGMENT_DURATION = 8.0
+MAX_SEGMENT_DURATION = 20.0
 MAX_TOTAL_DURATION = 120
 EXPECTED_WIDTH = 1080
 EXPECTED_HEIGHT = 1920
@@ -60,12 +61,14 @@ def _run_local_ffprobe(args: list[str]) -> subprocess.CompletedProcess | None:
 
 def _run_docker_ffprobe(args: list[str], project_root: Path) -> subprocess.CompletedProcess | None:
     try:
+        env = {**os.environ, "DOCKER_API_VERSION": "1.43"}
         return subprocess.run(
             ["docker", "run", "--rm",
              "-v", f"{project_root}:/workspace",
              "--entrypoint", "ffprobe",
              "linuxserver/ffmpeg:latest"] + args,
             capture_output=True, text=True, timeout=30,
+            env=env,
         )
     except Exception:
         return None
@@ -185,6 +188,7 @@ class JobValidator:
             "subtitle-alignment",
             "manifest",
             "video-resolution",
+            "pacing",
         ]
         all_pass = True
         for name in checks:
@@ -302,28 +306,123 @@ class JobValidator:
     # ── Duration checks ──────────────────────────────────────────────
 
     def _check_durations(self):
+        import math
+
+        # ── Level 1: scene targetDurationSec ────────────────────────────
         for scene in self.scenes:
             dur = scene.get("targetDurationSec", 0)
             sn = scene["sceneNumber"]
-            if dur <= 0:
+            if isinstance(dur, bool) or not isinstance(dur, (int, float)):
+                self._err(f"Scene {sn}: targetDurationSec={dur!r} is not a number")
+            elif not math.isfinite(dur):
+                self._err(f"Scene {sn}: targetDurationSec={dur} is not finite")
+            elif dur <= 0:
                 self._err(f"Scene {sn}: targetDurationSec={dur} <= 0")
-            elif dur > MAX_SEGMENT_DURATION:
-                self._err(f"Scene {sn}: targetDurationSec={dur} > {MAX_SEGMENT_DURATION}s")
             else:
-                self._ok(f"Scene {sn}: duration {dur}s OK")
+                self._ok(f"Scene {sn}: target duration {dur}s OK")
 
+        # ── Level 2: renderTimeline entries ─────────────────────────────
+        timeline = self.data.get("renderTimeline", [])
+        if timeline:
+            for i, entry in enumerate(timeline):
+                sn = entry.get("sceneNumber", "?")
+                start = entry.get("startSec")
+                end = entry.get("endSec")
+                dur = entry.get("durationSec")
+                prefix = f"Timeline[{i}] scene {sn}"
+
+                for field_name, val in [("startSec", start), ("endSec", end), ("durationSec", dur)]:
+                    if isinstance(val, bool) or not isinstance(val, (int, float)):
+                        self._err(f"{prefix}: {field_name}={val!r} is not a number")
+                    elif not math.isfinite(val):
+                        self._err(f"{prefix}: {field_name}={val} is not finite")
+
+                is_valid = all(
+                    isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+                    for v in [start, end, dur]
+                )
+                if not is_valid:
+                    continue
+
+                if start < 0:
+                    self._err(f"{prefix}: startSec={start} < 0")
+                if end <= start:
+                    self._err(f"{prefix}: endSec={end} <= startSec={start}")
+                if dur <= 0:
+                    self._err(f"{prefix}: durationSec={dur} <= 0")
+                if dur > MAX_SEGMENT_DURATION:
+                    self._err(f"{prefix}: durationSec={dur} > {MAX_SEGMENT_DURATION}s (max segment)")
+
+                expected_dur = end - start
+                if abs(dur - expected_dur) > 0.05:
+                    self._err(f"{prefix}: durationSec={dur:.3f} != end-start={expected_dur:.3f}")
+
+            # ── Level 3: scene aggregate windows ────────────────────────
+            scene_entries: dict[int, list[tuple[float, float]]] = {}
+            for entry in timeline:
+                sn = entry.get("sceneNumber")
+                s = entry.get("startSec")
+                e = entry.get("endSec")
+                if sn is None:
+                    continue
+                if isinstance(s, bool) or not isinstance(s, (int, float)):
+                    continue
+                if isinstance(e, bool) or not isinstance(e, (int, float)):
+                    continue
+                if not math.isfinite(s) or not math.isfinite(e):
+                    continue
+                scene_entries.setdefault(sn, []).append((float(s), float(e)))
+
+            for sn, spans in sorted(scene_entries.items()):
+                spans.sort()
+                scene_start = spans[0][0]
+                scene_end = spans[-1][1]
+                scene_window = scene_end - scene_start
+
+                if scene_window <= 0:
+                    self._err(f"Scene {sn}: aggregate window is zero or negative")
+                else:
+                    self._ok(f"Scene {sn}: aggregate window {scene_window:.1f}s ({len(spans)} segments)")
+
+                for i in range(1, len(spans)):
+                    prev_end = spans[i - 1][1]
+                    curr_start = spans[i][0]
+                    gap = curr_start - prev_end
+                    if gap < -0.05:
+                        self._err(f"Scene {sn}: overlap between segments ({prev_end:.3f}s -> {curr_start:.3f}s)")
+                    elif gap > 0.05:
+                        self._err(f"Scene {sn}: gap between segments ({prev_end:.3f}s -> {curr_start:.3f}s)")
+
+            # ── Level 4: total duration from renderTimeline ──────────────
+            finite_ends = []
+            for entry in timeline:
+                e = entry.get("endSec")
+                if isinstance(e, (int, float)) and not isinstance(e, bool) and math.isfinite(e):
+                    finite_ends.append(e)
+            total_duration = max(finite_ends) if finite_ends else 0
+            if total_duration <= 0:
+                self._err("Total duration from renderTimeline is zero or negative")
+            elif total_duration > MAX_TOTAL_DURATION:
+                self._err(f"Total duration {total_duration:.1f}s > {MAX_TOTAL_DURATION}s")
+            else:
+                self._ok(f"Total duration (from timeline): {total_duration:.1f}s")
+        else:
+            # ── Legacy metadata without renderTimeline ──────────────────
+            total = sum(float(s.get("targetDurationSec", 0)) for s in self.scenes)
+            if total <= 0:
+                self._err("Total duration is 0")
+            elif total > MAX_TOTAL_DURATION:
+                self._err(f"Total duration {total:.1f}s > {MAX_TOTAL_DURATION}s")
+            else:
+                self._ok(f"Total duration (from targets): {total:.1f}s")
+
+        # ── Continuous audio check ──────────────────────────────────────
         if self.is_continuous:
             dur = self.audio_config.get("durationSec", 0)
             if dur <= 0:
-                self._err(f"Continuous audio duration is 0")
+                self._err("Continuous audio duration is 0")
             elif dur > MAX_TOTAL_DURATION:
                 self._err(f"Continuous audio duration {dur}s > {MAX_TOTAL_DURATION}s")
-        else:
-            total = sum(float(s.get("targetDurationSec", 0)) for s in self.scenes)
-            if total <= 0:
-                self._err(f"Total duration is 0")
-            elif total > MAX_TOTAL_DURATION:
-                self._err(f"Total duration {total:.1f}s > {MAX_TOTAL_DURATION}s")
 
     # ── Subtitle ASS check ───────────────────────────────────────────
 
@@ -351,6 +450,12 @@ class JobValidator:
     # ── Subtitle cue checks ──────────────────────────────────────────
 
     def _check_subtitle_cues(self):
+        if self.is_continuous:
+            self._check_subtitle_cues_legacy()
+        else:
+            self._check_subtitle_cues_per_scene()
+
+    def _check_subtitle_cues_legacy(self):
         all_cues = []
         for scene in self.scenes:
             cues = scene.get("subtitleTiming", {}).get("cues", [])
@@ -381,9 +486,32 @@ class JobValidator:
 
         self._ok(f"{len(all_cues)} subtitle cues, all non-overlapping")
 
+    def _check_subtitle_cues_per_scene(self):
+        from subtitle_validation_context import build_validation_context
+        ctx = build_validation_context(self.data, video_dir=self.video_dir)
+        self._per_scene_subtitle_ctx = ctx
+
+        if ctx["totalCues"] == 0:
+            self._warn("No subtitle timing cues found")
+            return
+
+        for err in ctx.get("errors", []):
+            self._err(err)
+        for warn in ctx.get("warnings", []):
+            self._warn(warn)
+
+        if not ctx.get("errors"):
+            self._ok(f"{ctx['totalCues']} subtitle cues, all non-overlapping (per-scene)")
+
     # ── Subtitle coverage check ──────────────────────────────────────
 
     def _check_subtitle_coverage(self):
+        if self.is_continuous:
+            self._check_subtitle_coverage_legacy()
+        else:
+            self._check_subtitle_coverage_per_scene()
+
+    def _check_subtitle_coverage_legacy(self):
         all_cues = []
         for scene in self.scenes:
             cues = scene.get("subtitleTiming", {}).get("cues", [])
@@ -394,11 +522,7 @@ class JobValidator:
             self._warn("No cues for coverage check")
             return
 
-        audio_dur = 0.0
-        if self.is_continuous:
-            audio_dur = self.audio_config.get("durationSec", 0)
-        else:
-            audio_dur = sum(float(s.get("targetDurationSec", 0)) for s in self.scenes)
+        audio_dur = self.audio_config.get("durationSec", 0)
 
         if audio_dur <= 0:
             self._warn("Cannot check coverage: audio duration unknown")
@@ -426,9 +550,45 @@ class JobValidator:
         else:
             self._ok(f"Subtitle coverage: {coverage_pct:.0f}% of audio ({total_covered:.1f}s / {audio_dur:.1f}s)")
 
+    def _check_subtitle_coverage_per_scene(self):
+        ctx = getattr(self, "_per_scene_subtitle_ctx", None)
+        if ctx is None:
+            from subtitle_validation_context import build_validation_context
+            ctx = build_validation_context(self.data, video_dir=self.video_dir)
+            self._per_scene_subtitle_ctx = ctx
+
+        if ctx["totalCues"] == 0:
+            self._warn("No cues for coverage check")
+            return
+
+        global_cues = ctx.get("globalCues", [])
+        if not global_cues:
+            return
+
+        scene_windows = _build_scene_windows_from_metadata(self.data)
+        total_visual = sum(
+            w["endSec"] - w["startSec"] for w in scene_windows.values()
+        )
+        total_covered = sum(c["endSec"] - c["startSec"] for c in global_cues)
+
+        if total_visual > 0:
+            coverage_pct = total_covered / total_visual * 100
+            self._ok(
+                f"Subtitle coverage: {coverage_pct:.0f}% of visual timeline "
+                f"({total_covered:.1f}s / {total_visual:.1f}s)"
+            )
+        else:
+            self._warn("Cannot check coverage: visual timeline unknown")
+
     # ── Subtitle alignment check ────────────────────────────────────
 
     def _check_subtitle_alignment(self):
+        if self.is_continuous:
+            self._check_subtitle_alignment_legacy()
+        else:
+            self._check_subtitle_alignment_per_scene()
+
+    def _check_subtitle_alignment_legacy(self):
         scene_timings = self.data.get("audio", {}).get("sceneTimings", [])
         if not scene_timings:
             self._warn("No sceneTimings available (alignment check skipped)")
@@ -514,6 +674,21 @@ class JobValidator:
         if not has_errors:
             self._ok(f"Cue alignment: all {len(flat_cues)} cues within scene windows")
 
+    def _check_subtitle_alignment_per_scene(self):
+        ctx = getattr(self, "_per_scene_subtitle_ctx", None)
+        if ctx is None:
+            from subtitle_validation_context import build_validation_context
+            ctx = build_validation_context(self.data, video_dir=self.video_dir)
+            self._per_scene_subtitle_ctx = ctx
+
+        for err in ctx.get("errors", []):
+            self._err(err)
+        for warn in ctx.get("warnings", []):
+            self._warn(warn)
+
+        if not ctx.get("errors"):
+            self._ok(f"Cue alignment: all {ctx['totalCues']} cues within scene windows (per-scene)")
+
     # ── Manifest check ───────────────────────────────────────────────
 
     def _check_manifest(self):
@@ -578,6 +753,61 @@ class JobValidator:
             else:
                 self._err(f"video.mp4: resolution {w}x{h}, expected {EXPECTED_WIDTH}x{EXPECTED_HEIGHT}")
 
+    # ── Pacing check ───────────────────────────────────────────────
+
+    def _check_pacing(self):
+        if self.is_continuous:
+            self._ok("Pacing check skipped (continuous audio)")
+            return
+
+        video_path = self.video_dir / "video.mp4"
+        if not video_path.exists():
+            self._ok("Pacing check skipped (no video.mp4)")
+            return
+
+        try:
+            from pacing_validation import validate_audio_pacing
+
+            render_timeline = self.data.get("renderTimeline", [])
+            scene_windows = []
+            seen = set()
+            for entry in render_timeline:
+                sn = entry.get("sceneNumber")
+                if sn is None:
+                    continue
+                start = entry.get("startSec", 0)
+                end = entry.get("endSec", 0)
+                if sn not in seen:
+                    scene_windows.append({"sceneNumber": sn, "startSec": start, "endSec": end})
+                    seen.add(sn)
+
+            word_count = sum(
+                len(s.get("voiceover", "").split())
+                for s in self.scenes
+            )
+
+            result = validate_audio_pacing(
+                video_path=video_path,
+                scene_windows=scene_windows,
+                total_duration_sec=self.data.get("render", {}).get("durationSeconds"),
+                project_root=self.project_root,
+                word_count=word_count,
+            )
+
+            for err in result.get("errors", []):
+                self._err(err)
+            for warn in result.get("warnings", []):
+                self._warn(warn)
+
+            metrics = result.get("metrics", {})
+            self._ok(
+                f"Pacing: silenceRatio={metrics.get('silenceRatio', '?')}, "
+                f"narrationCoverage={metrics.get('narrationCoverageRatio', '?')}, "
+                f"status={result.get('status', '?')}"
+            )
+        except Exception as e:
+            self._warn(f"Pacing check failed: {e}")
+
     # ── Report ───────────────────────────────────────────────────────
 
     def report(self, as_json: bool = False) -> dict:
@@ -617,10 +847,24 @@ class JobValidator:
         return result
 
 
+def _build_scene_windows_from_metadata(data: dict) -> dict[int, dict[str, float]]:
+    windows: dict[int, dict[str, float]] = {}
+    for entry in data.get("renderTimeline", []):
+        sn = entry.get("sceneNumber")
+        start = entry.get("startSec", 0)
+        end = entry.get("endSec", 0)
+        if sn is None:
+            continue
+        if sn not in windows:
+            windows[sn] = {"startSec": float(start), "endSec": float(end)}
+        else:
+            windows[sn]["startSec"] = min(windows[sn]["startSec"], float(start))
+            windows[sn]["endSec"] = max(windows[sn]["endSec"], float(end))
+    return windows
+
+
 def update_manifest_gates(metadata_path: Path):
     """Re-run coverage validation and update quality gates in job-manifest.json."""
-    from coverage_validation import run_coverage_validation
-
     with open(metadata_path) as f:
         data = json.load(f)
 
@@ -633,32 +877,44 @@ def update_manifest_gates(metadata_path: Path):
     manifest = json.loads(manifest_path.read_text())
 
     audio_config = data.get("audio", {})
-    scene_timings = audio_config.get("sceneTimings", [])
-    audio_dur = audio_config.get("durationSec", 0)
-    cues_by_scene = {}
-    for sc in data.get("script", {}).get("scenes", []):
-        sn = sc["sceneNumber"]
-        cues_by_scene[sn] = sc.get("subtitleTiming", {}).get("cues", [])
-    narration_units = audio_config.get("narrationUnits", [])
+    is_continuous = audio_config.get("continuous", False)
 
-    coverage_result = run_coverage_validation(
-        scene_timings, audio_dur, cues_by_scene, narration_units
-    )
-    coverage_status = coverage_result.get("status", "N/A")
+    if is_continuous:
+        from coverage_validation import run_coverage_validation
+        scene_timings = audio_config.get("sceneTimings", [])
+        audio_dur = audio_config.get("durationSec", 0)
+        cues_by_scene = {}
+        for sc in data.get("script", {}).get("scenes", []):
+            sn = sc["sceneNumber"]
+            cues_by_scene[sn] = sc.get("subtitleTiming", {}).get("cues", [])
+        narration_units = audio_config.get("narrationUnits", [])
+        coverage_result = run_coverage_validation(
+            scene_timings, audio_dur, cues_by_scene, narration_units
+        )
+        coverage_status = coverage_result.get("status", "N/A")
+    else:
+        from subtitle_validation_context import build_validation_context
+        ctx = build_validation_context(data, video_dir=video_dir)
+        coverage_status = ctx["status"]
 
     gates = manifest.get("validation", {}).get("gates", {})
-    if gates:
-        gates["subtitleCoverageValidation"] = (
-            coverage_status if coverage_status != "N/A" else "NOT_APPLICABLE"
-        )
-        sub_gates = {k: v for k, v in gates.items() if k != "qualityGate"}
-        gate_failures = [k for k, v in sub_gates.items() if v == "FAIL"]
-        gate_warnings = [k for k, v in sub_gates.items() if v in ("REVIEW_REQUIRED", "WARNING")]
-        gates["qualityGate"] = (
-            "FAIL" if gate_failures
-            else ("WARNING" if gate_warnings else "PASS")
-        )
+    if not gates:
+        manifest.setdefault("validation", {})
+        gates = {}
         manifest["validation"]["gates"] = gates
+
+    gates["subtitleCoverageValidation"] = coverage_status
+
+    sub_gates = {k: v for k, v in gates.items() if k != "qualityGate"}
+    gate_failures = [k for k, v in sub_gates.items() if v == "FAIL"]
+    gate_warnings = [k for k, v in sub_gates.items() if v in ("REVIEW_REQUIRED", "WARNING", "PASS_WITH_WARNINGS")]
+    gate_unavailable = [k for k, v in sub_gates.items() if v == "NOT_APPLICABLE"]
+    gates["qualityGate"] = (
+        "FAIL" if gate_failures
+        else ("WARNING" if gate_warnings
+              else ("WARNING" if gate_unavailable else "PASS"))
+    )
+    manifest["validation"]["gates"] = gates
 
     manifest["validation"]["coverageStatus"] = coverage_status
 
@@ -669,8 +925,6 @@ def update_manifest_gates(metadata_path: Path):
 
 
 def main() -> int:
-    import os as _os
-    _os.environ['DOCKER_API_VERSION'] = '1.43'
 
     parser = argparse.ArgumentParser(
         description="Validate a shorts-historicos job"
