@@ -36,6 +36,16 @@ Reglas de trabajo para agentes que operan sobre este repositorio.
 - Agentes especializados solo se invocan cuando su dominio es directamente relevante.
 - No lanzar subagentes para tareas pequeñas.
 
+### Model routing and token economy
+
+When selecting a model, variant, execution limit, or fallback, load the
+`model-routing-and-token-economy` skill. Its policy is based on the audited
+evidence in `docs/research/opencode-free-models-benchmark-r1.md`.
+
+Declare the model and variant explicitly for every session, agent, or command.
+Do not rely on implicit model inheritance. Load this skill only when routing or
+token-economy decisions are required.
+
 ### Agentes disponibles
 
 | Agente | Rol |

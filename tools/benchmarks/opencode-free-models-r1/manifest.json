@@ -1,0 +1,35 @@
+{
+  "benchmarkId": "opencode-free-models-r1",
+  "executedAtUtc": "2026-07-17T19:06:21Z",
+  "repository": "JaviGalFer/shorts-creator",
+  "repositoryCommit": "6e9bed53631e289b71d824337a236eb1c8b04517",
+  "rawDirectoryOriginal": "/home/javi/opencode-benchmarks/shorts-free-r1-20260717T190621Z",
+  "rawArchive": {
+    "filename": "shorts-free-r1-20260717T190621Z.rar",
+    "originalPath": "/home/javi/opencode-benchmarks/shorts-free-r1-20260717T190621Z.rar",
+    "sizeBytes": 165170,
+    "sha256": "f041878330f47e120cce761c9573b524740fbaa545c88c1cb5f1e62fa3d6136b",
+    "committedToGit": false
+  },
+  "comparedModels": [
+    "opencode/big-pickle",
+    "opencode/deepseek-v4-flash-free, variant low",
+    "opencode/hy3-free, variant low",
+    "opencode/mimo-v2.5-free, variant low",
+    "opencode/nemotron-3-ultra-free, variant low",
+    "opencode/north-mini-code-free, variant none"
+  ],
+  "allowedRepositoryFiles": [
+    "bin/run_job.py",
+    "bin/generate_script.py"
+  ],
+  "agentTemplate": "benchmark-readonly.agent.md",
+  "promptFile": "prompt.txt",
+  "runnerFile": "run.sh",
+  "rawEventsCommitted": false,
+  "conclusionsStatus": "audited",
+  "auditReport": "docs/research/opencode-free-models-benchmark-r1.md",
+  "resultsSummary": "tools/benchmarks/opencode-free-models-r1/results-summary.json",
+  "auditMethod": "Deterministic Python script parsing *.events.jsonl from raw directory; extracted exit_code, elapsed_seconds, tool_calls, files_read, tokens from step_finish events, final response presence, JSON compliance, scope compliance. No manual event inspection in context.",
+  "rawEvidenceRevalidated": true
+}

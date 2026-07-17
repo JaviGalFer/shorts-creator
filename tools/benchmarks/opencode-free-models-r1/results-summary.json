@@ -1,0 +1,296 @@
+{
+  "benchmarkId": "opencode-free-models-r1",
+  "auditStatus": "audited",
+  "auditDate": "2026-07-17T21:54:00Z",
+  "repositoryCommit": "6e9bed53631e289b71d824337a236eb1c8b04517",
+  "scope": {
+    "taskType": "read-only runtime audit",
+    "allowedFiles": [
+      "bin/run_job.py",
+      "bin/generate_script.py"
+    ],
+    "agent": "benchmark-readonly",
+    "maxSteps": 4,
+    "format": "JSON-only",
+    "questions": 10
+  },
+  "models": [
+    {
+      "model": "opencode/big-pickle",
+      "variant": null,
+      "exitCode": 0,
+      "elapsedSeconds": 69,
+      "completionStatus": "silent_failure",
+      "finalResponsePresent": false,
+      "jsonOnlyCompliant": false,
+      "scopeCompliant": true,
+      "filesObserved": [
+        "bin/run_job.py",
+        "bin/generate_script.py"
+      ],
+      "toolCallCount": 14,
+      "toolCallNames": [
+        "grep",
+        "grep",
+        "grep",
+        "read",
+        "read",
+        "read",
+        "read",
+        "read",
+        "read",
+        "read",
+        "read",
+        "read",
+        "grep",
+        "read"
+      ],
+      "inputTokens": 22326,
+      "outputTokens": 1268,
+      "cacheReadTokens": 58432,
+      "verifiedStrengths": [
+        "Targeted reads with offset/limit",
+        "Full coverage of both allowed files",
+        "Technically correct synthesis (10/10 answers verified against source code)"
+      ],
+      "verifiedWeaknesses": [
+        "Did not emit valid JSON (produced markdown/text summary)",
+        "Hit step limit (4) before final output",
+        "No JSON-only compliance"
+      ],
+      "provisionalRoles": [
+        "exploration",
+        "planning",
+        "review"
+      ],
+      "decision": "candidate-with-format-fix",
+      "implementationCapability": "not-tested"
+    },
+    {
+      "model": "opencode/deepseek-v4-flash-free",
+      "variant": "low",
+      "exitCode": 0,
+      "elapsedSeconds": 31,
+      "completionStatus": "silent_failure",
+      "finalResponsePresent": false,
+      "jsonOnlyCompliant": null,
+      "scopeCompliant": true,
+      "filesObserved": [
+        "bin/run_job.py",
+        "bin/generate_script.py"
+      ],
+      "toolCallCount": 7,
+      "toolCallNames": [
+        "grep",
+        "grep",
+        "grep",
+        "read",
+        "read",
+        "read",
+        "read"
+      ],
+      "inputTokens": 14559,
+      "outputTokens": 2147,
+      "cacheReadTokens": 23936,
+      "verifiedStrengths": [
+        "Targeted reads with offset/limit",
+        "Fast execution (31s)",
+        "Low tool call count",
+        "No scope violations"
+      ],
+      "verifiedWeaknesses": [
+        "No final response (hit step limit)",
+        "Correctness not evaluable"
+      ],
+      "provisionalRoles": [
+        "exploration",
+        "review",
+        "fallback"
+      ],
+      "decision": "candidate-needs-more-steps",
+      "implementationCapability": "not-tested"
+    },
+    {
+      "model": "opencode/hy3-free",
+      "variant": "low",
+      "exitCode": 0,
+      "elapsedSeconds": 32,
+      "completionStatus": "silent_failure",
+      "finalResponsePresent": false,
+      "jsonOnlyCompliant": null,
+      "scopeCompliant": true,
+      "filesObserved": [
+        "bin/run_job.py"
+      ],
+      "toolCallCount": 6,
+      "toolCallNames": [
+        "grep",
+        "grep",
+        "read",
+        "read",
+        "read",
+        "grep"
+      ],
+      "inputTokens": 27479,
+      "outputTokens": 354,
+      "cacheReadTokens": 12288,
+      "verifiedStrengths": [
+        "Fast execution",
+        "No scope violations"
+      ],
+      "verifiedWeaknesses": [
+        "Only read 1 of 2 allowed files (incomplete coverage)",
+        "No final response",
+        "High input tokens for partial work (27K)"
+      ],
+      "provisionalRoles": [],
+      "decision": "reserve-incomplete-coverage",
+      "implementationCapability": "not-tested"
+    },
+    {
+      "model": "opencode/mimo-v2.5-free",
+      "variant": "low",
+      "exitCode": 0,
+      "elapsedSeconds": 124,
+      "completionStatus": "silent_failure",
+      "finalResponsePresent": false,
+      "jsonOnlyCompliant": null,
+      "scopeCompliant": false,
+      "filesObserved": [
+        "bin/run_job.py",
+        "bin/generate_script.py",
+        "bin/validate_job.py",
+        "bin/asset_validation.py"
+      ],
+      "toolCallCount": 5,
+      "toolCallNames": [
+        "read",
+        "read",
+        "read",
+        "grep",
+        "grep"
+      ],
+      "inputTokens": 45965,
+      "outputTokens": 1206,
+      "cacheReadTokens": 71616,
+      "verifiedStrengths": [],
+      "verifiedWeaknesses": [
+        "Full file reads without pagination (scope violation: unnecessary token usage)",
+        "Grepped outside allowed files (validate_job.py, asset_validation.py) — explicit scope violation",
+        "Slowest execution (124s)",
+        "Highest cache read tokens (71K)",
+        "No final response"
+      ],
+      "provisionalRoles": [],
+      "decision": "do-not-use",
+      "implementationCapability": "not-tested"
+    },
+    {
+      "model": "opencode/nemotron-3-ultra-free",
+      "variant": "low",
+      "exitCode": 0,
+      "elapsedSeconds": 28,
+      "completionStatus": "silent_failure",
+      "finalResponsePresent": false,
+      "jsonOnlyCompliant": null,
+      "scopeCompliant": false,
+      "filesObserved": [
+        "bin/run_job.py",
+        "bin/generate_script.py"
+      ],
+      "toolCallCount": 3,
+      "toolCallNames": [
+        "read",
+        "read",
+        "read"
+      ],
+      "inputTokens": 47225,
+      "outputTokens": 1526,
+      "cacheReadTokens": 26112,
+      "verifiedStrengths": [
+        "Fastest wall-time among full-read models (28s)",
+        "Minimal tool calls (3)"
+      ],
+      "verifiedWeaknesses": [
+        "Full file reads without pagination (scope violation: unnecessary token usage)",
+        "47K input tokens for 2 files — inefficient",
+        "No grep exploration, direct full reads only",
+        "No final response"
+      ],
+      "provisionalRoles": [],
+      "decision": "reserve-token-inefficient",
+      "implementationCapability": "not-tested"
+    },
+    {
+      "model": "opencode/north-mini-code-free",
+      "variant": "none",
+      "exitCode": 0,
+      "elapsedSeconds": 13,
+      "completionStatus": "silent_failure",
+      "finalResponsePresent": false,
+      "jsonOnlyCompliant": null,
+      "scopeCompliant": false,
+      "filesObserved": [
+        "bin/run_job.py",
+        "bin/generate_script.py"
+      ],
+      "toolCallCount": 4,
+      "toolCallNames": [
+        "read",
+        "read",
+        "read",
+        "read"
+      ],
+      "inputTokens": 82887,
+      "outputTokens": 1550,
+      "cacheReadTokens": 0,
+      "verifiedStrengths": [
+        "Fastest wall-time overall (13s)"
+      ],
+      "verifiedWeaknesses": [
+        "Full file reads without pagination (scope violation)",
+        "Extreme input token usage: 82,887 tokens for 2 small files — broken token economy",
+        "Zero cache read tokens reported",
+        "No grep, no targeted reads",
+        "No final response"
+      ],
+      "provisionalRoles": [],
+      "decision": "do-not-use",
+      "implementationCapability": "not-tested"
+    }
+  ],
+  "provisionalRouting": {
+    "exploration": {
+      "primary": "opencode/big-pickle",
+      "alternate": "opencode/deepseek-v4-flash-free (variant: low)",
+      "note": "big-pickle requires JSON-only enforcement via prompt; deepseek needs more steps"
+    },
+    "planning": {
+      "primary": "opencode/big-pickle",
+      "alternate": null,
+      "note": "Only model with verified technical correctness on this codebase; provisional-unvalidated-on-code-changes"
+    },
+    "implementation": {
+      "primary": null,
+      "alternate": null,
+      "note": "No model validated for implementation; this benchmark does not test code changes"
+    },
+    "review": {
+      "primary": "opencode/big-pickle",
+      "alternate": "opencode/deepseek-v4-flash-free (variant: low)",
+      "note": "Both read targeted, no scope violations; big-pickle has verified correctness"
+    },
+    "fallback": {
+      "primary": "opencode/deepseek-v4-flash-free (variant: low)",
+      "alternate": null,
+      "note": "Fast, targeted reads, no scope violations; but no final response in this run"
+    }
+  },
+  "revalidationTriggers": [
+    "Major version change in benchmark-readonly agent or opencode runner",
+    "Changes to prompt.txt or allowed files (bin/run_job.py, bin/generate_script.py) affecting correct answers",
+    "New free models added to OpenCode not in current set of 6",
+    "Change in step limit (currently 4) or output format requirement",
+    "Methodology flaw detected in token/time measurement"
+  ]
+}
