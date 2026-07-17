@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-**Última actualización:** 2026-07-14
+**Última actualización:** 2026-07-17
 
 ## Estado global
 
@@ -8,14 +8,42 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 
 **Último change completado:** `integrate-native-visual-plan-v2-generation` (2026-07-14)
 
-**Change activo:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente
+**Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
+
+**Change activo de planificación:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular
+
+## Plan de transformación modular
+
+El proyecto se transformará progresivamente hacia una arquitectura modular con V2 como único contrato visual soportado. No se reescribe desde cero.
+
+Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
+
+### Orden de fases
+
+1. Retirar V1 y enfoque histórico → `retire-legacy-visual-v1` (planificación)
+2. Estabilizar pipeline V2, baseline clara
+3. Crear `pyproject.toml` y `src/shorts_creator/`
+4. Extraer `contracts/` e `infrastructure/`
+5. Migrar `script/`
+6. Reanudar audio pacing (Phase B)
+7. Migrar `audio/`
+8. Migrar `assets/`
+9. Migrar `rendering/`
+10. Migrar `validation/`
+11. Reducir `bin/` a adaptadores, limpieza final
+
+## Benchmark y routing de modelos
+
+- Benchmark R1 cerrado en commit `4d1715f`
+- Routing gratuito documentado en `docs/research/opencode-free-models-benchmark-r1.md`
+- Modelos gratuitos aptos para planificación y código confirmados
 
 ## Próximos pasos
 
-1. Phase B: calibración de voz/WPM, word budget, Edge TTS rate, nuevo E2E 27–30s
-2. Mejorar prompts de búsqueda de imágenes v2 (`improve-visual-query-relevance-v2`)
-3. Mejorar calidad y relevancia semántica de assets
-4. Mejorar voz Edge TTS
+1. Ejecutar slices del change `retire-legacy-visual-v1`
+2. Estabilizar baseline V2 tras retirada de V1
+3. Phase B de audio pacing (tras migrar script/)
+4. Crear `pyproject.toml` y estructura `src/`
 5. Investigar instalación de ffprobe en el host
 6. Registrar FreeAI para imágenes de calidad gratuitas
 7. Integrar pipeline v2 con n8n
@@ -60,10 +88,6 @@ sceneWindowSec = activeAudioDurationSec + sceneTailPauseSec (0.25s)
 | timelineWPM | — | 157.8 |
 | effectiveSpeechWPM | — | 208.1 |
 | qualityGate | FAIL | PASS |
-
-Duración activa por escena:
-- S1: 3.825s, S2: 3.587s, S3: 3.712s, S4: 3.113s, S5: 2.763s
-- Total + 5 × 0.25s = 18.25s
 
 La reducción de duración a ~18s se debe al word budget de Phase A (48 palabras).
 Phase B expandirá a 27–30s con WPM calibrado.
