@@ -1,0 +1,118 @@
+"""Tests for V2-only generation contract (Slice 1).
+
+Run: python3 -m pytest tests/test_v2_only_generation_contract.py -v
+"""
+
+import sys
+from pathlib import Path
+
+PROJECT = Path("/home/javi/projects/shorts-creator")
+sys.path.insert(0, str(PROJECT / "bin"))
+
+import pytest
+
+from generate_script import main as gs_main
+from run_job import build_script_command
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _make_script_args(topic="Test", duration=None, duration_profile=None,
+                       duration_target=None, duration_min=None, duration_max=None,
+                       strictness=None, model=None):
+    class Args:
+        pass
+    a = Args()
+    a.topic = topic
+    a.duration = duration
+    a.duration_profile = duration_profile
+    a.duration_target = duration_target
+    a.duration_min = duration_min
+    a.duration_max = duration_max
+    a.strictness = strictness
+    a.model = model
+    return a
+
+
+# ── Contract 1: generate_script.py defaults to V2 ─────────────────────────────
+
+class TestGenerateScriptDefaultV2:
+    """Default resolution must be V2 when no explicit --visual-schema-version."""
+
+    def test_default_dry_run_uses_v2(self, monkeypatch, capsys):
+        """Dry-run without --visual-schema-version outputs schemaVersion=2."""
+        monkeypatch.setattr("generate_script.load_env", lambda: {"LLM_API_KEY": "fake"})
+        monkeypatch.setattr(sys, "argv", [
+            "generate_script.py", "--topic", "test",
+            "--dry-run", "--model", "gpt-4o-mini",
+        ])
+        exit_code = gs_main()
+        assert exit_code == 0
+        out = capsys.readouterr().out
+        assert "schemaVersion=2" in out
+
+    def test_explicit_v1_not_reinterpreted(self, monkeypatch, capsys):
+        """Explicit --visual-schema-version 1 is not reinterpreted as V2 during Slice 1."""
+        monkeypatch.setattr("generate_script.load_env", lambda: {"LLM_API_KEY": "fake"})
+        monkeypatch.setattr(sys, "argv", [
+            "generate_script.py", "--topic", "test",
+            "--visual-schema-version", "1",
+            "--dry-run", "--model", "gpt-4o-mini",
+        ])
+        exit_code = gs_main()
+        assert exit_code == 0
+        out = capsys.readouterr().out
+        assert "visualSchemaVersion=1" in out
+
+
+# ── Contract 2: build_script_command() always includes V2 flag ────────────────
+
+class TestBuildScriptCommandV2:
+    """build_script_command must add --visual-schema-version 2 deterministically."""
+
+    def test_adds_v2_flag(self):
+        """build_script_command includes --visual-schema-version 2."""
+        args = _make_script_args()
+        cmd = build_script_command(args)
+        assert "--visual-schema-version" in cmd
+        idx = cmd.index("--visual-schema-version")
+        assert cmd[idx + 1] == "2"
+
+    def test_v2_flag_appears_exactly_once(self):
+        """--visual-schema-version flag appears exactly once."""
+        args = _make_script_args()
+        cmd = build_script_command(args)
+        count = sum(1 for c in cmd if c == "--visual-schema-version")
+        assert count == 1
+
+    def test_preserves_existing_args_minimal(self):
+        """Other existing args are preserved alongside V2 flag."""
+        args = _make_script_args(topic="TestTopic")
+        cmd = build_script_command(args)
+        assert cmd[1].endswith("generate_script.py")
+        assert cmd[cmd.index("--topic") + 1] == "TestTopic"
+
+    def test_preserves_existing_args_all(self):
+        """All optional args are preserved alongside V2 flag."""
+        args = _make_script_args(
+            topic="Test", duration=42, duration_profile="standard_32_38",
+            duration_target=40, duration_min=35, duration_max=45,
+            strictness="strict", model="gpt-4",
+        )
+        cmd = build_script_command(args)
+        assert cmd[cmd.index("--topic") + 1] == "Test"
+        assert cmd[cmd.index("--duration") + 1] == "42"
+        assert cmd[cmd.index("--duration-profile") + 1] == "standard_32_38"
+        assert cmd[cmd.index("--duration-target") + 1] == "40"
+        assert cmd[cmd.index("--duration-min") + 1] == "35"
+        assert cmd[cmd.index("--duration-max") + 1] == "45"
+        assert cmd[cmd.index("--strictness") + 1] == "strict"
+        assert cmd[cmd.index("--model") + 1] == "gpt-4"
+        assert cmd[cmd.index("--visual-schema-version") + 1] == "2"
+
+    def test_v2_flag_in_dry_run_command(self):
+        """Dry-run mode also includes the V2 flag."""
+        args = _make_script_args(topic="DryRunTest")
+        cmd = build_script_command(args)
+        idx = cmd.index("--visual-schema-version")
+        assert cmd[idx + 1] == "2"

@@ -10,7 +10,15 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo de planificación:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 es el siguiente trabajo.
+
+### Slice 1 completado (2026-07-17)
+
+- `generate_script.py`: default de `--visual-schema-version` cambiado de 1 a 2; choices [1, 2] conservados; V1 explícito directo sigue soportado sin reinterpretación
+- `run_job.py`: `build_script_command()` añade `--visual-schema-version 2`
+- Tests focalizados: 13 passed, 0 failed
+- Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES` — único finding: descripción stale en session log (corregido)
+- No se ha implementado rechazo de jobs V1 ni eliminación de código V1
 
 ## Plan de transformación modular
 
@@ -40,7 +48,7 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 
 ## Próximos pasos
 
-1. Ejecutar slices del change `retire-legacy-visual-v1`
+1. Ejecutar Slice 2 del change `retire-legacy-visual-v1`
 2. Estabilizar baseline V2 tras retirada de V1
 3. Phase B de audio pacing (tras migrar script/)
 4. Crear `pyproject.toml` y estructura `src/`

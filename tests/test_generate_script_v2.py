@@ -110,13 +110,15 @@ class TestCliAndRequest:
         exit_code = gs.main()
         assert exit_code == 0
 
-    def test_explicit_v1_uses_system_prompt(self, monkeypatch):
+    def test_explicit_v1_uses_system_prompt(self, monkeypatch, capsys):
         """--visual-schema-version 1 uses SYSTEM_PROMPT."""
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "test", "--visual-schema-version", "1",
                                            "--dry-run", "--model", "gpt-4o-mini"])
         exit_code = gs.main()
         assert exit_code == 0
+        out = capsys.readouterr().out
+        assert "visualSchemaVersion=1" in out
 
     def test_explicit_v2_uses_system_prompt_v2(self, monkeypatch, capsys):
         """--visual-schema-version 2 uses SYSTEM_PROMPT_V2."""

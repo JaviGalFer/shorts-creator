@@ -2,9 +2,9 @@
 
 ## Slice 1 — V2-only generation contract
 
-- [ ] `generate_script.py`: cambiar default `--visual-schema-version` a `2`
+- [x] `generate_script.py`: cambiar default `--visual-schema-version` a `2`
 - [ ] `generate_script.py`: deprecar `--visual-schema-version 1` con warning + tratar como V2
-- [ ] Tests focalizados de generación (V2 only)
+- [x] Tests focalizados de generación (V2 only)
 
 ## Slice 2 — V2-only asset runtime
 

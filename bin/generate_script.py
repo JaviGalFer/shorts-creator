@@ -1105,7 +1105,7 @@ def main() -> int:
     parser.add_argument("--output", help="Output path for metadata.json (default: data/videos/{jobId}/metadata.json)")
     parser.add_argument("--dry-run", action="store_true", help="Print prompt and exit without calling API")
     parser.add_argument("--model", help="LLM model override")
-    parser.add_argument("--visual-schema-version", type=int, choices=[1, 2], default=1,
+    parser.add_argument("--visual-schema-version", type=int, choices=[1, 2], default=2,
                         help="VisualPlan schema version (1=legacy v1, 2=native v2)")
     add_duration_profile_args(parser)
     args = parser.parse_args()
