@@ -24,5 +24,21 @@
       "docs/sessions/**",
       ".pytest_cache/**"
     ]
+  },
+
+  "mcp": {
+    "codebase_memory": {
+      "type": "local",
+      "command": [
+        "/home/javi/.local/bin/codebase-memory-mcp"
+      ],
+      "cwd": "/home/javi/projects/shorts-creator",
+      "enabled": true,
+      "timeout": 15000,
+      "environment": {
+        "CBM_ALLOWED_ROOT": "/home/javi/projects/shorts-creator",
+        "CBM_LOG_LEVEL": "warn"
+      }
+    }
   }
 }
