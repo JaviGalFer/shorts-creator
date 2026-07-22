@@ -22,6 +22,9 @@ from run_job import (
     _check_mixed_schema_versions,
     _verify_stage_contract,
     build_stage_command,
+    _classify_visual_schema,
+    _schema_error_for_category,
+    V1_POSITIVE_FIELDS,
     STAGES,
     STAGE_SCRIPTS,
 )
@@ -189,11 +192,11 @@ class TestCheckMixedSchemaVersions:
 # build_stage_command — v2 script resolution
 # ---------------------------------------------------------------------------
 
-class TestBuildStageCommandV2:
+class TestBuildStageCommandV2Only:
 
-    def test_assets_v1_default(self):
+    def test_assets_always_uses_v2(self):
         cmd = build_stage_command("assets", "/path/meta.json")
-        assert cmd[1].endswith("fetch_images.py")
+        assert cmd[1].endswith("fetch_images_v2.py")
         assert cmd[2] == "/path/meta.json"
 
     def test_assets_v2_with_metadata(self):
@@ -202,14 +205,14 @@ class TestBuildStageCommandV2:
         assert cmd[1].endswith("fetch_images_v2.py")
         assert cmd[2] == "/path/meta.json"
 
-    def test_assets_v2_no_metadata_defaults_v1(self):
+    def test_assets_without_metadata(self):
         cmd = build_stage_command("assets", "/path/meta.json", metadata=None)
-        assert cmd[1].endswith("fetch_images.py")
+        assert cmd[1].endswith("fetch_images_v2.py")
 
-    def test_assets_v1_with_metadata_stays_v1(self):
+    def test_assets_with_v1_metadata(self):
         v1_meta = {"script": {"scenes": [_v1_scene()]}}
         cmd = build_stage_command("assets", "/path/meta.json", metadata=v1_meta)
-        assert cmd[1].endswith("fetch_images.py")
+        assert cmd[1].endswith("fetch_images_v2.py")
 
     def test_non_assets_stage_unchanged(self):
         for stage in ["audio", "prepare", "render", "validate"]:
@@ -530,7 +533,7 @@ class TestMixedSchemaFailFast:
             "script": {
                 "scenes": [
                     {"sceneNumber": 1, "visualPlan": {"_schemaVersion": V2_SCHEMA_VERSION}},
-                    {"sceneNumber": 2, "visualPlan": {"_schemaVersion": 1}},
+                    {"sceneNumber": 2, "visualPlan": {"editorialRole": "B-Roll", "strategy": "search", "searchQueries": ["test"]}},
                 ]
             },
         }
@@ -565,7 +568,7 @@ class TestMixedSchemaFailFast:
             "script": {
                 "scenes": [
                     {"sceneNumber": 1, "visualPlan": {"_schemaVersion": V2_SCHEMA_VERSION}},
-                    {"sceneNumber": 2, "visualPlan": {}},
+                    {"sceneNumber": 2, "visualPlan": {"editorialRole": "B-Roll", "strategy": "search"}},
                 ]
             },
         }

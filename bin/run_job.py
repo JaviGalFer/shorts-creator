@@ -46,6 +46,77 @@ RENDER_SUCCESS_STATUSES = {"RENDERED", "RENDERED_WITH_WARNINGS", "RENDERED_WITH_
 REVIEW_BLOCKING_STAGES = {"assets", "audio", "prepare", "render", "validate"}
 V2_IMAGE_EXTENSIONS: frozenset[str] = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 
+V1_POSITIVE_FIELDS: frozenset[str] = frozenset({"editorialRole", "strategy"})
+
+
+def _classify_visual_schema(metadata: dict) -> str:
+    if not isinstance(metadata, dict) or not metadata:
+        return "SCHEMA_NOT_AVAILABLE_YET"
+    script = metadata.get("script")
+    if not isinstance(script, dict):
+        return "SCHEMA_NOT_AVAILABLE_YET"
+    scenes = script.get("scenes")
+    if not isinstance(scenes, list):
+        return "INVALID_SCHEMA"
+    if not scenes:
+        return "INVALID_SCHEMA"
+
+    req = metadata.get("request")
+    if isinstance(req, dict):
+        visuals = req.get("visuals")
+        if isinstance(visuals, dict) and "schemaVersion" in visuals:
+            sv = visuals["schemaVersion"]
+            if not isinstance(sv, int) or isinstance(sv, bool) or sv != 2:
+                return "INVALID_SCHEMA"
+
+    has_v2 = False
+    has_v1 = False
+    has_invalid = False
+
+    for scene in scenes:
+        if not isinstance(scene, dict):
+            has_invalid = True
+            continue
+        vp = scene.get("visualPlan")
+        if vp is None:
+            has_invalid = True
+            continue
+        if not isinstance(vp, dict):
+            has_invalid = True
+            continue
+        sv = vp.get("_schemaVersion")
+        if isinstance(sv, int) and not isinstance(sv, bool):
+            if sv == 2:
+                has_v2 = True
+            else:
+                has_invalid = True
+        elif sv is None:
+            if V1_POSITIVE_FIELDS.intersection(vp.keys()):
+                has_v1 = True
+            else:
+                has_invalid = True
+        else:
+            has_invalid = True
+
+    if has_invalid:
+        return "INVALID_SCHEMA"
+    if has_v2 and has_v1:
+        return "MIXED_SCHEMA"
+    if has_v2:
+        return "SUPPORTED_V2"
+    if has_v1:
+        return "UNSUPPORTED_LEGACY_V1"
+    return "INVALID_SCHEMA"
+
+
+def _schema_error_for_category(category: str) -> str | None:
+    mapping = {
+        "UNSUPPORTED_LEGACY_V1": "UNSUPPORTED_LEGACY_SCHEMA",
+        "MIXED_SCHEMA": "MIXED_VISUAL_PLAN_SCHEMA_VERSIONS",
+        "INVALID_SCHEMA": "INVALID_VISUAL_SCHEMA",
+    }
+    return mapping.get(category)
+
 
 def _collect_visual_plan_schema_versions(metadata: dict) -> set[int]:
     """Return set of _schemaVersion values found across visualPlans."""
@@ -130,7 +201,7 @@ def build_script_command(args) -> list[str]:
 
 
 def build_stage_command(stage: str, metadata_path: str, metadata: dict | None = None) -> list[str]:
-    if stage == "assets" and metadata is not None and _uses_v2_visual_assets(metadata):
+    if stage == "assets":
         return [sys.executable, _script_path("fetch_images_v2.py"), metadata_path]
     script = STAGE_SCRIPTS.get(stage)
     if not script:
@@ -527,21 +598,23 @@ def main() -> int:
 
             data = load_metadata(metadata_path)
 
+            schema_category = _classify_visual_schema(data)
+            if schema_category != "SUPPORTED_V2":
+                schema_error = _schema_error_for_category(schema_category)
+                if schema_error is None:
+                    schema_error = "INVALID_VISUAL_SCHEMA"
+                print(f"ERROR [{stage}]: {schema_error}")
+                started = _utcnow()
+                set_failure(data, stage, schema_error, [], exit_code=0)
+                append_orchestration(data, stage, "FAILED", started, _utcnow(), schema_error)
+                save_metadata(metadata_path, data)
+                _final_summary(data, metadata_path, stage)
+                return 1
+
             if data.get("status") == "REVIEW_REQUIRED" and stage in REVIEW_BLOCKING_STAGES:
                 print(f"REVIEW_REQUIRED: job blocked at stage '{stage}'. Needs human review.")
                 _final_summary(data, metadata_path, stage)
                 return 0
-
-            if stage == "assets":
-                mixed_error = _check_mixed_schema_versions(data)
-                if mixed_error:
-                    print(f"ERROR [assets]: {mixed_error}")
-                    started = _utcnow()
-                    set_failure(data, "assets", mixed_error, [], exit_code=0)
-                    append_orchestration(data, "assets", "FAILED", started, _utcnow(), mixed_error)
-                    save_metadata(metadata_path, data)
-                    _final_summary(data, metadata_path, "assets")
-                    return 1
 
             cmd = build_stage_command(stage, metadata_path, metadata=data)
             started = _utcnow()

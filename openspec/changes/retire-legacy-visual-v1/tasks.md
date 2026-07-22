@@ -8,13 +8,17 @@
 
 ## Slice 2 — V2-only asset runtime
 
-- [ ] `run_job.py`: validar `request.visuals.schemaVersion` al inicio del pipeline
-- [ ] `run_job.py`: rechazar metadata sin schemaVersion o con schemaVersion=1 → `UNSUPPORTED_LEGACY_SCHEMA`
-- [ ] `run_job.py`: eliminar bifurcación fetch_images vs fetch_images_v2
-- [ ] `run_job.py`: invocar siempre `fetch_images_v2.py`
-- [ ] Tests focalizados de assets (V2 only)
-- [ ] Tests focalizados de contratos runtime
-- [ ] Tests focalizados de runner (rechazo V1)
+- [x] `run_job.py`: validar `request.visuals.schemaVersion` al inicio del pipeline
+- [x] `run_job.py`: rechazar metadata V1 pura → `UNSUPPORTED_LEGACY_SCHEMA`
+- [x] `run_job.py`: rechazar metadata mixta → `MIXED_VISUAL_PLAN_SCHEMA_VERSIONS`
+- [x] `run_job.py`: rechazar metadata visual inválida → `INVALID_VISUAL_SCHEMA`
+- [x] `run_job.py`: eliminar bifurcación fetch_images vs fetch_images_v2
+- [x] `run_job.py`: invocar siempre `fetch_images_v2.py`
+- [x] Tests focalizados de assets (V2 only)
+- [x] Tests focalizados de contratos runtime
+- [x] Tests focalizados de runner (rechazo V1)
+- [x] Actualizar `current-state.md`
+- [x] Crear session log
 
 ## Slice 3 — Remove V1 generation logic
 

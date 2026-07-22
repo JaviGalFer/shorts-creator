@@ -28,6 +28,9 @@ from run_job import (
     set_failure,
     _verify_stage_contract,
     _final_summary,
+    _classify_visual_schema,
+    _schema_error_for_category,
+    V1_POSITIVE_FIELDS,
     dry_run,
     main,
 )
@@ -111,7 +114,7 @@ def test_build_script_command_all_options():
 
 def test_build_stage_command_assets():
     cmd = build_stage_command("assets", "/path/to/metadata.json")
-    assert cmd[1].endswith("fetch_images.py")
+    assert cmd[1].endswith("fetch_images_v2.py")
     assert cmd[2] == "/path/to/metadata.json"
 
 
@@ -262,7 +265,7 @@ def test_dry_run_prints_plan(capsys):
     assert "EXECUTION PLAN" in captured
     assert "SCRIPT_GENERATING" in captured
     assert "generate_script.py" in captured
-    assert "fetch_images.py" in captured
+    assert "fetch_images_v2.py" in captured
     assert "generate_audio.py" in captured
     assert "prepare_job.py" in captured
     assert "render_job.py" in captured
@@ -275,7 +278,7 @@ def test_dry_run_stop_after_script_shows_only_script(capsys):
     dry_run(args)
     out = capsys.readouterr().out
     assert "generate_script.py" in out
-    assert "fetch_images.py" not in out
+    assert "fetch_images_v2.py" not in out
     assert "generate_audio.py" not in out
 
 
@@ -1198,7 +1201,326 @@ def test_prepare_exit1_no_render_no_validate(fake_job_dir, initial_metadata_file
 
 
 # ---------------------------------------------------------------------------
-# Helper
+# _classify_visual_schema tests
+# ---------------------------------------------------------------------------
+
+V2_FIXTURE = {
+    "script": {
+        "scenes": [
+            {"sceneNumber": 1, "visualPlan": {"_schemaVersion": 2, "visualIntent": "show"}},
+        ]
+    },
+}
+
+V1_FIXTURE = {
+    "script": {
+        "scenes": [
+            {"sceneNumber": 1, "visualPlan": {"editorialRole": "B-Roll", "strategy": "search", "searchQueries": ["test"]}},
+        ]
+    },
+}
+
+
+class TestClassifyVisualSchema:
+
+    def test_v2_coherent(self):
+        assert _classify_visual_schema(V2_FIXTURE) == "SUPPORTED_V2"
+
+    def test_v2_no_request_schema_version(self):
+        meta = {"script": {"scenes": [{"sceneNumber": 1, "visualPlan": {"_schemaVersion": 2}}]}}
+        assert _classify_visual_schema(meta) == "SUPPORTED_V2"
+
+    def test_request_schema_version_1_with_v2_scenes(self):
+        meta = {
+            "request": {"visuals": {"schemaVersion": 1}},
+            "script": {"scenes": [{"sceneNumber": 1, "visualPlan": {"_schemaVersion": 2}}]},
+        }
+        assert _classify_visual_schema(meta) == "INVALID_SCHEMA"
+
+    def test_v1_pure_legacy(self):
+        assert _classify_visual_schema(V1_FIXTURE) == "UNSUPPORTED_LEGACY_V1"
+
+    def test_no_schema_version_no_v1_markers(self):
+        meta = {"script": {"scenes": [{"sceneNumber": 1, "visualPlan": {"someField": "x"}}]}}
+        assert _classify_visual_schema(meta) == "INVALID_SCHEMA"
+
+    def test_mixed_v1_v2(self):
+        meta = {
+            "script": {
+                "scenes": [
+                    {"sceneNumber": 1, "visualPlan": {"_schemaVersion": 2}},
+                    {"sceneNumber": 2, "visualPlan": {"editorialRole": "B-Roll", "strategy": "search"}},
+                ]
+            }
+        }
+        assert _classify_visual_schema(meta) == "MIXED_SCHEMA"
+
+    def test_schema_version_string_two(self):
+        meta = {"script": {"scenes": [{"sceneNumber": 1, "visualPlan": {"_schemaVersion": "2"}}]}}
+        assert _classify_visual_schema(meta) == "INVALID_SCHEMA"
+
+    def test_schema_version_three(self):
+        meta = {"script": {"scenes": [{"sceneNumber": 1, "visualPlan": {"_schemaVersion": 3}}]}}
+        assert _classify_visual_schema(meta) == "INVALID_SCHEMA"
+
+    def test_schema_version_bool(self):
+        meta = {"script": {"scenes": [{"sceneNumber": 1, "visualPlan": {"_schemaVersion": True}}]}}
+        assert _classify_visual_schema(meta) == "INVALID_SCHEMA"
+
+    def test_scene_without_visual_plan(self):
+        meta = {"script": {"scenes": [{"sceneNumber": 1}]}}
+        assert _classify_visual_schema(meta) == "INVALID_SCHEMA"
+
+    def test_visual_plan_not_dict(self):
+        meta = {"script": {"scenes": [{"sceneNumber": 1, "visualPlan": "not-a-dict"}]}}
+        assert _classify_visual_schema(meta) == "INVALID_SCHEMA"
+
+    def test_no_script(self):
+        assert _classify_visual_schema({}) == "SCHEMA_NOT_AVAILABLE_YET"
+
+    def test_empty_scenes(self):
+        meta = {"script": {"scenes": []}}
+        assert _classify_visual_schema(meta) == "INVALID_SCHEMA"
+
+
+# ---------------------------------------------------------------------------
+# _schema_error_for_category tests
+# ---------------------------------------------------------------------------
+
+class TestSchemaErrorForCategory:
+
+    def test_unsupported_legacy_v1(self):
+        assert _schema_error_for_category("UNSUPPORTED_LEGACY_V1") == "UNSUPPORTED_LEGACY_SCHEMA"
+
+    def test_mixed_schema(self):
+        assert _schema_error_for_category("MIXED_SCHEMA") == "MIXED_VISUAL_PLAN_SCHEMA_VERSIONS"
+
+    def test_invalid_schema(self):
+        assert _schema_error_for_category("INVALID_SCHEMA") == "INVALID_VISUAL_SCHEMA"
+
+    def test_supported_v2(self):
+        assert _schema_error_for_category("SUPPORTED_V2") is None
+
+    def test_not_available(self):
+        assert _schema_error_for_category("SCHEMA_NOT_AVAILABLE_YET") is None
+
+
+# ---------------------------------------------------------------------------
+# Main pipeline schema rejection tests
+# ---------------------------------------------------------------------------
+
+class TestMainSchemaRejection:
+
+    def test_v1_metadata_rejected(self, fake_job_dir, capsys):
+        meta_path = str(fake_job_dir / "metadata.json")
+        script_output = json.dumps({"jobId": "test-1", "path": meta_path, "status": "SCRIPT_DRAFT"})
+        v1_meta = {
+            "jobId": "test-1",
+            "status": "SCRIPT_DRAFT",
+            "createdAt": "2000-01-01T00:00:00.000Z",
+            "script": {
+                "scenes": [
+                    {"sceneNumber": 1, "visualPlan": {"editorialRole": "B-Roll", "strategy": "search", "searchQueries": ["test"]}},
+                ]
+            },
+        }
+
+        def side_effect(cmd, **kw):
+            if "generate_script.py" in " ".join(cmd):
+                return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with patch("run_job.subprocess.run", side_effect=side_effect):
+            with patch("run_job.load_metadata", return_value=v1_meta):
+                with patch("run_job.save_metadata") as mock_save:
+                    with patch("run_job.os.path.exists", return_value=True):
+                        with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
+                            rc = main()
+                            assert rc == 1
+                            saved = mock_save.call_args[0][1]
+                            assert saved["status"] == "FAILED"
+                            assert saved["failure"]["error"] == "UNSUPPORTED_LEGACY_SCHEMA"
+                            assert saved["failure"]["exitCode"] == 0
+
+    def test_v1_assets_not_executed(self, fake_job_dir, capsys):
+        meta_path = str(fake_job_dir / "metadata.json")
+        script_output = json.dumps({"jobId": "test-1", "path": meta_path, "status": "SCRIPT_DRAFT"})
+        v1_meta = {
+            "jobId": "test-1",
+            "status": "SCRIPT_DRAFT",
+            "createdAt": "2000-01-01T00:00:00.000Z",
+            "script": {
+                "scenes": [
+                    {"sceneNumber": 1, "visualPlan": {"editorialRole": "B-Roll", "strategy": "search", "searchQueries": ["test"]}},
+                ]
+            },
+        }
+
+        call_stages = []
+
+        def side_effect(cmd, **kw):
+            cmd_str = " ".join(cmd)
+            if "generate_script.py" in cmd_str:
+                call_stages.append("script")
+                return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
+            if "fetch_images" in cmd_str:
+                call_stages.append("assets")
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with patch("run_job.subprocess.run", side_effect=side_effect):
+            with patch("run_job.load_metadata", return_value=v1_meta):
+                with patch("run_job.save_metadata"):
+                    with patch("run_job.os.path.exists", return_value=True):
+                        with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
+                            rc = main()
+                            assert rc == 1
+                            assert "script" in call_stages
+                            assert "assets" not in call_stages
+
+    def test_mixed_schema_rejected(self, fake_job_dir, capsys):
+        meta_path = str(fake_job_dir / "metadata.json")
+        script_output = json.dumps({"jobId": "test-1", "path": meta_path, "status": "SCRIPT_DRAFT"})
+        mixed_meta = {
+            "jobId": "test-1",
+            "status": "SCRIPT_DRAFT",
+            "createdAt": "2000-01-01T00:00:00.000Z",
+            "script": {
+                "scenes": [
+                    {"sceneNumber": 1, "visualPlan": {"_schemaVersion": 2}},
+                    {"sceneNumber": 2, "visualPlan": {"editorialRole": "B-Roll", "strategy": "search"}},
+                ]
+            },
+        }
+
+        def side_effect(cmd, **kw):
+            if "generate_script.py" in " ".join(cmd):
+                return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with patch("run_job.subprocess.run", side_effect=side_effect):
+            with patch("run_job.load_metadata", return_value=mixed_meta):
+                with patch("run_job.save_metadata") as mock_save:
+                    with patch("run_job.os.path.exists", return_value=True):
+                        with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
+                            rc = main()
+                            assert rc == 1
+                            saved = mock_save.call_args[0][1]
+                            assert saved["status"] == "FAILED"
+                            assert "MIXED_VISUAL_PLAN_SCHEMA_VERSIONS" in saved["failure"]["error"]
+
+    def test_invalid_schema_rejected(self, fake_job_dir, capsys):
+        meta_path = str(fake_job_dir / "metadata.json")
+        script_output = json.dumps({"jobId": "test-1", "path": meta_path, "status": "SCRIPT_DRAFT"})
+        invalid_meta = {
+            "jobId": "test-1",
+            "status": "SCRIPT_DRAFT",
+            "createdAt": "2000-01-01T00:00:00.000Z",
+            "script": {
+                "scenes": [
+                    {"sceneNumber": 1},
+                ]
+            },
+        }
+
+        def side_effect(cmd, **kw):
+            if "generate_script.py" in " ".join(cmd):
+                return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with patch("run_job.subprocess.run", side_effect=side_effect):
+            with patch("run_job.load_metadata", return_value=invalid_meta):
+                with patch("run_job.save_metadata") as mock_save:
+                    with patch("run_job.os.path.exists", return_value=True):
+                        with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
+                            rc = main()
+                            assert rc == 1
+                            saved = mock_save.call_args[0][1]
+                            assert saved["status"] == "FAILED"
+                            assert saved["failure"]["error"] == "INVALID_VISUAL_SCHEMA"
+
+    def test_v2_metadata_reaches_assets(self, fake_job_dir, capsys):
+        meta_path = str(fake_job_dir / "metadata.json")
+        script_output = json.dumps({"jobId": "test-1", "path": meta_path, "status": "SCRIPT_DRAFT"})
+        v2_meta = {
+            "jobId": "test-1",
+            "status": "SCRIPT_DRAFT",
+            "createdAt": "2000-01-01T00:00:00.000Z",
+            "script": {
+                "scenes": [
+                    {"sceneNumber": 1, "visualPlan": {"_schemaVersion": 2, "visualIntent": "show"}},
+                ]
+            },
+        }
+        assets_meta = {
+            "jobId": "test-1",
+            "status": "ASSETS_READY",
+            "createdAt": "2000-01-01T00:00:00.000Z",
+            "script": {
+                "scenes": [
+                    {"sceneNumber": 1, "visualPlan": {"_schemaVersion": 2, "visualIntent": "show"}},
+                ]
+            },
+        }
+
+        assets_dir = fake_job_dir / "assets"
+        assets_dir.mkdir()
+        (assets_dir / "seg_001.jpg").touch()
+
+        commands_run = []
+
+        def side_effect(cmd, **kw):
+            commands_run.append(" ".join(cmd))
+            cmd_str = " ".join(cmd)
+            if "generate_script.py" in cmd_str:
+                return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
+            if "fetch_images_v2.py" in cmd_str:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with patch("run_job.subprocess.run", side_effect=side_effect):
+            with patch("run_job.load_metadata",
+                       side_effect=[v2_meta, assets_meta, assets_meta]):
+                with patch("run_job.save_metadata"):
+                    with patch("run_job.os.path.exists", return_value=True):
+                        with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
+                            rc = main()
+                            assert rc == 0
+                            asset_cmds = [c for c in commands_run if "fetch_images_v2.py" in c]
+                            assert len(asset_cmds) == 1
+
+
+# ---------------------------------------------------------------------------
+# build_stage_command dispatch tests
+# ---------------------------------------------------------------------------
+
+class TestBuildStageCommandDispatch:
+
+    def test_assets_with_null_metadata(self):
+        cmd = build_stage_command("assets", "/path/meta.json", metadata=None)
+        assert cmd[1].endswith("fetch_images_v2.py")
+
+    def test_assets_with_v1_metadata(self):
+        cmd = build_stage_command("assets", "/path/meta.json", metadata=V1_FIXTURE)
+        assert cmd[1].endswith("fetch_images_v2.py")
+
+    def test_assets_with_v2_metadata(self):
+        cmd = build_stage_command("assets", "/path/meta.json", metadata=V2_FIXTURE)
+        assert cmd[1].endswith("fetch_images_v2.py")
+
+    def test_dry_run_shows_v2(self, capsys):
+        args = _make_args(topic="Test", duration=42, stop_after="validate")
+        rc = dry_run(args)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "fetch_images_v2.py" in out
+
+    def test_assets_script_appears_exactly_once(self):
+        cmd = build_stage_command("assets", "/path/meta.json")
+        count = sum(1 for c in cmd if "fetch_images_v2" in c)
+        assert count == 1
+
+
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------

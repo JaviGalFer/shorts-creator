@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-**Última actualización:** 2026-07-17
+**Última actualización:** 2026-07-22
 
 ## Estado global
 
@@ -10,7 +10,7 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 es el siguiente trabajo.
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit.
 
 ### Slice 1 completado (2026-07-17)
 
@@ -19,6 +19,19 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 - Tests focalizados: 13 passed, 0 failed
 - Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES` — único finding: descripción stale en session log (corregido)
 - No se ha implementado rechazo de jobs V1 ni eliminación de código V1
+
+### Slice 2 completado (2026-07-22)
+
+- `run_job.py`: clasificador `_classify_visual_schema()` fail-closed con 5 categorías
+- `run_job.py`: `_schema_error_for_category()` mapea categorías a errores del contrato
+- `run_job.py`: validación en bloque común post-script; V1 puro → `UNSUPPORTED_LEGACY_SCHEMA`; mixed → `MIXED_VISUAL_PLAN_SCHEMA_VERSIONS`; inválido → `INVALID_VISUAL_SCHEMA`
+- `run_job.py`: `build_stage_command()` siempre devuelve `fetch_images_v2.py` para assets desde el pipeline canónico
+- `fetch_images.py` sigue existiendo físicamente (retirada aplazada a Slice 4)
+- La rama V1 de `_verify_stage_contract` permanece en el archivo, pero es inalcanzable desde el pipeline canónico tras el guard. Su limpieza queda aplazada a Slice 4.
+- Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES` — sin findings funcionales bloqueantes
+- Tests focalizados confirmados: 62 passed, 0 failed
+- Slice 2 cerrado mediante commit de cierre
+- Slice 3 (siguiente trabajo) no iniciado
 
 ## Plan de transformación modular
 
@@ -48,7 +61,7 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 
 ## Próximos pasos
 
-1. Ejecutar Slice 2 del change `retire-legacy-visual-v1`
+1. Slice 3 del change `retire-legacy-visual-v1`: retirar lógica V1 de `generate_script.py`
 2. Estabilizar baseline V2 tras retirada de V1
 3. Phase B de audio pacing (tras migrar script/)
 4. Crear `pyproject.toml` y estructura `src/`
