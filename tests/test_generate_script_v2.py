@@ -89,36 +89,22 @@ class TestCliAndRequest:
     """Tests 1-4: CLI flag behavior and request metadata."""
 
     def test_default_uses_system_prompt(self, monkeypatch):
-        """Default (no --visual-schema-version) uses SYSTEM_PROMPT (v1)."""
+        """Default (no --visual-schema-version) uses SYSTEM_PROMPT_V2."""
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
-        tested = {"reached": False}
-
-        def mock_main():
-            import argparse
-            p = argparse.ArgumentParser()
-            p.add_argument("--topic", default="test")
-            p.add_argument("--visual-schema-version", type=int, choices=[1, 2], default=1)
-            p.add_argument("--dry-run", action="store_true", default=False)
-            from duration_profiles import add_duration_profile_args
-            add_duration_profile_args(p)
-            args = p.parse_args([])
-            assert args.visual_schema_version == 1
-            tested["reached"] = True
-            return 0
-
         monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "test", "--dry-run", "--model", "gpt-4o-mini"])
         exit_code = gs.main()
         assert exit_code == 0
 
-    def test_explicit_v1_uses_system_prompt(self, monkeypatch, capsys):
-        """--visual-schema-version 1 uses SYSTEM_PROMPT."""
+    def test_explicit_v1_is_rejected(self, monkeypatch, capsys):
+        """--visual-schema-version 1 is rejected by argparse with SystemExit(2)."""
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "test", "--visual-schema-version", "1",
                                            "--dry-run", "--model", "gpt-4o-mini"])
-        exit_code = gs.main()
-        assert exit_code == 0
-        out = capsys.readouterr().out
-        assert "visualSchemaVersion=1" in out
+        with pytest.raises(SystemExit) as exc_info:
+            gs.main()
+        assert exc_info.value.code == 2
+        err = capsys.readouterr().err
+        assert "invalid choice" in err.lower()
 
     def test_explicit_v2_uses_system_prompt_v2(self, monkeypatch, capsys):
         """--visual-schema-version 2 uses SYSTEM_PROMPT_V2."""
@@ -860,14 +846,17 @@ class TestNeutralDurationPrompt:
         assert "fecha con año" not in out
         assert "nombre propio relevante" not in out
 
-    def test_v1_prompt_preserves_historical_requirements(self, monkeypatch, capsys):
+    def test_v1_is_rejected_by_argparse(self, monkeypatch, capsys):
+        """--visual-schema-version 1 is rejected, no LLM called."""
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Berlín",
                                            "--visual-schema-version", "1", "--dry-run",
                                            "--model", "gpt-4o-mini", "--duration", "30"])
-        gs.main()
-        out = capsys.readouterr().out + capsys.readouterr().err
-        assert "detalles históricos" in out or "fecha" in out.lower()
+        with pytest.raises(SystemExit) as exc_info:
+            gs.main()
+        assert exc_info.value.code == 2
+        err = capsys.readouterr().err
+        assert "invalid choice" in err.lower()
 
     def test_aurora_dry_run_v2_no_historical_injection(self, monkeypatch, capsys):
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})

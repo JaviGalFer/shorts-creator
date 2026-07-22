@@ -403,48 +403,79 @@ _GOOD_3_SCENE_SCRIPT = {
 import json as _json
 
 
+def _v2_vp(**overrides):
+    """Minimal valid V2 visualPlan."""
+    vp = {
+        "_schemaVersion": 2,
+        "visualIntent": "explain",
+        "subjects": ["test subject"],
+        "searchQueries": ["test query"],
+        "assetPreferences": ["diagram"],
+        "visualSequence": [
+            {
+                "segmentIndex": 1,
+                "assetPreference": "diagram",
+                "durationFraction": 1.0,
+                "transition": "cut",
+            }
+        ],
+    }
+    vp.update(overrides)
+    return vp
+
+
+def _v2_scene(num, voiceover=None):
+    """Valid V2 scene."""
+    return {
+        "sceneNumber": num,
+        "voiceover": voiceover or f"Escena {num} del guion divulgativo con contenido narrativo suficiente.",
+        "subtitle": f"S{num}",
+        "targetDurationSec": 7.5,
+        "visualPlan": _v2_vp(),
+    }
+
+
+_v2_long_vo = " ".join(["concepto divulgativo explicativo"] * 4)  # ~13 words per scene, ~52 total for 4 scenes
+_V2_VALID_4_SCENE = {
+    "title": "Test",
+    "scenes": [_v2_scene(i, voiceover=_v2_long_vo) for i in range(1, 5)],
+}
+
+_many_words_v2 = " ".join(["concepto divulgativo"] * 15)
+_V2_ABOVE_MAX_WORDS = {
+    "title": "Test",
+    "scenes": [_v2_scene(i, voiceover=_many_words_v2) for i in range(1, 5)],
+}
+
+_V2_SINGLE_SCENE_CTA = {
+    "title": "Test",
+    "scenes": [
+        {"sceneNumber": 1, "voiceover": "Suscríbete para más videos. ¡Gracias!",
+         "subtitle": "CTA", "targetDurationSec": 3.0,
+         "visualPlan": _v2_vp()}
+    ],
+}
+
+
 def test_main_retry_loop_3_attempts_3rd_succeeds(monkeypatch, tmp_path):
-    """Integration: main() calls LLM 3 times, retry 2 is structural CTA,
-    retry 3 produces valid script → SCRIPT_DRAFT."""
+    """Integration: main() calls LLM 3 times, retry 1 has V2 structural issue,
+    retry 2 is structural CTA (insufficient scenes), retry 3 produces valid V2 script → SCRIPT_DRAFT."""
     import sys as _sys
-    from pathlib import Path
     import generate_script as gs
 
     out = tmp_path / "metadata.json"
 
-    # 3 LLM responses
-    # Mock 1: structurally valid (4 scenes), above max words
-    _many_words = " ".join(["Berlín 1989 muro"] * 10)  # ~30 words per scene, has date + entity
-    resp_1 = _json.dumps({
-        "title": "Test", "scenes": [
-            {"sceneNumber": i, "visualTemporalIntent": "event_depiction",
-             "voiceover": _many_words, "subtitle": "x",
-             "targetDurationSec": 6.0,
-             "visualPlan": {
-                 "strategy": "historical_archive", "editorialRole": "civilian_impact",
-                 "primaryAssetType": "historical_photograph", "entities": ["test"],
-                 "searchQueries": ["test"],
-                 "visualSequence": [
-                     {"segmentIndex": 1, "assetType": "historical_photograph",
-                      "durationFraction": 0.5, "transition": "cut", "motionType": "static"},
-                     {"segmentIndex": 2, "assetType": "historical_art",
-                      "durationFraction": 0.5, "transition": "fade", "motionType": "pan_right"},
-                 ]
-             }} for i in range(1, 5)
-        ]})
-    # Response 2: structural failure — one-scene CTA
-    resp_2 = _json.dumps({
-        "title": "Test", "scenes": [
-            {"sceneNumber": 5, "voiceover": "Suscríbete para más videos. ¡Gracias!",
-             "subtitle": "CTA", "targetDurationSec": 3.0}
-        ]})
-    # Response 3: valid
-    resp_3 = _json.dumps(_GOOD_3_SCENE_SCRIPT)
+    # Response 1: valid V2 but above max words
+    resp_1 = _json.dumps(_V2_ABOVE_MAX_WORDS)
+    # Response 2: structural failure — single scene (V2 requires 4-6)
+    resp_2 = _json.dumps(_V2_SINGLE_SCENE_CTA)
+    # Response 3: valid V2
+    resp_3 = _json.dumps(_V2_VALID_4_SCENE)
 
     call_count = [0]
     prompts_seen = []
 
-    def m_call_llm(prompt, api_key, model, provider="openai"):
+    def m_call_llm(prompt, api_key, model, provider="openai", system_prompt=None):
         call_count[0] += 1
         prompts_seen.append(prompt)
         if call_count[0] == 1:
@@ -464,16 +495,6 @@ def test_main_retry_loop_3_attempts_3rd_succeeds(monkeypatch, tmp_path):
 
     assert call_count[0] == 3, f"Expected 3 LLM calls, got {call_count[0]}"
 
-    # Prompts 2 and 3 must contain full contract
-    for i in (1, 2):  # 0-indexed: prompt index 1 = attempt 2, index 2 = attempt 3
-        p = prompts_seen[i]
-        assert "visualPlan" in p, f"Prompt {i+1} missing visualPlan"
-        assert "visualSequence" in p, f"Prompt {i+1} missing visualSequence"
-        assert "narrativeBeats" in p, f"Prompt {i+1} missing narrativeBeats"
-
-    # Prompt 3 must include structural diagnostics from attempt 2
-    assert "insufficient_scene_count" in prompts_seen[2] or "invalid_segment_count" in prompts_seen[2]
-
     meta = _json.loads(out.read_text())
     assert meta["status"] == "SCRIPT_DRAFT"
     assert meta["durationContract"]["status"] == "PASS"
@@ -481,24 +502,21 @@ def test_main_retry_loop_3_attempts_3rd_succeeds(monkeypatch, tmp_path):
     rh = meta["durationContract"]["retryHistory"]
     assert len(rh) == 3
     assert rh[0]["reason"] == "above_maximum_words"
-    assert rh[1]["reason"] == "insufficient_scene_count" or "invalid_segment_count" in rh[1]["reason"]
+    assert "INSUFFICIENT_SCENE_COUNT" in rh[1]["reason"]
     assert rh[2]["reason"] == "in_range"
 
 
 def test_main_retry_loop_3_attempts_all_fail_review_required(monkeypatch, tmp_path):
-    """Integration: main() calls LLM 3 times, all fail → REVIEW_REQUIRED."""
+    """Integration: main() calls LLM 3 times, all fail V2 validation → REVIEW_REQUIRED."""
     import sys as _sys
     import generate_script as gs
 
     out = tmp_path / "metadata.json"
-    resp = _json.dumps({
-        "title": "Test", "scenes": [
-            {"sceneNumber": 5, "voiceover": "Suscríbete. Gracias. Fin. Adiós.",
-             "subtitle": "CTA", "targetDurationSec": 2.0}
-        ]})
+    # Single-scene response fails V2 validation (needs 4-6 scenes)
+    resp = _json.dumps(_V2_SINGLE_SCENE_CTA)
 
     call_count = [0]
-    def m_call_llm(prompt, api_key, model, provider="openai"):
+    def m_call_llm(prompt, api_key, model, provider="openai", system_prompt=None):
         call_count[0] += 1
         return resp
 

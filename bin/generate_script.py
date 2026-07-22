@@ -461,7 +461,7 @@ def load_env():
 
 
 def call_llm(prompt: str, api_key: str, model: str, provider: str = "openai", system_prompt: str | None = None) -> str:
-    sp = system_prompt if system_prompt is not None else SYSTEM_PROMPT
+    sp = system_prompt if system_prompt is not None else SYSTEM_PROMPT_V2
     if provider == "openai":
         data = json.dumps({
             "model": model,
@@ -1105,8 +1105,8 @@ def main() -> int:
     parser.add_argument("--output", help="Output path for metadata.json (default: data/videos/{jobId}/metadata.json)")
     parser.add_argument("--dry-run", action="store_true", help="Print prompt and exit without calling API")
     parser.add_argument("--model", help="LLM model override")
-    parser.add_argument("--visual-schema-version", type=int, choices=[1, 2], default=2,
-                        help="VisualPlan schema version (1=legacy v1, 2=native v2)")
+    parser.add_argument("--visual-schema-version", type=int, choices=[2], default=2,
+                        help="VisualPlan schema version (only V2 supported)")
     add_duration_profile_args(parser)
     args = parser.parse_args()
 
@@ -1152,16 +1152,12 @@ def main() -> int:
         estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
     )
 
-    if visual_schema_version == 2:
-        active_system_prompt = SYSTEM_PROMPT_V2
-        base_prompt = _build_user_prompt_v2(args.topic, provisional_budget, strictness)
-    else:
-        active_system_prompt = None
-        base_prompt = _build_user_prompt(args.topic, provisional_budget, strictness)
+    active_system_prompt = SYSTEM_PROMPT_V2
+    base_prompt = _build_user_prompt_v2(args.topic, provisional_budget, strictness)
 
     if args.dry_run:
         print("=== SYSTEM PROMPT ===")
-        print(active_system_prompt if active_system_prompt else SYSTEM_PROMPT)
+        print(active_system_prompt)
         print("\n=== USER PROMPT ===")
         print(base_prompt)
         print("\n=== MODEL ===")
@@ -1198,41 +1194,26 @@ def main() -> int:
                 estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
             )
 
-            if visual_schema_version == 2:
-                # V2 structural validation
-                canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
-                    script_data, allow_generated_images=allow_generated_images,
-                )
-                v2_structural_issues = v2_errs
-                v2_valid = canonical is not None
+            # V2 structural validation
+            canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
+                script_data, allow_generated_images=allow_generated_images,
+            )
+            v2_structural_issues = v2_errs
+            v2_valid = canonical is not None
 
-                retry_inst = _build_retry_instruction_v2(
-                    retry_budget, word_count, scene_count, estimated_dur,
-                    structural_issues=v2_errs if not v2_valid else [],
-                    allow_generated_images=allow_generated_images,
-                )
-                base_retry = _build_user_prompt_v2(args.topic, retry_budget, strictness)
-                current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
-                print(f"Retry {retries}/{MAX_SCRIPT_ATTEMPTS - 1}: generated {word_count} words, "
-                      f"estimated {estimated_dur:.1f}s, "
-                      f"v2 valid={v2_valid}, errors={len(v2_errs)}")
-            else:
-                # V1 structural validation
-                sv = _validate_script_structure(script_data, MIN_SCENE_COUNT, args.topic)
-                retry_inst = _build_retry_instruction(
-                    retry_budget, word_count, scene_count, estimated_dur,
-                    structural_issues=sv["reasons"] if not sv["valid"] else None,
-                )
-                base_retry = _build_user_prompt(args.topic, retry_budget, strictness)
-                current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
-                print(f"Retry {retries}/{MAX_SCRIPT_ATTEMPTS - 1}: generated {word_count} words, "
-                      f"estimated {estimated_dur:.1f}s, need {retry_budget['minimumWords']}-{retry_budget['maximumWords']} words")
+            retry_inst = _build_retry_instruction_v2(
+                retry_budget, word_count, scene_count, estimated_dur,
+                structural_issues=v2_errs if not v2_valid else [],
+                allow_generated_images=allow_generated_images,
+            )
+            base_retry = _build_user_prompt_v2(args.topic, retry_budget, strictness)
+            current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
+            print(f"Retry {retries}/{MAX_SCRIPT_ATTEMPTS - 1}: generated {word_count} words, "
+                  f"estimated {estimated_dur:.1f}s, "
+                  f"v2 valid={v2_valid}, errors={len(v2_errs)}")
 
         try:
-            if visual_schema_version == 2:
-                content = call_llm(current_prompt, api_key, model, provider, system_prompt=SYSTEM_PROMPT_V2)
-            else:
-                content = call_llm(current_prompt, api_key, model, provider)
+            content = call_llm(current_prompt, api_key, model, provider, system_prompt=SYSTEM_PROMPT_V2)
         except Exception as e:
             print(f"ERROR calling LLM: {e}")
             return 1
@@ -1270,87 +1251,48 @@ def main() -> int:
         else:
             duration_ok = True
 
-        if visual_schema_version == 2:
-            # ── V2 validation ───────────────────────────────────────
-            canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
-                script_data, allow_generated_images=allow_generated_images,
-            )
-            v2_structural_issues = v2_errs
-            v2_valid = canonical is not None
+        # ── V2 validation ───────────────────────────────────────
+        canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
+            script_data, allow_generated_images=allow_generated_images,
+        )
+        v2_structural_issues = v2_errs
+        v2_valid = canonical is not None
 
-            if not v2_valid:
-                retry_reason = v2_errs[0]["code"] if v2_errs else "invalid_v2_structure"
-                retry_instruction = "fix_v2_structure_then_duration"
-            elif duration_ok:
-                retry_reason = "in_range"
-                retry_instruction = "none_needed"
-            elif word_count < final_budget["minimumWords"]:
-                retry_reason = "below_minimum_words"
-                retry_instruction = "expand_content"
-            elif word_count > final_budget["maximumWords"]:
-                retry_reason = "above_maximum_words"
-                retry_instruction = "reduce_content"
-            else:
-                retry_reason = "duration_out_of_range"
-                retry_instruction = "expand_content"
-
-            retry_entry: dict = {
-                "retry": retries,
-                "reason": retry_reason,
-                "actualWordCount": word_count,
-                "minimumWords": final_budget["minimumWords"],
-                "preferredWords": final_budget["preferredWords"],
-                "maximumWords": final_budget["maximumWords"],
-                "estimatedDurationSec": round(estimated_dur, 1),
-                "instructionType": retry_instruction,
-            }
-            if not v2_valid:
-                retry_entry["structuralIssues"] = _count_v2_structural_issue_codes(v2_errs)
-                retry_entry["structuralIssueDetails"] = _count_v2_structural_issue_messages(v2_errs)
-            retry_history.append(retry_entry)
-
-            if v2_valid and duration_ok:
-                script_data = canonical
-                print(f"  Accepted v2: canonical valid + duration OK ({estimated_dur:.1f}s within range)")
-                break
+        if not v2_valid:
+            retry_reason = v2_errs[0]["code"] if v2_errs else "invalid_v2_structure"
+            retry_instruction = "fix_v2_structure_then_duration"
+        elif duration_ok:
+            retry_reason = "in_range"
+            retry_instruction = "none_needed"
+        elif word_count < final_budget["minimumWords"]:
+            retry_reason = "below_minimum_words"
+            retry_instruction = "expand_content"
+        elif word_count > final_budget["maximumWords"]:
+            retry_reason = "above_maximum_words"
+            retry_instruction = "reduce_content"
         else:
-            # ── V1 validation ───────────────────────────────────────
-            sv = _validate_script_structure(script_data, MIN_SCENE_COUNT, args.topic)
+            retry_reason = "duration_out_of_range"
+            retry_instruction = "expand_content"
 
-            if not sv["valid"]:
-                retry_reason = sv["reasons"][0][0] if sv["reasons"] else "invalid_scene_structure"
-                retry_instruction = "fix_structure_then_duration"
-            elif duration_ok:
-                retry_reason = "in_range"
-                retry_instruction = "none_needed"
-            elif word_count < final_budget["minimumWords"]:
-                retry_reason = "below_minimum_words"
-                retry_instruction = "expand_factual_content"
-            elif word_count > final_budget["maximumWords"]:
-                retry_reason = "above_maximum_words"
-                retry_instruction = "reduce_content"
-            else:
-                retry_reason = "duration_out_of_range"
-                retry_instruction = "expand_content"
+        retry_entry: dict = {
+            "retry": retries,
+            "reason": retry_reason,
+            "actualWordCount": word_count,
+            "minimumWords": final_budget["minimumWords"],
+            "preferredWords": final_budget["preferredWords"],
+            "maximumWords": final_budget["maximumWords"],
+            "estimatedDurationSec": round(estimated_dur, 1),
+            "instructionType": retry_instruction,
+        }
+        if not v2_valid:
+            retry_entry["structuralIssues"] = _count_v2_structural_issue_codes(v2_errs)
+            retry_entry["structuralIssueDetails"] = _count_v2_structural_issue_messages(v2_errs)
+        retry_history.append(retry_entry)
 
-            retry_entry: dict = {
-                "retry": retries,
-                "reason": retry_reason,
-                "actualWordCount": word_count,
-                "minimumWords": final_budget["minimumWords"],
-                "preferredWords": final_budget["preferredWords"],
-                "maximumWords": final_budget["maximumWords"],
-                "estimatedDurationSec": round(estimated_dur, 1),
-                "instructionType": retry_instruction,
-            }
-            if not sv["valid"]:
-                retry_entry["structuralIssues"] = [code for code, _ in sv["reasons"]]
-                retry_entry["structuralIssueDetails"] = [msg for _, msg in sv["reasons"]]
-            retry_history.append(retry_entry)
-
-            if sv["valid"] and duration_ok:
-                print(f"  Accepted: structure valid + duration OK ({estimated_dur:.1f}s within range)")
-                break
+        if v2_valid and duration_ok:
+            script_data = canonical
+            print(f"  Accepted v2: canonical valid + duration OK ({estimated_dur:.1f}s within range)")
+            break
 
         retries += 1
 
@@ -1374,8 +1316,7 @@ def main() -> int:
         "mode": "images",
         "allowGeneratedImages": False,
     }
-    if visual_schema_version == 2:
-        visuals_request["schemaVersion"] = 2
+    visuals_request["schemaVersion"] = 2
 
     request = {
         "topic": args.topic,
@@ -1431,23 +1372,15 @@ def main() -> int:
     structure_valid_after_retries = True
     structure_issue_codes: list[str] = []
 
-    if visual_schema_version == 2:
-        canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
-            script_data, allow_generated_images=allow_generated_images,
-        )
-        v2_valid = canonical is not None
-        if not v2_valid:
-            structure_valid_after_retries = False
-            structure_issue_codes = _count_v2_structural_issue_codes(v2_errs)
-            for issue in v2_errs:
-                review_reasons.append(f"V2_STRUCTURE_{issue.get('code', 'UNKNOWN')}: {issue.get('message', '')}")
-    else:
-        sv = _validate_script_structure(script_data, MIN_SCENE_COUNT, args.topic)
-        if not sv["valid"]:
-            structure_valid_after_retries = False
-            structure_issue_codes = [code for code, _ in sv["reasons"]]
-            for code, msg in sv["reasons"]:
-                review_reasons.append(f"STRUCTURE_{code.upper()}: {msg}")
+    canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
+        script_data, allow_generated_images=allow_generated_images,
+    )
+    v2_valid = canonical is not None
+    if not v2_valid:
+        structure_valid_after_retries = False
+        structure_issue_codes = _count_v2_structural_issue_codes(v2_errs)
+        for issue in v2_errs:
+            review_reasons.append(f"V2_STRUCTURE_{issue.get('code', 'UNKNOWN')}: {issue.get('message', '')}")
 
     if not duration_ok_after_retries:
         review_reasons.append(
@@ -1460,8 +1393,8 @@ def main() -> int:
     all_ok = duration_ok_after_retries and structure_valid_after_retries
     status = "SCRIPT_DRAFT" if all_ok else "REVIEW_REQUIRED"
 
-    # For v2 REVIEW_REQUIRED after exhausted retries, add explicit reason
-    if not all_ok and visual_schema_version == 2 and retries >= MAX_SCRIPT_ATTEMPTS:
+    # For REVIEW_REQUIRED after exhausted retries, add explicit reason
+    if not all_ok and retries >= MAX_SCRIPT_ATTEMPTS:
         if not structure_valid_after_retries:
             review_reasons.insert(0, "VISUAL_PLAN_V2_INVALID: v2 plan validation failed after 3 attempts")
 
@@ -1477,9 +1410,9 @@ def main() -> int:
         "durationProfile": duration_profile_name,
     }
 
-    # For v2, use canonical script if available
+    # Use canonical script if available
     script_to_persist = script_data
-    if visual_schema_version == 2 and all_ok:
+    if all_ok:
         canonical, _, _ = _validate_and_canonicalize_script_v2(
             script_data, allow_generated_images=allow_generated_images,
         )

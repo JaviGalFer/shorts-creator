@@ -51,18 +51,19 @@ class TestGenerateScriptDefaultV2:
         out = capsys.readouterr().out
         assert "schemaVersion=2" in out
 
-    def test_explicit_v1_not_reinterpreted(self, monkeypatch, capsys):
-        """Explicit --visual-schema-version 1 is not reinterpreted as V2 during Slice 1."""
+    def test_explicit_v1_is_rejected(self, monkeypatch, capsys):
+        """Explicit --visual-schema-version 1 is rejected by argparse with SystemExit(2)."""
         monkeypatch.setattr("generate_script.load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", [
             "generate_script.py", "--topic", "test",
             "--visual-schema-version", "1",
             "--dry-run", "--model", "gpt-4o-mini",
         ])
-        exit_code = gs_main()
-        assert exit_code == 0
-        out = capsys.readouterr().out
-        assert "visualSchemaVersion=1" in out
+        with pytest.raises(SystemExit) as exc_info:
+            gs_main()
+        assert exc_info.value.code == 2
+        err = capsys.readouterr().err
+        assert "invalid choice" in err.lower()
 
 
 # ── Contract 2: build_script_command() always includes V2 flag ────────────────

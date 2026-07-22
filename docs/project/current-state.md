@@ -10,7 +10,7 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit.
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit.
 
 ### Slice 1 completado (2026-07-17)
 
@@ -31,7 +31,23 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 - Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES` — sin findings funcionales bloqueantes
 - Tests focalizados confirmados: 62 passed, 0 failed
 - Slice 2 cerrado mediante commit de cierre
-- Slice 3 (siguiente trabajo) no iniciado
+
+### Slice 3A cerrado (2026-07-22)
+
+- `generate_script.py`: `--visual-schema-version` choices restringido a `[2]`; `--visual-schema-version 1` produce `SystemExit(2)` vía argparse
+- `generate_script.py`: `call_llm` default cambiado de `SYSTEM_PROMPT` a `SYSTEM_PROMPT_V2`
+- `generate_script.py`: `main()` aplanado a V2-only — sin ramas productivas V1
+- `generate_script.py`: `visuals_request["schemaVersion"]` siempre 2; `visualSchemaVersion` stdout siempre 2
+- Sin flag y con flag `--visual-schema-version 2`, `generate_script.py` usa V2
+- Retry, validación y canonicalización son exclusivamente V2 en runtime
+- `run_job.py` continúa pasando `--visual-schema-version 2` (sin cambios)
+- SYSTEM_PROMPT y helpers V1 siguen físicamente presentes, sin callers productivos desde main()
+- Eliminación física de V1 pertenece a Slice 3B
+- Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES` — sin findings funcionales bloqueantes
+- Tests focalizados confirmados: 138 passed, 0 failed
+- Slice 3A cerrado mediante el commit de esta iteración
+- Slice 3B es el siguiente trabajo
+- Slice 4 no ha comenzado
 
 ## Plan de transformación modular
 
@@ -61,8 +77,8 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 
 ## Próximos pasos
 
-1. Slice 3 del change `retire-legacy-visual-v1`: retirar lógica V1 de `generate_script.py`
-2. Estabilizar baseline V2 tras retirada de V1
+1. Slice 3B del change `retire-legacy-visual-v1`: eliminación física de SYSTEM_PROMPT, helpers V1, imports y tests muertos
+2. Estabilizar baseline V2 tras eliminación de V1
 3. Phase B de audio pacing (tras migrar script/)
 4. Crear `pyproject.toml` y estructura `src/`
 5. Investigar instalación de ffprobe en el host
