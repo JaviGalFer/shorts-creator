@@ -1,5 +1,4 @@
 import pytest
-import re
 import sys
 from pathlib import Path
 
@@ -7,66 +6,6 @@ from pathlib import Path
 _BIN = Path(__file__).resolve().parents[1] / "bin"
 if str(_BIN) not in sys.path:
     sys.path.insert(0, str(_BIN))
-
-PROMPT_PATH = Path(__file__).resolve().parents[1] / "bin" / "generate_script.py"
-content = PROMPT_PATH.read_text()
-# Extract SYSTEM_PROMPT string between triple quotes
-m = re.search(r"SYSTEM_PROMPT\s*=\s*\"\"\"(.*?)\"\"\"", content, re.DOTALL)
-assert m, "Could not extract SYSTEM_PROMPT"
-SYSTEM_PROMPT = m.group(1)
-
-
-def test_prompt_has_decision_tree():
-    assert "Árbol de decisión" in SYSTEM_PROMPT
-
-
-def test_prompt_has_all_eight_roles_in_decision_tree():
-    roles_in_tree = [
-        "character_portrait",
-        "battle_or_assault",
-        "military_technology",
-        "civilian_impact",
-        "document_or_date",
-        "context_map",
-        "consequence_or_legacy",
-        "atmospheric_transition",
-    ]
-    for role in roles_in_tree:
-        assert role in SYSTEM_PROMPT, f"Role {role} missing from prompt"
-
-
-def test_context_map_has_exclusion_rule():
-    assert "NO usar para escenas que describen un evento" in SYSTEM_PROMPT
-
-
-def test_context_map_berlin_wall_example():
-    assert "El Muro de Berlín cayó en 1989" in SYSTEM_PROMPT
-    assert "battle_or_assault" in SYSTEM_PROMPT.split("El Muro de Berlín cayó en 1989")[1]
-
-
-def test_context_map_is_not_default():
-    assert "NO usar context_map como valor por defecto" in SYSTEM_PROMPT
-
-
-def test_context_map_restricted_to_geography():
-    assert "EXCLUSIVAMENTE para escenas donde el propósito visual principal es entender geografía" in SYSTEM_PROMPT
-
-
-def test_prompt_has_exclusion_rules_section():
-    assert "Reglas de exclusión" in SYSTEM_PROMPT
-
-
-def test_prompt_has_detailed_role_descriptions():
-    assert "Descripción detallada por rol" in SYSTEM_PROMPT
-
-
-def test_character_portrait_exclusion():
-    assert "NO usar si no hay una persona histórica específica" in SYSTEM_PROMPT
-
-
-def test_atmospheric_transition_max_20_percent():
-    assert "20%" in SYSTEM_PROMPT
-
 
 # ── Structural validation tests ────────────────────────────────────────
 
@@ -227,51 +166,6 @@ def test_structurally_invalid_accepted_only_if_duration_fits():
     assert "insufficient_scene_count" in codes or "cta_only_or_non_historical" in codes
 
 
-def test_retry_prompt_preserves_full_contract(monkeypatch):
-    """The retry prompt must contain the original schema/contract requirements
-    plus corrective instruction, not just a minimal correction message."""
-    import generate_script as gs
-
-    # Mock budget for the test
-    budget = {
-        "targetSec": 30, "minSec": 27, "maxSec": 35,
-        "minimumWords": 47, "preferredWords": 52, "maximumWords": 61,
-        "sceneCount": 5, "pauseSec": 1.4,
-        "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
-    }
-
-    retry_inst = gs._build_retry_instruction(
-        budget, actual_word_count=8, actual_scene_count=1, estimated_dur=4.4,
-        structural_issues=[
-            ("insufficient_scene_count", "1 scenes, need at least 4"),
-            ("cta_only_or_non_historical", "script lacks factual historical content"),
-        ],
-    )
-
-    # Retry instruction must include structural fix commands
-    assert "Problemas estructurales" in retry_inst
-    assert "insufficient_scene_count" in retry_inst
-    assert "cta_only_or_non_historical" in retry_inst
-    assert "Contrato de duración" in retry_inst
-    assert "Reglas obligatorias" in retry_inst
-    assert "4 Y 6 ESCENAS" in retry_inst
-    assert "visualPlan" in retry_inst
-    assert "visualSequence" in retry_inst
-    assert "narrativeBeats" in retry_inst
-    assert "motionType" in retry_inst
-
-    # Also test retry prompt preserves full user prompt contract
-    base = gs._build_user_prompt("La caída del Muro de Berlín", budget, "balanced")
-    assert "Genera un guion histórico" in base
-    assert "visualPlan Y visualSequence" in base
-    assert "DEBE tener 2 o más segmentos" in base
-    assert "narrativeBeats" in base
-    assert "motionType" in base
-    assert "Estilo de duración" in base or "duración" in base.lower()
-    assert "30" in base  # targetSec
-    assert "27" in base  # minSec
-
-
 def test_exhausted_retries_produce_review_required_structure_issues(monkeypatch):
     """When all retries are exhausted, the metadata must contain
     structureIssues and REVIEW_REQUIRED status with full retry history."""
@@ -306,99 +200,7 @@ def test_exhausted_retries_produce_review_required_structure_issues(monkeypatch)
     assert "structuralIssues" in retry_history[1]
 
 
-def test_build_user_prompt_contains_historical_requirements():
-    """_build_user_prompt must contain mandatory historical content rules."""
-    from generate_script import _build_user_prompt
-    budget = {
-        "targetSec": 30, "minSec": 27, "maxSec": 35,
-        "minimumWords": 47, "preferredWords": 52, "maximumWords": 61,
-        "sceneCount": 5, "pauseSec": 1.4,
-        "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
-    }
-    prompt = _build_user_prompt("La caída del Muro de Berlín", budget, "balanced")
-    assert "visualPlan" in prompt
-    assert "visualSequence" in prompt
-    assert "narrativeBeats" in prompt
-    assert "motionType" in prompt
-    assert "DEBE tener 2 o más segmentos" in prompt
-    assert "regla técnica obligatoria" in prompt.lower()
-
-
 # ── Retry-loop integration tests ────────────────────────────────────────
-
-_GOOD_3_SCENE_SCRIPT = {
-    "title": "Test",
-    "scenes": [
-        {
-            "sceneNumber": 1, "visualTemporalIntent": "event_depiction",
-            "voiceover": "El 13 de agosto de 1961 comenzó la construcción del Muro de Berlín.",
-            "subtitle": "Construcción", "targetDurationSec": 6.0,
-            "visualPlan": {
-                "strategy": "historical_archive", "editorialRole": "battle_or_assault",
-                "primaryAssetType": "historical_photograph", "period": "1961",
-                "location": "Berlín", "entities": ["Muro de Berlín"],
-                "searchQueries": ["Berlin Wall construction 1961"],
-                "visualSequence": [
-                    {"segmentIndex": 1, "assetType": "historical_photograph",
-                     "durationFraction": 0.5, "transition": "cut", "motionType": "slow_zoom_in"},
-                    {"segmentIndex": 2, "assetType": "historical_art",
-                     "durationFraction": 0.5, "transition": "fade", "motionType": "pan_right"},
-                ]
-            }
-        },
-        {
-            "sceneNumber": 2, "visualTemporalIntent": "event_depiction",
-            "voiceover": "Durante 28 años dividió Alemania en dos bloques enfrentados en la Guerra Fría.",
-            "subtitle": "División", "targetDurationSec": 6.0,
-            "visualPlan": {
-                "strategy": "historical_archive", "editorialRole": "context_map",
-                "primaryAssetType": "historical_map", "period": "1961-1989",
-                "location": "Berlín", "entities": ["Guerra Fría"],
-                "searchQueries": ["Berlin Wall division map Cold War"],
-                "visualSequence": [
-                    {"segmentIndex": 1, "assetType": "historical_map",
-                     "durationFraction": 0.5, "transition": "cut", "motionType": "slow_zoom_in"},
-                    {"segmentIndex": 2, "assetType": "document",
-                     "durationFraction": 0.5, "transition": "fade", "motionType": "pan_right"},
-                ]
-            }
-        },
-        {
-            "sceneNumber": 3, "visualTemporalIntent": "event_depiction",
-            "voiceover": "El 9 de noviembre de 1989 la presión popular derribó la barrera de hormigón.",
-            "subtitle": "Caída", "targetDurationSec": 6.0,
-            "visualPlan": {
-                "strategy": "historical_archive", "editorialRole": "civilian_impact",
-                "primaryAssetType": "historical_photograph", "period": "1989",
-                "location": "Berlín", "entities": ["Muro de Berlín"],
-                "searchQueries": ["Berlin Wall fall 1989"],
-                "visualSequence": [
-                    {"segmentIndex": 1, "assetType": "historical_photograph",
-                     "durationFraction": 0.5, "transition": "cut", "motionType": "slow_zoom_in"},
-                    {"segmentIndex": 2, "assetType": "historical_art",
-                     "durationFraction": 0.5, "transition": "fade", "motionType": "pan_right"},
-                ]
-            }
-        },
-        {
-            "sceneNumber": 4, "visualTemporalIntent": "legacy_or_commemoration",
-            "voiceover": "Hoy la Puerta de Brandeburgo recuerda a las víctimas. Suscríbete para más historia.",
-            "subtitle": "Legado", "targetDurationSec": 6.0,
-            "visualPlan": {
-                "strategy": "historical_archive", "editorialRole": "consequence_or_legacy",
-                "primaryAssetType": "historical_photograph", "period": "presente",
-                "location": "Berlín", "entities": ["Puerta de Brandeburgo"],
-                "searchQueries": ["Brandenburg Gate Berlin today memorial"],
-                "visualSequence": [
-                    {"segmentIndex": 1, "assetType": "historical_photograph",
-                     "durationFraction": 0.5, "transition": "cut", "motionType": "slow_zoom_in"},
-                    {"segmentIndex": 2, "assetType": "historical_art",
-                     "durationFraction": 0.5, "transition": "fade", "motionType": "pan_right"},
-                ]
-            }
-        },
-    ]
-}
 
 import json as _json
 
@@ -676,33 +478,6 @@ def test_shared_contract_used_by_fetch_and_generate():
     assert gs.is_asset_type_allowed is eac.is_asset_type_allowed
 
 
-# ── Prompt contract consistency tests ───────────────────────────────────
-
-
-def test_system_prompt_json_example_no_context_map_atmospheric_broll():
-    """The canonical JSON example must NOT show context_map paired with
-    atmospheric_broll, which the shared contract forbids."""
-    from generate_script import SYSTEM_PROMPT as sp
-    import json as _j
-    json_start = sp.find("## Formato JSON de salida")
-    assert json_start >= 0, "JSON example section not found"
-    json_block = sp[json_start:]
-    assert '"assetType": "atmospheric_broll"' not in json_block, (
-        "Canonical JSON example must not use atmospheric_broll with context_map"
-    )
-
-
-def test_prompt_prose_no_broll_for_portrait():
-    """Prompt prose must not instruct b-roll for character_portrait."""
-    from generate_script import SYSTEM_PROMPT as sp
-    composition_start = sp.find("Reglas de composición")
-    role_start = sp.find("Reglas de rol editorial")
-    portrait_section = sp[composition_start:role_start] if composition_start >= 0 and role_start > composition_start else sp
-    assert "broll atmosférico" not in portrait_section.lower(), (
-        "Portrait composition must not recommend atmospheric_broll"
-    )
-
-
 def test_validate_segment_for_role_uses_shared_helper():
     """_validate_segment_for_role must delegate to is_asset_type_allowed
     for requested-type checks."""
@@ -850,65 +625,6 @@ def test_civilian_impact_broll_rejected():
     result = _validate_script_structure(script, MIN_SCENE_COUNT, "Muro de Berlín")
     codes = [c for c, _ in result["reasons"]]
     assert "forbidden_segment_asset_type" in codes
-
-
-def test_system_prompt_schema_no_generic_broll():
-    """The canonical JSON schema must not present broll as valid for every role."""
-    from generate_script import SYSTEM_PROMPT as sp
-    json_start = sp.find("## Formato JSON de salida")
-    assert json_start >= 0
-    json_block = sp[json_start:]
-    # broll should not appear as a bare enum option without qualification
-    assert '"broll"\n' not in json_block or "compatible" in json_block, (
-        "Schema must qualify broll/broll usage"
-    )
-
-
-def test_retry_instruction_has_replacement_types(monkeypatch):
-    """Retry instruction for forbidden type must include valid replacement suggestions."""
-    import generate_script as gs
-
-    budget = {
-        "targetSec": 30, "minSec": 27, "maxSec": 35,
-        "minimumWords": 47, "preferredWords": 52, "maximumWords": 61,
-        "sceneCount": 5, "pauseSec": 1.4,
-        "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
-    }
-
-    retry_inst = gs._build_retry_instruction(
-        budget, actual_word_count=52, actual_scene_count=5, estimated_dur=29.8,
-        structural_issues=[
-            ("forbidden_segment_asset_type",
-             "scene 1 editorialRole=context_map forbids assetType=historical_photograph (use: historical_map, document, map)"),
-            ("forbidden_segment_asset_type",
-             "scene 3 editorialRole=battle_or_assault forbids assetType=atmospheric_broll (use: historical_photograph, historical_art, painting)"),
-        ],
-    )
-    assert "use:" in retry_inst
-    assert "historical_map" in retry_inst or "document" in retry_inst
-    assert "historical_photograph" in retry_inst or "historical_art" in retry_inst
-
-
-def test_retry_instruction_explicit_two_segments_rule():
-    """Retry instruction for insufficient_segments must explicitly require
-    exactly two segments for 5-7 second scenes."""
-    import generate_script as gs
-
-    budget = {
-        "targetSec": 30, "minSec": 27, "maxSec": 35,
-        "minimumWords": 47, "preferredWords": 52, "maximumWords": 61,
-        "sceneCount": 5, "pauseSec": 1.4,
-        "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
-    }
-
-    retry_inst = gs._build_retry_instruction(
-        budget, actual_word_count=61, actual_scene_count=5, estimated_dur=34.7,
-        structural_issues=[
-            ("invalid_segment_count_medium", "scene 1 duration 6s requires exactly 2 segments, got 1"),
-        ],
-    )
-    assert "2 segmentos" in retry_inst or "2 o más segmentos" in retry_inst
-    assert "durationFraction" in retry_inst or "durationfraction" in retry_inst.lower()
 
 
 # ── Allow-list explicit contract tests ───────────────────────────────────

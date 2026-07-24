@@ -33,17 +33,29 @@
 - [x] Tests CLI invertidos para rechazo V1 (`test_generate_script_v2.py`, `test_v2_only_generation_contract.py`)
 - [x] Tests focalizados: 138 passed, 0 failed
 
-### Slice 3B — Eliminación física de código V1 (pendiente)
+### Slice 3B1 — Eliminar V1 prompts y builders (completado, revisado y cerrado mediante el commit de esta iteración 2026-07-22)
 
-- [ ] `generate_script.py`: retirar `SYSTEM_PROMPT` V1
-- [ ] `generate_script.py`: retirar `_build_duration_prompt_instruction()`
+- [x] `generate_script.py`: retirar `SYSTEM_PROMPT` V1
+- [x] `generate_script.py`: retirar `_build_duration_prompt_instruction()`
+- [x] `generate_script.py`: retirar `_build_retry_instruction()`
+- [x] `generate_script.py`: retirar `_build_user_prompt()`
+- [x] Conservar `SYSTEM_PROMPT_V2` y funciones `_v2`
+- [x] Retirar tests exclusivamente V1 (17 tests: 13 tests de contenido de SYSTEM_PROMPT + 4 tests de builders V1)
+- [x] Conservar tests compartidos V1/V2
+- [x] Migrar tests neutrales de duración a equivalentes V2 (`test_duration_profiles.py`)
+- [x] Eliminar fixture `_GOOD_3_SCENE_SCRIPT` sin callers
+- [x] Eliminar `import re` y `PROMPT_PATH` sin uso residual
+
+### Slice 3B2 — Eliminar validator V1 (pendiente)
+
+- [ ] Revisar y trasladar cobertura útil del validator V1
 - [ ] `generate_script.py`: retirar `_validate_script_structure()`
-- [ ] `generate_script.py`: retirar `_build_retry_instruction()`
-- [ ] `generate_script.py`: retirar `_build_user_prompt()`
+- [ ] Eliminar imports editoriales muertos
+- [ ] Eliminar fixtures y helpers V1 restantes
+
+### Slice 3B3 — Eliminar `--visual-schema-version` CLI (pendiente)
+
 - [ ] `generate_script.py`: retirar `--visual-schema-version` CLI arg (ya no es necesario)
-- [ ] Conservar `SYSTEM_PROMPT_V2` y funciones `_v2`
-- [ ] Retirar tests exclusivamente V1
-- [ ] Conservar tests compartidos V1/V2
 
 ## Slice 4 — Remove legacy asset implementation
 
