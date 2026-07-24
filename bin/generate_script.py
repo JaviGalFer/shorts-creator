@@ -13,8 +13,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from duration_profiles import add_duration_profile_args, resolve_requested_duration, calculate_word_budget
-from editorial_asset_contract import is_asset_type_allowed, is_temporal_intent_allowed, allowed_asset_types_for_role
-import editorial_asset_contract
 from visual_plan_v2 import canonicalize_visual_plan_v2
 
 DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
@@ -294,114 +292,6 @@ def _build_duration_prompt_instruction_v2(budget: dict, strictness: str) -> str:
     lines.append(f"- El CTA debe incluirse dentro de la voz en off de la última escena, no como escena separada.")
     lines.append(f"- NO uses frases de relleno, CTA repetido, oraciones duplicadas ni pausas dramáticas falsas.")
     return "\n".join(lines)
-
-
-def _validate_script_structure(script_data: dict, min_scenes: int, topic: str) -> dict:
-    """Validate structural completeness of a generated script.
-
-    Returns {valid: bool, reasons: [(code, message), ...]}.
-    Duration is checked separately by the budget loop.
-    """
-    reasons: list[tuple[str, str]] = []
-    scenes = script_data.get("scenes", [])
-
-    if not scenes:
-        reasons.append(("empty_scenes", "script has no scenes"))
-        return {"valid": False, "reasons": reasons}
-
-    if len(scenes) < min_scenes:
-        reasons.append(("insufficient_scene_count",
-                        f"{len(scenes)} scenes, need at least {min_scenes}"))
-
-    scene_nums = []
-    for s in scenes:
-        sn = s.get("sceneNumber")
-        if isinstance(sn, (int, float)):
-            scene_nums.append(int(sn))
-        else:
-            scene_nums.append(sn)
-        vo = (s.get("voiceover") or "").strip()
-        if not vo:
-            reasons.append(("empty_voiceover",
-                            f"scene {sn} has empty voiceover"))
-        vp = s.get("visualPlan")
-        vti = s.get("visualTemporalIntent", "")
-        if not vp or not isinstance(vp, dict):
-            reasons.append(("missing_visualPlan",
-                            f"scene {sn} missing visualPlan"))
-        else:
-            er = vp.get("editorialRole", "")
-            # Temporal intent compatibility
-            if er and vti and not is_temporal_intent_allowed(er, vti):
-                allowed_intents = ", ".join(sorted(editorial_asset_contract.ROLE_INTENT_RULES.get(er, set())))
-                reasons.append(("forbidden_visual_temporal_intent",
-                                f"scene {sn} editorialRole={er} forbids visualTemporalIntent={vti} (allowed: {allowed_intents})"))
-            # Primary asset type compatibility
-            primary = vp.get("primaryAssetType", "")
-            if primary and er and not is_asset_type_allowed(er, primary, vti):
-                repl = editorial_asset_contract.suggest_replacement_types(er, primary, vti)
-                repl_hint = f" (use: {', '.join(repl[:3])})" if repl else ""
-                reasons.append(("forbidden_primary_asset_type",
-                                f"scene {sn} editorialRole={er} forbids primaryAssetType={primary}{repl_hint}"))
-            # Secondary asset type compatibility
-            secondary = vp.get("secondaryAssetType", "")
-            if secondary and secondary != "null" and er and not is_asset_type_allowed(er, secondary, vti):
-                repl = editorial_asset_contract.suggest_replacement_types(er, secondary, vti)
-                repl_hint = f" (use: {', '.join(repl[:3])})" if repl else ""
-                reasons.append(("forbidden_secondary_asset_type",
-                                f"scene {sn} editorialRole={er} forbids secondaryAssetType={secondary}{repl_hint}"))
-            vs = vp.get("visualSequence")
-            if not vs or not isinstance(vs, list) or len(vs) == 0:
-                reasons.append(("missing_visualSequence",
-                                f"scene {sn} missing visualSequence"))
-            else:
-                dur = s.get("targetDurationSec") or s.get("target_duration_sec") or 0
-                seg_count = len(vs)
-                if dur <= 4:
-                    if seg_count != 1:
-                        reasons.append(("invalid_segment_count_short",
-                                        f"scene {sn} duration {dur}s requires exactly 1 segment, got {seg_count}"))
-                elif dur < 8:
-                    if seg_count != 2:
-                        reasons.append(("invalid_segment_count_medium",
-                                        f"scene {sn} duration {dur}s requires exactly 2 segments, got {seg_count}"))
-                else:
-                    if seg_count < 2 or seg_count > 3:
-                        reasons.append(("invalid_segment_count_long",
-                                        f"scene {sn} duration {dur}s requires 2-3 segments, got {seg_count}"))
-                for seg in vs:
-                    seg_at = seg.get("assetType", "")
-                    if seg_at and not is_asset_type_allowed(er, seg_at, vti):
-                        repl = editorial_asset_contract.suggest_replacement_types(er, seg_at, vti)
-                        repl_hint = f" (use: {', '.join(repl[:3])})" if repl else ""
-                        reasons.append(("forbidden_segment_asset_type",
-                                        f"scene {sn} editorialRole={er} forbids assetType={seg_at}{repl_hint}"))
-
-    # Scene number order
-    numeric_scene_nums = [int(n) for n in scene_nums if isinstance(n, (int, float))]
-    if numeric_scene_nums and numeric_scene_nums != sorted(numeric_scene_nums):
-        reasons.append(("unordered_scenes", "scene numbers not ordered"))
-
-    # Historical content: at minimum, the script must mention the topic entity
-    # or include a proper name, date, or factual claim beyond a generic CTA.
-    all_vo = " ".join((s.get("voiceover") or "") for s in scenes)
-    has_date = bool(re.search(r'\b(1[89]\d{2}|20\d{2})\b', all_vo))
-    has_named_entity = False
-    topic_parts = [w for w in re.sub(r'[^a-záéíóúñü ]', '', topic.lower()).split() if len(w) > 2]
-    for part in topic_parts:
-        if part in all_vo.lower():
-            has_named_entity = True
-            break
-    if not has_named_entity:
-        proper_pattern = r'\b[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+\b'
-        if re.search(proper_pattern, all_vo):
-            has_named_entity = True
-    if not has_date and not has_named_entity:
-        reasons.append(("cta_only_or_non_historical",
-                        "script lacks factual historical content (no date or named entity)"))
-
-    valid = len(reasons) == 0
-    return {"valid": valid, "reasons": reasons}
 
 
 PROVISIONAL_SCENE_COUNT = 5

@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-**Última actualización:** 2026-07-22
+**Última actualización:** 2026-07-24
 
 ## Estado global
 
@@ -10,7 +10,7 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración.
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración.
 
 ### Slice 1 completado (2026-07-17)
 
@@ -47,10 +47,10 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 - Tests focalizados confirmados: 138 passed, 0 failed
 - Slice 3A cerrado mediante el commit de esta iteración
 
-### Slice 3B1 implementado pendiente de review y commit (2026-07-22)
+### Slice 3B1 implementado, revisado y cerrado mediante `5a4e7f2` (2026-07-22)
 
 - `generate_script.py`: cuatro símbolos V1 de prompts eliminados (`SYSTEM_PROMPT`, `_build_duration_prompt_instruction`, `_build_retry_instruction`, `_build_user_prompt`)
-- `tests/test_generate_script.py`: 13 tests V1 eliminados; 35 tests pasan (validator, retry-loop V2, asset-side, segment-count)
+- `tests/test_generate_script.py`: 17 tests V1 eliminados; 35 tests permanecen (validator, retry-loop V2, asset-side, segment-count)
 - `tests/test_duration_profiles.py`: migrados a equivalentes V2 vía aliases locales; 36 tests pasan
 - Fixture `_GOOD_3_SCENE_SCRIPT`, `PROMPT_PATH`, `import re` eliminados sin impacto
 - runtime continúa V2-only
@@ -62,8 +62,45 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
   - `test_generate_script_v2.py`: 77 passed
   - `test_v2_only_generation_contract.py`: 7 passed
   - `test_run_job.py -k build_script_command`: 2 passed
-- Slice 3B2 es el siguiente trabajo
+- Slice 3B3 es el siguiente trabajo
 - Slice 4 no ha comenzado
+
+### Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración (2026-07-24)
+
+- `_validate_script_structure` eliminado
+- imports editoriales eliminados de generate_script.py
+- import re conservado
+- tres re.sub productivos conservados
+- 25 tests dependientes del validator V1 eliminados
+- tests/test_generate_script.py queda con diez tests
+- _build_scene_script eliminado
+- _seg_script eliminado
+- test_shared_contract_used_by_fetch_and_generate transformado en test_fetch_images_imports_editorial_contract
+- reglas neutrales de estructura siguen cubiertas por _validate_and_canonicalize_script_v2 y tests/test_generate_script_v2.py
+- validación histórica V1 eliminada sin migración
+- reglas editorialRole, visualTemporalIntent y assetType V1 eliminadas de generate_script sin migración
+- segment-count V1 eliminado sin migración
+- editorial_asset_contract continúa utilizado por fetch_images.py hasta Slice 4
+- Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES`.
+- Cero findings bloqueantes.
+- Dos notas cosméticas dentro del slice corregidas antes del commit:
+  - separación de líneas top-level en generate_script.py;
+  - newline final en tests/test_generate_script.py.
+- Comentario stale de fetch_images.py aplazado a Slice 4.
+- tests focalizados:
+  - test_generate_script.py: 10 passed
+  - test_generate_script_v2.py: 77 passed
+  - test_duration_profiles.py: 36 passed
+  - test_v2_only_generation_contract.py: 7 passed
+  - test_run_job.py -k build_script_command: 2 passed
+  - total: 132 passed, 0 failed
+- Slice 3B3 es el siguiente trabajo
+- Slice 4 no ha comenzado
+
+## Resumen
+
+- Slice 3B1: 157 tests focalizados pasados, 0 fallidos
+- Slice 3B2: 132 tests focalizados pasados, 0 fallidos
 
 ## Plan de transformación modular
 
@@ -93,7 +130,7 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 
 ## Próximos pasos
 
-1. Slice 3B2 del change `retire-legacy-visual-v1`: eliminar `_validate_script_structure`, imports editoriales muertos y fixtures V1 restantes
+1. Slice 3B3 del change `retire-legacy-visual-v1`: retirar `--visual-schema-version` CLI
 2. Estabilizar baseline V2 tras eliminación de V1
 3. Phase B de audio pacing (tras migrar script/)
 4. Crear `pyproject.toml` y estructura `src/`

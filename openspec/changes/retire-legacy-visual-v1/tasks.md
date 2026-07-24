@@ -3,7 +3,7 @@
 ## Slice 1 — V2-only generation contract
 
 - [x] `generate_script.py`: cambiar default `--visual-schema-version` a `2`
-- [ ] `generate_script.py`: deprecar `--visual-schema-version 1` con warning + tratar como V2
+- [x] ~~`generate_script.py`: deprecar `--visual-schema-version 1` con warning + tratar como V2~~ — superseded por Slice 3A: V1 se rechaza mediante argparse con `SystemExit(2)`
 - [x] Tests focalizados de generación (V2 only)
 
 ## Slice 2 — V2-only asset runtime
@@ -46,12 +46,22 @@
 - [x] Eliminar fixture `_GOOD_3_SCENE_SCRIPT` sin callers
 - [x] Eliminar `import re` y `PROMPT_PATH` sin uso residual
 
-### Slice 3B2 — Eliminar validator V1 (pendiente)
+### Slice 3B2 — Eliminar validator V1 (completado, revisado y cerrado mediante el commit de esta iteración)
 
-- [ ] Revisar y trasladar cobertura útil del validator V1
-- [ ] `generate_script.py`: retirar `_validate_script_structure()`
-- [ ] Eliminar imports editoriales muertos
-- [ ] Eliminar fixtures y helpers V1 restantes
+- [x] Revisar y trasladar cobertura útil del validator V1
+- [x] `generate_script.py`: retirar `_validate_script_structure()`
+- [x] Eliminar imports editoriales muertos
+- [x] Eliminar fixtures y helpers V1 restantes
+- [x] Convertir test compartido a test funcional real
+- [x] Mantener `import re`, tres re.sub productivos intactos
+- [x] Conservar `editorial_asset_contract.py` para fetch_images hasta Slice 4
+- [x] **Conservar runtime, retry y validación V2-only**
+- [x] Ejecutar tests focalizados: 132 passed, 0 failed
+- [x] Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES`, sin findings bloqueantes.
+
+Queda pendiente:
+- Slice 3B3: retirar `--visual-schema-version` CLI
+- Slice 4: retirar legacy asset implementation
 
 ### Slice 3B3 — Eliminar `--visual-schema-version` CLI (pendiente)
 
