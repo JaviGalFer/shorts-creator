@@ -74,8 +74,8 @@
   - test_duration_profiles.py: 36 passed
 - [x] Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES`, sin findings bloqueantes.
 
-Queda pendiente:
-- Slice 4: retirar legacy asset implementation
+Queda pendiente dentro de Slice 4:
+- Slice 4B2: limpieza de configuración residual.
 
 ## Slice 4 — Remove legacy asset implementation
 
@@ -95,11 +95,27 @@ Queda pendiente:
   - `test_generate_script_v2.py`: 77 passed
   - `test_fetch_images_v2.py`: 39 passed
 
-Queda pendiente para Slice 4B:
-- [ ] Retirar `fetch_images.py` del runtime (mover a `tools/` o eliminar)
-- [ ] Eliminar `editorial_asset_contract.py`
-- [ ] Eliminar fixtures V1
-- [ ] No renombrar módulos `_v2` todavía
+### Slice 4B1 — Retirada física del código legacy y migración de cobertura (completado, revisado y cerrado mediante el commit de esta iteración)
+
+- [x] `bin/fetch_images.py` eliminado
+- [x] `bin/editorial_asset_contract.py` eliminado
+- [x] cero imports productivos o de tests hacia ambos módulos
+- [x] `test_semantic_asset_validation.py` reducido de 76 a 8 tests neutrales
+- [x] `test_no_topic_specific_contamination.py` reducido de 26 a 4 tests de asset_validation
+- [x] `test_generate_script.py` reducido de 10 a 3 tests de retry V2
+- [x] comentario stale de `asset_validation.py` corregido
+- [x] README actualizado con comando V2 válido
+- [x] runbook n8n actualizado sin flags V1 incompatibles
+- [x] tests focalizados ejecutados
+- [x] Review read-only final: `APPROVE_WITH_NON_BLOCKING_NOTES`, sin findings bloqueantes.
+- [x] Tests focalizados finales: 292 passed, 0 failed.
+
+Queda pendiente para Slice 4B2:
+- [ ] decidir PEXELS_API_KEY
+- [ ] revisar .env.example
+- [ ] revisar docker-compose.yml
+- [ ] revisar visual_provider_config_v2.py
+- [ ] actualizar docs/project/environment.md si procede
 
 ## Slice 5 — Product and documentation cleanup
 

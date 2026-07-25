@@ -10,7 +10,7 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración.
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B2 permanece pendiente.
 
 ### Slice 1 completado (2026-07-17)
 
@@ -156,12 +156,52 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 - Tests focalizados finales: 184 passed, 0 failed.
 - Slice 4B no iniciado
 
+### Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración (2026-07-25)
+
+- `fetch_images.py` eliminado físicamente
+- `editorial_asset_contract.py` eliminado físicamente
+- stack V2 intacto
+- cero imports residuales desde `bin/` y `tests/`
+- `test_semantic_asset_validation.py`: 76 tests → 8 tests
+- `test_no_topic_specific_contamination.py`: 26 tests → 4 tests
+- `test_generate_script.py`: 10 tests → 3 tests
+- 97 tests legacy eliminados
+- 15 tests neutrales conservados en esos tres archivos
+- configuración Pexels no modificada
+- Slice 4B2 no iniciado
+- tests focalizados: 292 passed, 0 failed
+- Review final: `APPROVE_WITH_NON_BLOCKING_NOTES`.
+- Cero findings bloqueantes.
+- Dos módulos legacy eliminados físicamente:
+
+  - `bin/fetch_images.py`;
+  - `bin/editorial_asset_contract.py`.
+- Cero imports o callers productivos residuales.
+- Stack V2 intacto.
+- Clasificación y rechazo V1/mixed/invalid del runner intactos.
+- 97 tests exclusivamente legacy eliminados.
+- 15 tests neutrales conservados.
+- Conteos finales:
+
+  - `test_semantic_asset_validation.py`: 8;
+  - `test_no_topic_specific_contamination.py`: 4;
+  - `test_generate_script.py`: 3.
+- Total focalizado final: 292 passed, 0 failed.
+- README y runbook primario utilizan CLI V2 válido.
+- Runbook primario documenta:
+
+  - script → assets → audio → prepare → render;
+  - assets visuales bajo `assets/`.
+- Configuración Pexels no modificada.
+- Slice 4B2 no iniciado.
+
 ## Resumen
 
 - Slice 3B1: 157 tests focalizados pasados, 0 fallidos
 - Slice 3B2: 132 tests focalizados pasados, 0 fallidos
 - Slice 3B3: 132 tests focalizados pasados, 0 fallidos
 - Slice 4A: implementado, revisado y cerrado mediante el commit de esta iteración
+- Slice 4B1: implementado, revisado y cerrado mediante el commit de esta iteración
 
 ## Plan de transformación modular
 
@@ -191,12 +231,12 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 
 ## Próximos pasos
 
-1. Slice 4B del change `retire-legacy-visual-v1`: retirar físicamente el stack legacy de assets.
-3. Phase B de audio pacing (tras migrar script/)
-4. Crear `pyproject.toml` y estructura `src/`
-5. Investigar instalación de ffprobe en el host
-6. Registrar FreeAI para imágenes de calidad gratuitas
-7. Integrar pipeline v2 con n8n
+1. Slice 4B2 del change `retire-legacy-visual-v1`: resolver la configuración residual de proveedores y PEXELS_API_KEY.
+2. Phase B de audio pacing (tras migrar script/)
+3. Crear `pyproject.toml` y estructura `src/`
+4. Investigar instalación de ffprobe en el host
+5. Registrar FreeAI para imágenes de calidad gratuitas
+6. Integrar pipeline v2 con n8n
 
 ## Audio pacing v2 — Phase A (completada 2026-07-14)
 

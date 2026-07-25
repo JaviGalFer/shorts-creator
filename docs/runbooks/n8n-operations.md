@@ -4,16 +4,16 @@
 
 ```bash
 # Cada vídeo vive en data/videos/{jobId}/
-# 1. Generar guion (LLM)
-python3 bin/generate_script.py data/videos/{jobId}/metadata.json
+# 1. Generar guion
+python3 bin/generate_script.py --topic "<tema>" --duration 30 --output data/videos/{jobId}/metadata.json
 
-# 2. Generar audio (Edge TTS)
+# 2. Descargar assets visuales
+python3 bin/fetch_images_v2.py data/videos/{jobId}/metadata.json
+
+# 3. Generar audio (Edge TTS)
 python3 bin/generate_audio.py data/videos/{jobId}/metadata.json
 
-# 3. Descargar imágenes
-python3 bin/fetch_images.py data/videos/{jobId}/metadata.json --provider pollinations
-
-# 4. Preparar subtítulos
+# 4. Preparar subtítulos y timeline
 python3 bin/prepare_job.py data/videos/{jobId}/metadata.json
 
 # 5. Renderizar vídeo
@@ -27,9 +27,11 @@ data/videos/{jobId}/
   video.mp4           <- Render final
   metadata.json       <- Job metadata
   subtitle.ass        <- Subtítulos (ASS o SRT)
+  assets/
+    seg_001.jpg
+    ...
   scenes/
-    scene-01.jpg      <- Imagen escena
-    scene-01.mp3      <- Audio escena
+    narration.mp3
     ...
 ```
 
@@ -37,11 +39,12 @@ data/videos/{jobId}/
 
 | Script | Función |
 |--------|---------|
+| `bin/generate_script.py` | Genera guion mediante LLM con plan visual V2 |
+| `bin/fetch_images_v2.py` | Descarga assets visuales mediante el pipeline V2 y los proveedores configurados. |
 | `bin/generate_audio.py` | Genera MP3 por escena vía Edge TTS |
-| `bin/fetch_images.py` | Descarga imágenes (Pollinations/FreeAI/Wikimedia) |
 | `bin/prepare_job.py` | Genera subtítulos ASS + consolida metadata |
 | `bin/render_job.py` | Renderiza MP4 final con FFmpeg Docker |
-| `review_job.py` | Aprueba/rechaza vídeo renderizado |
+| `bin/review_job.py` | Aprueba/rechaza vídeo renderizado |
 
 ## n8n workflows (legacy)
 

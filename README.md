@@ -109,7 +109,7 @@ python bin/run_job.py --topic "La caida de Constantinopla" --duration 42
 # Opción 2: etapas individuales
 python bin/generate_script.py "La caida de Constantinopla"
 python bin/generate_audio.py
-python bin/fetch_images.py
+python bin/fetch_images_v2.py
 python bin/render_job.py
 ```
 

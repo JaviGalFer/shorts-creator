@@ -29,7 +29,7 @@ EDITORIAL_ROLE_COMPATIBILITY = {
 
 THEME_CONSTRAINTS: dict[str, dict] = {
     # No hardcoded theme constraints — editorial coherence checks use
-    # the shared editorial_asset_contract allow-lists which are topic-agnostic.
+    # the allow-lists below, which are topic-agnostic.
 }
 
 LOW_CONFIDENCE_PROVIDERS = {"pollinations", "pexels"}
