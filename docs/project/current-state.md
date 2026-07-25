@@ -10,7 +10,7 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración.
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración.
 
 ### Slice 1 completado (2026-07-17)
 
@@ -120,14 +120,48 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 - Los diagnósticos `visualSchemaVersion=2` permanecen.
 - Los tests fueron transformados sin reducción de conteo.
 - Tests focalizados finales: 132 passed, 0 failed.
-- Slice 4 es el siguiente trabajo.
-- Slice 4 no ha comenzado.
+- Slice 4A es el siguiente trabajo.
+- Slice 4A implementado pendiente de review y commit.
+- Slice 4B no ha comenzado.
+
+### Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración (2026-07-25)
+
+- `run_job.py`: `STAGE_SCRIPTS` ya no referencia `fetch_images.py`
+- `run_job.py`: retirados `_collect_visual_plan_schema_versions`, `_uses_v2_visual_assets`, `_check_mixed_schema_versions`
+- `run_job.py`: `_verify_stage_contract` para assets simplificado a contrato V2-only (`assets/`, `V2_IMAGE_EXTENSIONS`)
+- `run_job.py`: clasificación y rechazo de V1/mixed/invalid conservado (`_classify_visual_schema`, `_schema_error_for_category`, `V1_POSITIVE_FIELDS`)
+- `tests/test_run_job_v2_assets.py`: retiradas 4 clases legacy (25 tests). Quedan 20 tests V2-only
+- `tests/test_generate_script_v2.py`: `test_run_job_modules_unchanged` transformado a contrato V2 vigente (77 tests)
+- `tests/test_run_job.py`: `test_assets_ready_with_images_passes` migrado a contrato V2 (`assets/`, schemaVersion=2)
+- `fetch_images.py` sigue existiendo hasta Slice 4B
+- `editorial_asset_contract.py` sigue existiendo hasta Slice 4B
+- Conteos AST finales: test_run_job_v2_assets.py=20, test_generate_script_v2.py=77, test_run_job.py=91
+- Tests focalizados:
+  - test_run_job_v2_assets.py: 20 passed, 0 failed
+  - test_run_job.py (5 clases focalizadas): 48 passed, 0 failed
+  - test_generate_script_v2.py: 77 passed, 0 failed
+  - test_fetch_images_v2.py: 39 passed, 0 failed
+- Total focalizado de Slice 4A: 184 passed, 0 failed.
+- El fallo de `test_v2_metadata_reaches_assets` se debía a reutilización de metadata mutable en el test y quedó corregido.
+- Cero regresiones focalizadas detectadas.
+- Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES`.
+- Cero findings bloqueantes.
+- Review confirmó que no existen callers productivos a `fetch_images.py` desde el runner.
+- Review confirmó que la clasificación y rechazo V1/mixed/invalid permanece intacta.
+- Review confirmó el contrato V2-only de assets.
+- Review confirmó los conteos AST:
+  - test_run_job_v2_assets.py: 20;
+  - test_generate_script_v2.py: 77;
+  - test_run_job.py: 91.
+- Tests focalizados finales: 184 passed, 0 failed.
+- Slice 4B no iniciado
 
 ## Resumen
 
 - Slice 3B1: 157 tests focalizados pasados, 0 fallidos
 - Slice 3B2: 132 tests focalizados pasados, 0 fallidos
 - Slice 3B3: 132 tests focalizados pasados, 0 fallidos
+- Slice 4A: implementado, revisado y cerrado mediante el commit de esta iteración
 
 ## Plan de transformación modular
 
@@ -157,12 +191,12 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 
 ## Próximos pasos
 
-1. Slice 4 del change `retire-legacy-visual-v1`: retirar legacy asset implementation.
-2. Phase B de audio pacing (tras migrar script/)
-3. Crear `pyproject.toml` y estructura `src/`
-4. Investigar instalación de ffprobe en el host
-5. Registrar FreeAI para imágenes de calidad gratuitas
-6. Integrar pipeline v2 con n8n
+1. Slice 4B del change `retire-legacy-visual-v1`: retirar físicamente el stack legacy de assets.
+3. Phase B de audio pacing (tras migrar script/)
+4. Crear `pyproject.toml` y estructura `src/`
+5. Investigar instalación de ffprobe en el host
+6. Registrar FreeAI para imágenes de calidad gratuitas
+7. Integrar pipeline v2 con n8n
 
 ## Audio pacing v2 — Phase A (completada 2026-07-14)
 

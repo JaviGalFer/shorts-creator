@@ -4,7 +4,6 @@ Run: python3 -m pytest tests/test_run_job_v2_assets.py -v
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -17,15 +16,8 @@ sys.path.insert(0, str(PROJECT / "bin"))
 import pytest
 
 from run_job import (
-    _collect_visual_plan_schema_versions,
-    _uses_v2_visual_assets,
-    _check_mixed_schema_versions,
     _verify_stage_contract,
     build_stage_command,
-    _classify_visual_schema,
-    _schema_error_for_category,
-    V1_POSITIVE_FIELDS,
-    STAGES,
     STAGE_SCRIPTS,
 )
 from visual_plan_v2 import SCHEMA_VERSION as V2_SCHEMA_VERSION
@@ -77,115 +69,6 @@ def _v1_scene(scene_number=1):
             "searchQueries": ["test v1 query"],
         },
     }
-
-
-# ---------------------------------------------------------------------------
-# _uses_v2_visual_assets
-# ---------------------------------------------------------------------------
-
-class TestUsesV2VisualAssets:
-
-    def test_true_for_v2_plan(self):
-        meta = {"script": {"scenes": [_v2_scene()]}}
-        assert _uses_v2_visual_assets(meta) is True
-
-    def test_false_for_v1_plan(self):
-        meta = {"script": {"scenes": [_v1_scene()]}}
-        assert _uses_v2_visual_assets(meta) is False
-
-    def test_false_for_no_visual_plan(self):
-        meta = {"script": {"scenes": [{"sceneNumber": 1}]}}
-        assert _uses_v2_visual_assets(meta) is False
-
-    def test_false_for_empty_metadata(self):
-        assert _uses_v2_visual_assets({}) is False
-
-    def test_false_for_no_scenes(self):
-        assert _uses_v2_visual_assets({"script": {}}) is False
-
-    def test_true_when_mixed_with_no_plan_scene(self):
-        meta = {"script": {"scenes": [_v2_scene(1), {"sceneNumber": 2}]}}
-        assert _uses_v2_visual_assets(meta) is True
-
-
-# ---------------------------------------------------------------------------
-# _collect_visual_plan_schema_versions
-# ---------------------------------------------------------------------------
-
-class TestCollectVisualPlanSchemaVersions:
-
-    def test_single_v2(self):
-        meta = {"script": {"scenes": [_v2_scene()]}}
-        assert _collect_visual_plan_schema_versions(meta) == {2}
-
-    def test_multiple_v2(self):
-        meta = {"script": {"scenes": [_v2_scene(1), _v2_scene(2, 2)]}}
-        assert _collect_visual_plan_schema_versions(meta) == {2}
-
-    def test_v1_and_v2(self):
-        meta = {"script": {"scenes": [_v2_scene(1), _v1_scene(2)]}}
-        versions = _collect_visual_plan_schema_versions(meta)
-        assert 2 in versions
-        # v1 has no _schemaVersion, so only 2 is collected
-        assert versions == {2}
-
-    def test_no_visual_plans(self):
-        meta = {"script": {"scenes": [{"sceneNumber": 1}]}}
-        assert _collect_visual_plan_schema_versions(meta) == set()
-
-    def test_empty_metadata(self):
-        assert _collect_visual_plan_schema_versions({}) == set()
-
-
-# ---------------------------------------------------------------------------
-# _check_mixed_schema_versions
-# ---------------------------------------------------------------------------
-
-class TestCheckMixedSchemaVersions:
-
-    def test_no_mixed_for_all_v2(self):
-        meta = {"script": {"scenes": [_v2_scene(1), _v2_scene(2, 2)]}}
-        assert _check_mixed_schema_versions(meta) is None
-
-    def test_no_mixed_for_no_v2(self):
-        meta = {"script": {"scenes": [_v1_scene()]}}
-        assert _check_mixed_schema_versions(meta) is None
-
-    def test_no_mixed_for_no_visual_plans(self):
-        meta = {"script": {"scenes": [{"sceneNumber": 1}]}}
-        assert _check_mixed_schema_versions(meta) is None
-
-    def test_scenes_without_visual_plan_ignored(self):
-        meta = {"script": {"scenes": [_v2_scene(1), {"sceneNumber": 2}]}}
-        assert _check_mixed_schema_versions(meta) is None
-
-    def test_mixed_v1_v2_schema_fails(self):
-        meta = {"script": {"scenes": [
-            {"sceneNumber": 1, "visualPlan": {"_schemaVersion": V2_SCHEMA_VERSION}},
-            {"sceneNumber": 2, "visualPlan": {"_schemaVersion": 1}},
-        ]}}
-        assert _check_mixed_schema_versions(meta) == "MIXED_VISUAL_PLAN_SCHEMA_VERSIONS"
-
-    def test_mixed_no_schema_version_field_fails(self):
-        meta = {"script": {"scenes": [
-            {"sceneNumber": 1, "visualPlan": {"_schemaVersion": V2_SCHEMA_VERSION}},
-            {"sceneNumber": 2, "visualPlan": {}},
-        ]}}
-        assert _check_mixed_schema_versions(meta) == "MIXED_VISUAL_PLAN_SCHEMA_VERSIONS"
-
-    def test_mixed_non_int_schema_version_fails(self):
-        meta = {"script": {"scenes": [
-            {"sceneNumber": 1, "visualPlan": {"_schemaVersion": V2_SCHEMA_VERSION}},
-            {"sceneNumber": 2, "visualPlan": {"_schemaVersion": "2"}},
-        ]}}
-        assert _check_mixed_schema_versions(meta) == "MIXED_VISUAL_PLAN_SCHEMA_VERSIONS"
-
-    def test_mixed_bool_schema_version_fails(self):
-        meta = {"script": {"scenes": [
-            {"sceneNumber": 1, "visualPlan": {"_schemaVersion": V2_SCHEMA_VERSION}},
-            {"sceneNumber": 2, "visualPlan": {"_schemaVersion": True}},
-        ]}}
-        assert _check_mixed_schema_versions(meta) == "MIXED_VISUAL_PLAN_SCHEMA_VERSIONS"
 
 
 # ---------------------------------------------------------------------------
@@ -334,70 +217,6 @@ class TestV2AssetsContract:
         assert ok is False
         assert err is not None
         assert "STAGE_OUTPUT_CONTRACT_FAILED" in err
-
-
-# ---------------------------------------------------------------------------
-# v1 assets contract — unchanged behavior
-# ---------------------------------------------------------------------------
-
-class TestV1AssetsContractUnchanged:
-
-    def test_v1_assets_ready_with_scene_images_passes(self, fake_job_dir):
-        scenes_dir = fake_job_dir / "scenes"
-        scenes_dir.mkdir()
-        (scenes_dir / "scene-1.jpg").touch()
-        meta_path = str(fake_job_dir / "metadata.json")
-        data = {"status": "ASSETS_READY"}
-        result = _make_completed_process(0)
-        ok, status, err = _verify_stage_contract("assets", data, meta_path, result)
-        assert ok is True
-        assert status == "ASSETS_READY"
-
-    def test_v1_assets_partial_fails_contract(self, fake_job_dir):
-        meta_path = str(fake_job_dir / "metadata.json")
-        data = {"status": "ASSETS_PARTIAL"}
-        result = _make_completed_process(0)
-        ok, status, err = _verify_stage_contract("assets", data, meta_path, result)
-        assert ok is False
-        assert err is not None
-        assert "STAGE_OUTPUT_CONTRACT_FAILED" in err
-
-    def test_v1_asset_unresolved_blocks(self, fake_job_dir):
-        meta_path = str(fake_job_dir / "metadata.json")
-        data = {"status": "ASSET_UNRESOLVED"}
-        result = _make_completed_process(0)
-        ok, status, err = _verify_stage_contract("assets", data, meta_path, result)
-        assert ok is False
-        assert status == "ASSET_UNRESOLVED"
-        assert err is None
-
-    def test_v1_assets_ready_no_scene_dir_fails(self, fake_job_dir):
-        meta_path = str(fake_job_dir / "metadata.json")
-        data = {"status": "ASSETS_READY"}
-        result = _make_completed_process(0)
-        ok, status, err = _verify_stage_contract("assets", data, meta_path, result)
-        assert ok is False
-        assert err is not None
-        assert "STAGE_OUTPUT_CONTRACT_FAILED" in err
-
-    def test_v1_assets_ready_empty_scenes_dir_fails(self, fake_job_dir):
-        scenes_dir = fake_job_dir / "scenes"
-        scenes_dir.mkdir()
-        meta_path = str(fake_job_dir / "metadata.json")
-        data = {"status": "ASSETS_READY"}
-        result = _make_completed_process(0)
-        ok, status, err = _verify_stage_contract("assets", data, meta_path, result)
-        assert ok is False
-        assert err is not None
-
-    def test_v1_review_required_blocks(self, fake_job_dir):
-        meta_path = str(fake_job_dir / "metadata.json")
-        data = {"status": "REVIEW_REQUIRED"}
-        result = _make_completed_process(0)
-        ok, status, err = _verify_stage_contract("assets", data, meta_path, result)
-        assert ok is False
-        assert status == "REVIEW_REQUIRED"
-        assert err is None
 
 
 # ---------------------------------------------------------------------------
@@ -619,6 +438,7 @@ def test_no_provider_modules_imported_in_run_job():
 # ---------------------------------------------------------------------------
 
 def test_non_assets_stages_preserve_scripts():
+    assert "assets" not in STAGE_SCRIPTS
     v2_meta = {"script": {"scenes": [_v2_scene()]}}
     for stage, script in STAGE_SCRIPTS.items():
         if stage == "assets":

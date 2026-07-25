@@ -79,9 +79,26 @@ Queda pendiente:
 
 ## Slice 4 — Remove legacy asset implementation
 
+### Slice 4A — Retirar ramas runtime legacy de assets (completado, revisado y cerrado mediante el commit de esta iteración)
+
+- [x] entrada assets legacy eliminada de STAGE_SCRIPTS
+- [x] helpers muertos eliminados (_collect_visual_plan_schema_versions, _uses_v2_visual_assets, _check_mixed_schema_versions)
+- [x] `_verify_stage_contract` simplificado a contrato V2-only
+- [x] clasificación y rechazo de V1/mixed/invalid conservados
+- [x] tests legacy del runner retirados (4 clases, 25 tests)
+- [x] compatibilidad V2 de generación transformada
+- [x] test assets-ready del runner migrado a assets/
+- [x] Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES`, sin findings bloqueantes.
+- [x] Tests focalizados: 184 passed, 0 failed
+  - `test_run_job_v2_assets.py`: 20 passed
+  - cinco clases focalizadas de `test_run_job.py`: 48 passed
+  - `test_generate_script_v2.py`: 77 passed
+  - `test_fetch_images_v2.py`: 39 passed
+
+Queda pendiente para Slice 4B:
 - [ ] Retirar `fetch_images.py` del runtime (mover a `tools/` o eliminar)
+- [ ] Eliminar `editorial_asset_contract.py`
 - [ ] Eliminar fixtures V1
-- [ ] Eliminar configuración usada únicamente por V1
 - [ ] No renombrar módulos `_v2` todavía
 
 ## Slice 5 — Product and documentation cleanup

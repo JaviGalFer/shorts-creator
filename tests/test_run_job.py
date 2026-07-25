@@ -612,11 +612,14 @@ def _make_completed_process(returncode=0, stdout="", stderr=""):
 class TestVerifyStageContract:
 
     def test_assets_ready_with_images_passes(self, fake_job_dir):
-        scenes_dir = fake_job_dir / "scenes"
-        scenes_dir.mkdir()
-        (scenes_dir / "scene-1.jpg").touch()
+        assets_dir = fake_job_dir / "assets"
+        assets_dir.mkdir()
+        (assets_dir / "seg_001.jpg").touch()
         meta_path = str(fake_job_dir / "metadata.json")
-        data = {"status": "ASSETS_READY"}
+        data = {
+            "status": "ASSETS_READY",
+            "script": {"scenes": [{"sceneNumber": 1, "visualPlan": {"_schemaVersion": 2}}]},
+        }
         result = _make_completed_process(0)
         ok, status, err = _verify_stage_contract("assets", data, meta_path, result)
         assert ok is True
@@ -641,14 +644,14 @@ class TestVerifyStageContract:
         assert status == "ASSET_UNRESOLVED"
         assert err is None  # known blocking status
 
-    def test_assets_partial_fails_contract(self, fake_job_dir):
+    def test_assets_partial_graceful_block(self, fake_job_dir):
         meta_path = str(fake_job_dir / "metadata.json")
         data = {"status": "ASSETS_PARTIAL"}
         result = _make_completed_process(0)
         ok, status, err = _verify_stage_contract("assets", data, meta_path, result)
         assert ok is False
-        assert err is not None
-        assert "STAGE_OUTPUT_CONTRACT_FAILED" in err
+        assert status == "ASSETS_PARTIAL"
+        assert err is None
 
     def test_assets_stale_running_status_fails(self, fake_job_dir):
         meta_path = str(fake_job_dir / "metadata.json")
@@ -1480,7 +1483,7 @@ class TestMainSchemaRejection:
 
         with patch("run_job.subprocess.run", side_effect=side_effect):
             with patch("run_job.load_metadata",
-                       side_effect=[v2_meta, assets_meta, assets_meta]):
+                       side_effect=[dict(v2_meta), dict(v2_meta), dict(assets_meta), dict(assets_meta)]):
                 with patch("run_job.save_metadata"):
                     with patch("run_job.os.path.exists", return_value=True):
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):

@@ -705,7 +705,7 @@ class TestV2Compatibility:
 
     def test_run_job_modules_unchanged(self):
         """run_job.py still handles v2 dispatch correctly."""
-        from run_job import _uses_v2_visual_assets, _collect_visual_plan_schema_versions
+        from run_job import _classify_visual_schema, build_stage_command
         v2_meta = {
             "script": {
                 "scenes": [
@@ -713,7 +713,9 @@ class TestV2Compatibility:
                 ]
             }
         }
-        assert _uses_v2_visual_assets(v2_meta) is True
+        assert _classify_visual_schema(v2_meta) == "SUPPORTED_V2"
+        cmd = build_stage_command("assets", "/path/meta.json", metadata=v2_meta)
+        assert cmd[1].endswith("fetch_images_v2.py")
 
     def test_e2e_metadata_still_valid_for_canonicalizer(self):
         """Previous E2E metadata can still be canonicalized."""
