@@ -1,0 +1,58 @@
+# Sesión: Implement retire V1 Slice 3B3 CLI
+
+- Fecha: 2026-07-25
+- Objetivo: Retirar `--visual-schema-version` del CLI de generation y del comando productivo en run_job.py
+- Estado inicial: HEAD f6bc903, working tree limpio (slot conocido: permisos en data/postgres/)
+- Estado final: 132 tests focalizados passed, Slice 3B3 implementado pendiente de review
+- Agente responsable: opencode/deepseek-v4-flash-free (default)
+- Cambio OpenSpec relacionado: retire-legacy-visual-v1 (Slice 3B3)
+- Riesgo asumido: Ninguno — runtime ya V2-only; el selector CLI era redundante
+- Validaciones realizadas:
+  - Inventario inicial exacto de referencias `--visual-schema-version`
+  - Conteos AST confirmados (77 + 7 + 10 + 36 = 130 tests, + 2 build_script_command = 132)
+  - Zero `--visual-schema-version` en bin/ tras edición
+  - Zero variable `visual_schema_version` productiva
+  - `visualSchemaVersion=2` conservado como literal en diagnósticos
+  - `visuals_request["schemaVersion"] = 2` conservado
+  - test_generate_script_v2.py: 77 tests (sin reducción)
+  - test_v2_only_generation_contract.py: 7 tests (sin reducción)
+  - 132 passed, 0 failed
+  - reindex exitoso sin persistencia
+- Archivos modificados:
+  - bin/generate_script.py
+  - bin/run_job.py
+  - tests/test_generate_script_v2.py
+  - tests/test_v2_only_generation_contract.py
+  - openspec/changes/retire-legacy-visual-v1/tasks.md
+  - docs/project/current-state.md
+  - docs/sessions/20260725-134500-retire-legacy-visual-v1-slice-3b3.md (nuevo)
+- Comandos ejecutados:
+  - python3 -m pytest tests/test_generate_script_v2.py -q → 77 passed
+  - python3 -m pytest tests/test_v2_only_generation_contract.py -q → 7 passed
+  - python3 -m pytest tests/test_run_job.py -k "build_script_command" -q → 2 passed
+  - python3 -m pytest tests/test_generate_script.py -q → 10 passed
+  - python3 -m pytest tests/test_duration_profiles.py -q → 36 passed
+  - Total focalizado: 132 passed, 0 failed
+  - codebase-memory-mcp index_repository (mode fast, no persistence)
+- Resultado: Slice 3B3 implementado. CLI selector eliminado. Tests transformados sin reducción de conteo.
+- Próximos pasos: Review read-only de Slice 3B3. Tras cierre, Slice 4.
+- Bloqueos o decisiones pendientes: Ninguno. Sin commit. Sin push. Sin Slice 4.
+
+## Review y cierre
+
+- Verdict: `APPROVE_WITH_NON_BLOCKING_NOTES`.
+- Cero findings bloqueantes.
+- Review confirmó que el selector desapareció de generate_script.py.
+- Review confirmó que run_job.py dejó de pasar el selector.
+- Review confirmó que `request.visuals.schemaVersion=2` permanece.
+- Review confirmó que los diagnósticos `visualSchemaVersion=2` permanecen.
+- Review confirmó que no se eliminaron tests.
+- Review confirmó 77 tests en test_generate_script_v2.py.
+- Review confirmó 7 tests en test_v2_only_generation_contract.py.
+- Review confirmó 132 passed, 0 failed.
+- Encabezado stale del test corregido.
+- Referencia stale de tasks.md corregida.
+- Fecha y referencia histórica de current-state.md corregidas.
+- Commit: `refactor(script): remove visual schema CLI selector`.
+- Ningún push.
+- Próxima acción: Slice 4 — retirar legacy asset implementation.

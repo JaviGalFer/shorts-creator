@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-**Última actualización:** 2026-07-24
+**Última actualización:** 2026-07-25
 
 ## Estado global
 
@@ -10,7 +10,7 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración.
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración.
 
 ### Slice 1 completado (2026-07-17)
 
@@ -52,7 +52,7 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 - `generate_script.py`: cuatro símbolos V1 de prompts eliminados (`SYSTEM_PROMPT`, `_build_duration_prompt_instruction`, `_build_retry_instruction`, `_build_user_prompt`)
 - `tests/test_generate_script.py`: 17 tests V1 eliminados; 35 tests permanecen (validator, retry-loop V2, asset-side, segment-count)
 - `tests/test_duration_profiles.py`: migrados a equivalentes V2 vía aliases locales; 36 tests pasan
-- Fixture `_GOOD_3_SCENE_SCRIPT`, `PROMPT_PATH`, `import re` eliminados sin impacto
+- Fixture `_GOOD_3_SCENE_SCRIPT`, `PROMPT_PATH` eliminados sin impacto; `import re` eliminado de tests/test_generate_script.py (conservado en bin/generate_script.py)
 - runtime continúa V2-only
 - `_validate_script_structure` continúa temporalmente presente (Slice 3B2)
 - Tests del validator V1 siguen presentes (Slice 3B2)
@@ -62,7 +62,7 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
   - `test_generate_script_v2.py`: 77 passed
   - `test_v2_only_generation_contract.py`: 7 passed
   - `test_run_job.py -k build_script_command`: 2 passed
-- Slice 3B3 es el siguiente trabajo
+- Slice 3B2 es el siguiente trabajo
 - Slice 4 no ha comenzado
 
 ### Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración (2026-07-24)
@@ -97,10 +97,37 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 - Slice 3B3 es el siguiente trabajo
 - Slice 4 no ha comenzado
 
+### Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración (2026-07-25)
+
+- `generate_script.py`: argumento `--visual-schema-version` eliminado del parser
+- `generate_script.py`: variable `args.visual_schema_version` eliminada
+- `generate_script.py`: `request.visuals.schemaVersion=2` conservado
+- `generate_script.py`: `visualSchemaVersion=2` conservado en salidas diagnósticas (dry-run, normal, JSON)
+- `generate_script.py`: exactamente tres `re.sub` conservados
+- `run_job.py`: `build_script_command()` ya no pasa el selector
+- `run_job.py`: validación de schema V1/mixed/invalid permanece intacta
+- Tests del selector transformados, no eliminados
+- `test_generate_script_v2.py` continúa con 77 tests
+- `test_v2_only_generation_contract.py` continúa con 7 tests
+- `test_generate_script.py`: 10 tests (sin cambios)
+- `test_duration_profiles.py`: 36 tests (sin cambios)
+- `test_run_job.py -k build_script_command`: 2 tests (sin cambios)
+- Total focalizado: 132 passed, 0 failed
+- Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES`.
+- Cero findings bloqueantes.
+- El selector CLI fue eliminado del parser y del caller productivo.
+- El contrato persistido `request.visuals.schemaVersion=2` permanece.
+- Los diagnósticos `visualSchemaVersion=2` permanecen.
+- Los tests fueron transformados sin reducción de conteo.
+- Tests focalizados finales: 132 passed, 0 failed.
+- Slice 4 es el siguiente trabajo.
+- Slice 4 no ha comenzado.
+
 ## Resumen
 
 - Slice 3B1: 157 tests focalizados pasados, 0 fallidos
 - Slice 3B2: 132 tests focalizados pasados, 0 fallidos
+- Slice 3B3: 132 tests focalizados pasados, 0 fallidos
 
 ## Plan de transformación modular
 
@@ -130,13 +157,12 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 
 ## Próximos pasos
 
-1. Slice 3B3 del change `retire-legacy-visual-v1`: retirar `--visual-schema-version` CLI
-2. Estabilizar baseline V2 tras eliminación de V1
-3. Phase B de audio pacing (tras migrar script/)
-4. Crear `pyproject.toml` y estructura `src/`
-5. Investigar instalación de ffprobe en el host
-6. Registrar FreeAI para imágenes de calidad gratuitas
-7. Integrar pipeline v2 con n8n
+1. Slice 4 del change `retire-legacy-visual-v1`: retirar legacy asset implementation.
+2. Phase B de audio pacing (tras migrar script/)
+3. Crear `pyproject.toml` y estructura `src/`
+4. Investigar instalación de ffprobe en el host
+5. Registrar FreeAI para imágenes de calidad gratuitas
+6. Integrar pipeline v2 con n8n
 
 ## Audio pacing v2 — Phase A (completada 2026-07-14)
 

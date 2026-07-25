@@ -595,12 +595,8 @@ def main() -> int:
     parser.add_argument("--output", help="Output path for metadata.json (default: data/videos/{jobId}/metadata.json)")
     parser.add_argument("--dry-run", action="store_true", help="Print prompt and exit without calling API")
     parser.add_argument("--model", help="LLM model override")
-    parser.add_argument("--visual-schema-version", type=int, choices=[2], default=2,
-                        help="VisualPlan schema version (only V2 supported)")
     add_duration_profile_args(parser)
     args = parser.parse_args()
-
-    visual_schema_version = args.visual_schema_version
 
     env = load_env()
     api_key = env.get("LLM_API_KEY") or os.environ.get("LLM_API_KEY")
@@ -652,12 +648,12 @@ def main() -> int:
         print(base_prompt)
         print("\n=== MODEL ===")
         print(f"provider={provider}, model={model}")
-        print(f"visualSchemaVersion={visual_schema_version}")
+        print("visualSchemaVersion=2")
         return 0
 
     print(f"Generating script for topic: {args.topic}")
     print(f"Using model: {model} ({provider})")
-    print(f"Visual schema version: {visual_schema_version}")
+    print("Visual schema version: 2")
     print(f"Duration target: {target_dur}s, min: {min_sec}s, max: {max_sec}s, strictness: {strictness}")
 
     # ── Retry loop ────────────────────────────────────────────────────
@@ -982,7 +978,7 @@ def main() -> int:
         "estimatedDurationSec": round(estimated_dur, 1),
         "durationContractStatus": "PASS" if all_ok else "FAIL",
         "retries": retries,
-        "visualSchemaVersion": visual_schema_version,
+        "visualSchemaVersion": 2,
         "status": status,
     }))
     return 0

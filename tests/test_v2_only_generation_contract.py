@@ -37,7 +37,7 @@ def _make_script_args(topic="Test", duration=None, duration_profile=None,
 # ── Contract 1: generate_script.py defaults to V2 ─────────────────────────────
 
 class TestGenerateScriptDefaultV2:
-    """Default resolution must be V2 when no explicit --visual-schema-version."""
+    """Default resolution is V2 (CLI flag removed)."""
 
     def test_default_dry_run_uses_v2(self, monkeypatch, capsys):
         """Dry-run without --visual-schema-version outputs schemaVersion=2."""
@@ -51,8 +51,8 @@ class TestGenerateScriptDefaultV2:
         out = capsys.readouterr().out
         assert "schemaVersion=2" in out
 
-    def test_explicit_v1_is_rejected(self, monkeypatch, capsys):
-        """Explicit --visual-schema-version 1 is rejected by argparse with SystemExit(2)."""
+    def test_removed_visual_schema_flag_is_rejected(self, monkeypatch, capsys):
+        """--visual-schema-version flag is rejected because it was removed."""
         monkeypatch.setattr("generate_script.load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", [
             "generate_script.py", "--topic", "test",
@@ -62,39 +62,35 @@ class TestGenerateScriptDefaultV2:
         with pytest.raises(SystemExit) as exc_info:
             gs_main()
         assert exc_info.value.code == 2
-        err = capsys.readouterr().err
-        assert "invalid choice" in err.lower()
 
 
-# ── Contract 2: build_script_command() always includes V2 flag ────────────────
+# ── Contract 2: build_script_command() exposes no visual schema selector ──────
 
 class TestBuildScriptCommandV2:
-    """build_script_command must add --visual-schema-version 2 deterministically."""
+    """build_script_command no longer adds --visual-schema-version."""
 
-    def test_adds_v2_flag(self):
-        """build_script_command includes --visual-schema-version 2."""
+    def test_build_script_command_does_not_add_visual_schema_flag(self):
+        """build_script_command does not add --visual-schema-version."""
         args = _make_script_args()
         cmd = build_script_command(args)
-        assert "--visual-schema-version" in cmd
-        idx = cmd.index("--visual-schema-version")
-        assert cmd[idx + 1] == "2"
+        assert "--visual-schema-version" not in cmd
 
-    def test_v2_flag_appears_exactly_once(self):
-        """--visual-schema-version flag appears exactly once."""
+    def test_build_script_command_has_no_visual_schema_selector(self):
+        """Command has no V1/V2 selector argument."""
         args = _make_script_args()
         cmd = build_script_command(args)
-        count = sum(1 for c in cmd if c == "--visual-schema-version")
-        assert count == 1
+        assert "--visual-schema-version" not in cmd
 
     def test_preserves_existing_args_minimal(self):
-        """Other existing args are preserved alongside V2 flag."""
+        """Other existing args are preserved (no V2 flag)."""
         args = _make_script_args(topic="TestTopic")
         cmd = build_script_command(args)
         assert cmd[1].endswith("generate_script.py")
         assert cmd[cmd.index("--topic") + 1] == "TestTopic"
+        assert "--visual-schema-version" not in cmd
 
     def test_preserves_existing_args_all(self):
-        """All optional args are preserved alongside V2 flag."""
+        """All optional args are preserved (no V2 flag)."""
         args = _make_script_args(
             topic="Test", duration=42, duration_profile="standard_32_38",
             duration_target=40, duration_min=35, duration_max=45,
@@ -109,11 +105,10 @@ class TestBuildScriptCommandV2:
         assert cmd[cmd.index("--duration-max") + 1] == "45"
         assert cmd[cmd.index("--strictness") + 1] == "strict"
         assert cmd[cmd.index("--model") + 1] == "gpt-4"
-        assert cmd[cmd.index("--visual-schema-version") + 1] == "2"
+        assert "--visual-schema-version" not in cmd
 
-    def test_v2_flag_in_dry_run_command(self):
-        """Dry-run mode also includes the V2 flag."""
+    def test_visual_schema_flag_absent_in_dry_run_command(self):
+        """Dry-run command also has no V2 flag."""
         args = _make_script_args(topic="DryRunTest")
         cmd = build_script_command(args)
-        idx = cmd.index("--visual-schema-version")
-        assert cmd[idx + 1] == "2"
+        assert "--visual-schema-version" not in cmd

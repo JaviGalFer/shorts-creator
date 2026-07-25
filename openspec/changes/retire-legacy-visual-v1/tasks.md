@@ -59,13 +59,23 @@
 - [x] Ejecutar tests focalizados: 132 passed, 0 failed
 - [x] Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES`, sin findings bloqueantes.
 
+### Slice 3B3 — Eliminar `--visual-schema-version` CLI (completado, revisado y cerrado mediante el commit de esta iteración)
+
+- [x] `generate_script.py`: retirar `--visual-schema-version` CLI arg (ya no es necesario)
+- [x] `run_job.py`: retirar paso de `--visual-schema-version` en `build_script_command`
+- [x] Transformar tests del selector (no eliminar)
+- [x] Conservar `request.visuals.schemaVersion=2`
+- [x] Conservar diagnósticos `visualSchemaVersion=2`
+- [x] Tests focalizados: 132 passed, 0 failed
+  - test_generate_script_v2.py: 77 passed
+  - test_v2_only_generation_contract.py: 7 passed
+  - test_run_job.py -k build_script_command: 2 passed
+  - test_generate_script.py: 10 passed
+  - test_duration_profiles.py: 36 passed
+- [x] Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES`, sin findings bloqueantes.
+
 Queda pendiente:
-- Slice 3B3: retirar `--visual-schema-version` CLI
 - Slice 4: retirar legacy asset implementation
-
-### Slice 3B3 — Eliminar `--visual-schema-version` CLI (pendiente)
-
-- [ ] `generate_script.py`: retirar `--visual-schema-version` CLI arg (ya no es necesario)
 
 ## Slice 4 — Remove legacy asset implementation
 

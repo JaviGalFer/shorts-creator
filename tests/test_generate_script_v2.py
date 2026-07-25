@@ -86,36 +86,32 @@ def _v2_script(scenes=None):
 
 
 class TestCliAndRequest:
-    """Tests 1-4: CLI flag behavior and request metadata."""
+    """Tests 1-4: CLI and request metadata (flag removal)."""
 
     def test_default_uses_system_prompt(self, monkeypatch):
-        """Default (no --visual-schema-version) uses SYSTEM_PROMPT_V2."""
+        """Default uses SYSTEM_PROMPT_V2 (flag removed)."""
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "test", "--dry-run", "--model", "gpt-4o-mini"])
         exit_code = gs.main()
         assert exit_code == 0
 
-    def test_explicit_v1_is_rejected(self, monkeypatch, capsys):
-        """--visual-schema-version 1 is rejected by argparse with SystemExit(2)."""
+    def test_removed_visual_schema_flag_v1_is_rejected(self, monkeypatch, capsys):
+        """--visual-schema-version 1 is rejected because the flag is removed."""
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "test", "--visual-schema-version", "1",
                                            "--dry-run", "--model", "gpt-4o-mini"])
         with pytest.raises(SystemExit) as exc_info:
             gs.main()
         assert exc_info.value.code == 2
-        err = capsys.readouterr().err
-        assert "invalid choice" in err.lower()
 
-    def test_explicit_v2_uses_system_prompt_v2(self, monkeypatch, capsys):
-        """--visual-schema-version 2 uses SYSTEM_PROMPT_V2."""
+    def test_removed_visual_schema_flag_v2_is_rejected(self, monkeypatch, capsys):
+        """--visual-schema-version 2 is also rejected because the flag is removed."""
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "test", "--visual-schema-version", "2",
                                            "--dry-run", "--model", "gpt-4o-mini"])
-        exit_code = gs.main()
-        assert exit_code == 0
-        out = capsys.readouterr().out
-        # dry-run prints the active system prompt which should be v2
-        assert "schemaVersion=2" in out
+        with pytest.raises(SystemExit) as exc_info:
+            gs.main()
+        assert exc_info.value.code == 2
 
     def test_v2_metadata_persists_schema_version(self, monkeypatch, tmp_path):
         """Metadata v2 persists request.visuals.schemaVersion=2."""
@@ -131,7 +127,7 @@ class TestCliAndRequest:
             return _json.dumps(script)
 
         monkeypatch.setattr(gs, "call_llm", mock_call)
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
 
         exit_code = gs.main()
@@ -152,7 +148,7 @@ class TestV2Success:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         assert exit_code == 0
@@ -165,7 +161,7 @@ class TestV2Success:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         meta = _json.loads(out_path.read_text())
@@ -208,7 +204,7 @@ class TestV2Success:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         meta = _json.loads(out_path.read_text())
@@ -229,7 +225,7 @@ class TestV2Success:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         meta = _json.loads(out_path.read_text())
@@ -249,7 +245,7 @@ class TestV2Success:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         meta = _json.loads(out_path.read_text())
@@ -276,7 +272,7 @@ class TestV2Success:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         meta = _json.loads(out_path.read_text())
@@ -303,7 +299,7 @@ class TestV2Success:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         meta = _json.loads(out_path.read_text())
@@ -316,7 +312,7 @@ class TestV2Success:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         meta = _json.loads(out_path.read_text())
@@ -330,7 +326,7 @@ class TestV2Success:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         meta = _json.loads(out_path.read_text())
@@ -349,7 +345,7 @@ class TestV2Success:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         meta = _json.loads(out_path.read_text())
@@ -362,7 +358,7 @@ class TestV2Success:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         meta = _json.loads(out_path.read_text())
@@ -621,7 +617,7 @@ class TestV2Retry:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", mock_call)
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
 
         exit_code = gs.main()
@@ -648,7 +644,7 @@ class TestV2Retry:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", mock_call)
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
 
         exit_code = gs.main()
@@ -683,7 +679,7 @@ class TestV2Retry:
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(gs, "call_llm", mock_call)
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test", "--visual-schema-version", "2",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
 
         gs.main()
@@ -832,12 +828,12 @@ class TestPromptProperties:
 
 
 class TestNeutralDurationPrompt:
-    """Verify v2 duration prompt is neutral, v1 unchanged."""
+    """Verify v2 duration prompt is neutral."""
 
     def test_v2_prompt_has_no_historical_requirements(self, monkeypatch, capsys):
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Aurora boreal",
-                                           "--visual-schema-version", "2", "--dry-run",
+                                           "--dry-run",
                                            "--model", "gpt-4o-mini", "--duration", "30"])
         gs.main()
         out = capsys.readouterr().out + capsys.readouterr().err
@@ -846,22 +842,20 @@ class TestNeutralDurationPrompt:
         assert "fecha con año" not in out
         assert "nombre propio relevante" not in out
 
-    def test_v1_is_rejected_by_argparse(self, monkeypatch, capsys):
-        """--visual-schema-version 1 is rejected, no LLM called."""
+    def test_visual_schema_version_flag_is_absent_from_help(self, monkeypatch, capsys):
+        """--help does not mention --visual-schema-version."""
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Berlín",
-                                           "--visual-schema-version", "1", "--dry-run",
-                                           "--model", "gpt-4o-mini", "--duration", "30"])
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--help"])
         with pytest.raises(SystemExit) as exc_info:
             gs.main()
-        assert exc_info.value.code == 2
-        err = capsys.readouterr().err
-        assert "invalid choice" in err.lower()
+        assert exc_info.value.code == 0
+        out = capsys.readouterr().out
+        assert "--visual-schema-version" not in out
 
     def test_aurora_dry_run_v2_no_historical_injection(self, monkeypatch, capsys):
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Cómo se produce una aurora boreal",
-                                           "--visual-schema-version", "2", "--dry-run",
+                                           "--dry-run",
                                            "--model", "gpt-4o-mini", "--duration", "30"])
         gs.main()
         out = capsys.readouterr().out + capsys.readouterr().err
@@ -1156,7 +1150,6 @@ class TestRetryFixIntegration:
         monkeypatch.setattr(gs, "call_llm", mock_call)
         out_path = tmp_path / "metadata.json"
         monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
-                                           "--visual-schema-version", "2",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         assert exit_code == 0
@@ -1177,7 +1170,6 @@ class TestRetryFixIntegration:
         monkeypatch.setattr(gs, "call_llm", mock_call)
         out_path = tmp_path / "metadata.json"
         monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
-                                           "--visual-schema-version", "2",
                                            "--duration", "30", "--output", str(out_path)])
         exit_code = gs.main()
         assert exit_code == 0

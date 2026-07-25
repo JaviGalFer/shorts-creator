@@ -196,7 +196,6 @@ def build_script_command(args) -> list[str]:
         cmd.extend(["--strictness", args.strictness])
     if args.model is not None:
         cmd.extend(["--model", args.model])
-    cmd.extend(["--visual-schema-version", "2"])
     return cmd
 
 
