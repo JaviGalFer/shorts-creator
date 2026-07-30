@@ -74,8 +74,7 @@
   - test_duration_profiles.py: 36 passed
 - [x] Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES`, sin findings bloqueantes.
 
-Queda pendiente dentro de Slice 4:
-- Slice 4B2: limpieza de configuración residual.
+Slice 4 completado: Slice 4A, Slice 4B1 y Slice 4B2 fueron implementados, revisados y cerrados.
 
 ## Slice 4 — Remove legacy asset implementation
 
@@ -110,12 +109,18 @@ Queda pendiente dentro de Slice 4:
 - [x] Review read-only final: `APPROVE_WITH_NON_BLOCKING_NOTES`, sin findings bloqueantes.
 - [x] Tests focalizados finales: 292 passed, 0 failed.
 
-Queda pendiente para Slice 4B2:
-- [ ] decidir PEXELS_API_KEY
-- [ ] revisar .env.example
-- [ ] revisar docker-compose.yml
-- [ ] revisar visual_provider_config_v2.py
-- [ ] actualizar docs/project/environment.md si procede
+### Slice 4B2 — Limpieza de configuración residual (completado, revisado y cerrado mediante el commit de esta iteración)
+
+- [x] `PEXELS_API_KEY` eliminado de `.env.example`
+- [x] passthrough de `PEXELS_API_KEY` eliminado de `docker-compose.yml`
+- [x] cero consumidores productivos o workflows n8n de `PEXELS_API_KEY`
+- [x] entrada `pexels` conservada como proveedor V2 planificado, disabled y not implemented
+- [x] documentación de entorno actualizada para Pixabay y Wikimedia
+- [x] FreeAI y Pollinations conservados sin cambios
+- [x] Pixabay y Wikimedia conservados como proveedores activos
+- [x] tests focalizados ejecutados
+- [x] Review read-only: `APPROVE_WITH_NON_BLOCKING_NOTES`, sin findings bloqueantes.
+- [x] Tests focalizados finales: 313 passed, 0 failed.
 
 ## Slice 5 — Product and documentation cleanup
 

@@ -28,7 +28,7 @@ Postgres: localhost:5433
 Ver `.env.example`. Las variables requeridas por fase:
 
 - **Fundación**: Ninguna
-- **Fase 1**: `LLM_API_KEY`, `ELEVENLABS_API_KEY`, `PEXELS_API_KEY` (o Pixabay)
+- **Fase 1**: `LLM_API_KEY`, `ELEVENLABS_API_KEY`, `PIXABAY_API_KEY` (proveedor de stock V2 activo; Wikimedia no necesita API key; Pexels permanece como proveedor planificado sin contrato activo de variable de entorno)
 - **Fase 2**: Las mismas + opcionales de configuración
 - **Fase 3**: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
 

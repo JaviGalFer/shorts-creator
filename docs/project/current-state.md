@@ -10,7 +10,7 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B2 permanece pendiente.
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4 completo. Slice 5 es el siguiente trabajo.
 
 ### Slice 1 completado (2026-07-17)
 
@@ -192,8 +192,46 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 
   - script → assets → audio → prepare → render;
   - assets visuales bajo `assets/`.
-- Configuración Pexels no modificada.
+- Configuración Pexels no modificada (hasta Slice 4B2).
 - Slice 4B2 no iniciado.
+
+### Slice 4B2 implementado, revisado y cerrado mediante el commit de esta iteración (2026-07-25)
+
+- `PEXELS_API_KEY` eliminado de `.env.example`
+- passthrough de `PEXELS_API_KEY` eliminado de `docker-compose.yml`
+- cero consumidores productivos o workflows de `PEXELS_API_KEY`
+- entrada `pexels` conservada como proveedor V2 planificado
+- Pexels continúa `disabled` y `not implemented`
+- Pixabay continúa activo con `PIXABAY_API_KEY`
+- Wikimedia continúa activo sin API key
+- FreeAI y Pollinations no modificados
+- routing y executor no modificados
+- tests focalizados ejecutados: todos pasados
+- Review final: `APPROVE_WITH_NON_BLOCKING_NOTES`.
+- Cero findings bloqueantes.
+- `PEXELS_API_KEY` eliminado de `.env.example`.
+- Passthrough eliminado de `docker-compose.yml`.
+- Cero consumidores productivos o workflows n8n.
+- Entrada `pexels` conservada como provider planificado.
+- Pexels continúa disabled y not implemented.
+- `requiresApiKey=True` representa una capacidad futura, no un contrato activo de variable.
+- Pixabay continúa activo con `PIXABAY_API_KEY`.
+- Wikimedia continúa activo sin API key.
+- FreeAI y Pollinations permanecen sin cambios.
+- Router, executor, bridge y fetcher V2 intactos.
+- Tests sin modificaciones.
+- Conteos focalizados:
+
+  - test_visual_provider_config_v2.py: 13;
+  - test_visual_asset_executor_v2.py: 102;
+  - test_visual_asset_router_v2.py: 102;
+  - test_visual_asset_bridge_v2.py: 34;
+  - test_fetch_images_v2.py: 39;
+  - test_visual_v2_dry_run_e2e.py: 22;
+  - test_failure_no_env_vars_in_metadata: 1.
+- Total focalizado final: 313 passed, 0 failed.
+- Slice 4 completo.
+- Slice 5 pendiente.
 
 ## Resumen
 
@@ -202,6 +240,8 @@ Pipeline funcional de vídeos cortos verticales (9:16, ~1 min). Scripts en `bin/
 - Slice 3B3: 132 tests focalizados pasados, 0 fallidos
 - Slice 4A: implementado, revisado y cerrado mediante el commit de esta iteración
 - Slice 4B1: implementado, revisado y cerrado mediante el commit de esta iteración
+- Slice 4B2: implementado, revisado y cerrado mediante el commit de esta iteración
+- Slice 4: completado
 
 ## Plan de transformación modular
 
@@ -231,12 +271,13 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 
 ## Próximos pasos
 
-1. Slice 4B2 del change `retire-legacy-visual-v1`: resolver la configuración residual de proveedores y PEXELS_API_KEY.
-2. Phase B de audio pacing (tras migrar script/)
-3. Crear `pyproject.toml` y estructura `src/`
-4. Investigar instalación de ffprobe en el host
-5. Registrar FreeAI para imágenes de calidad gratuitas
-6. Integrar pipeline v2 con n8n
+1. Slice 5 del change `retire-legacy-visual-v1`: limpieza de producto y documentación.
+2. Slice 6: baseline completa, E2E V2 canónico y cierre formal del change.
+3. Phase B de audio pacing tras migrar script/
+4. Crear `pyproject.toml` y estructura `src/`
+5. Investigar instalación de ffprobe en el host
+6. Registrar FreeAI para imágenes de calidad gratuitas
+7. Integrar pipeline v2 con n8n
 
 ## Audio pacing v2 — Phase A (completada 2026-07-14)
 

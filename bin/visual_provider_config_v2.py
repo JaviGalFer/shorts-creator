@@ -22,7 +22,7 @@ def load_provider_config_v2(
             "live": wikimedia_live,
             "userAgent": user_agent,
         },
-        "pexels": {
+        "pexels": {  # Planned provider — no V2 implementation or active API-key contract yet.
             "enabled": False,
             "implemented": False,
             "requiresApiKey": True,
