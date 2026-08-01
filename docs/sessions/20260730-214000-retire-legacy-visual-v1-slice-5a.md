@@ -443,7 +443,22 @@ Ejecutar reaprobación read-only focalizada de Slice 5A, verificando F1 corregid
 docs(product): align V2 identity and current architecture
 ```
 
+- Hash completo: `f2a807823a7b23f1e69cb014328c337157be03b1`
+- Hash corto: `f2a8078`
+- Working tree postcommit: limpio
+- Staging postcommit: 0
+- Archivos incluidos: 9
+
 - Sin push.
 - Sin reindexado.
 - Slice 5A cerrado.
 - Slice 5B pendiente.
+
+## Corrección postcommit de trazabilidad
+
+- El cierre de Slice 5A ya estaba correctamente creado en `f2a8078`.
+- `docs/project/current-state.md` conservaba una afirmación stale de "cero commits" dentro del bloque vigente de Slice 5A.
+- La afirmación fue sustituida por el hash real del commit de cierre y el estado factual postcommit.
+- No se modificó código ni comportamiento; corrección exclusivamente documental.
+- Esta corrección se guarda en un commit documental independiente.
+- No hubo push ni reindexado.
