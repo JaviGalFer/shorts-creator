@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validación automatizada de jobs de shorts-históricos.
+"""Validación automatizada de jobs de vídeos cortos.
 
 Uso:
     python3 bin/validate_job.py data/videos/{jobId}/metadata.json
@@ -927,7 +927,7 @@ def update_manifest_gates(metadata_path: Path):
 def main() -> int:
 
     parser = argparse.ArgumentParser(
-        description="Validate a shorts-historicos job"
+        description="Validate a shorts-creator job"
     )
     parser.add_argument("metadata_path", help="Path to metadata.json")
     parser.add_argument("--json", action="store_true", help="Output JSON report")

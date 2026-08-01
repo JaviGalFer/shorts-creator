@@ -124,10 +124,30 @@ Slice 4 completado: Slice 4A, Slice 4B1 y Slice 4B2 fueron implementados, revisa
 
 ## Slice 5 — Product and documentation cleanup
 
-- [ ] Actualizar README.md: producto genérico
-- [ ] Actualizar AGENTS.md: contexto actualizado
-- [ ] Actualizar documentación de arquitectura
-- [ ] Mantener historia como caso de uso posible
+### Slice 5A — Product identity and architecture (completado, revisado, corregido, reaprobado y cerrado mediante el commit de esta sesión)
+
+- [x] README.md: reestructurar con identidad de generador genérico y configurable, personalización como propuesta principal, separación entre capacidades actuales y dirección futura, apertura sin referencia histórica, quick start no histórico, duración no fijada a ~1 min
+- [x] `docs/project/architecture.md`: distinguir arquitectura actual de futura; retirar referencias a n8n como orquestador, `bin/fetch_images.py`, Pexels como provider activo, ElevenLabs como TTS canónico; actualizar paths de assets a `assets/`; documentar Visual Plan V2 como canónico
+- [x] `docs/architecture/modular-v2-transformation-roadmap.md`: actualizar estado de partida (V1 ya no es runtime ejecutable); reflejar progreso real (Slices 1-4 completados, Slice 5 en ejecución, Slice 6 pendiente)
+- [x] `openspec/changes/retire-legacy-visual-v1/tasks.md`: estructurar Slice 5 en 5A y 5B; marcar tareas de implementación 5A como completadas
+- [x] `docs/project/current-state.md`: añadir bloque factual de Slice 5A implementado
+- [x] `docs/sessions/20260730-214000-retire-legacy-visual-v1-slice-5a.md`: session log de implementación
+- [x] Neutralizar identidad histórica residual en textos expuestos y docstrings del runtime sin alterar comportamiento
+- [x] Review read-only de Slice 5A
+- [x] Correcciones derivadas del review
+- [x] Reaprobación read-only focalizada de Slice 5A
+- [x] Cierre y commit de Slice 5A
+
+Review formal: CHANGES_REQUIRED por F1 MEDIUM en tabla Markdown del README (fila `LLM_PROVIDER` con tres celdas en tabla de dos columnas); F1 corregido con sustitución de celda única; reaprobación read-only focalizada: APPROVED_FOR_COMMIT; Slice 5A cerrado mediante el commit de esta sesión.
+
+### Slice 5B — Environment, integrations and operational references (pendiente)
+
+- [ ] Actualizar `docs/project/environment.md`: contexto actualizado
+- [ ] Actualizar `docs/project/integrations.md`: estado de providers
+- [ ] Actualizar `docs/runbooks/n8n-operations.md`: n8n como infraestructura legacy
+- [ ] Actualizar `AGENTS.md`: contexto actualizado
+- [ ] Revisar `HANDOVER.md`: contexto actualizado
+- [ ] Revisar workflows n8n documentados
 
 ## Slice 6 — Baseline and closure
 

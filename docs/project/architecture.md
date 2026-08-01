@@ -1,27 +1,35 @@
 # Arquitectura del sistema
 
-## Visión general
+## Arquitectura actual
+
+### Orquestador
+
+`bin/run_job.py` es el orquestador canónico. Ejecuta las seis etapas del pipeline en orden de dependencia, verifica contratos de salida post-etapa y produce metadata trazable con historial de orquestación.
+
+No hay backend permanente, base de datos obligatoria ni dependencia de n8n para el pipeline.
+
+### Pipeline
 
 ```
-[Entrada manual] -> n8n -> LLM (guion) -> ElevenLabs (voz)
-                            -> FFmpeg (render) -> [MP4 + metadata]
+script → assets → audio → prepare → render → validate
 ```
 
-n8n actúa como orquestador. No hay backend permanente, ni base de datos obligatoria en el MVP.
+| Etapa | Script | Contrato de salida | Artefacto |
+|-------|--------|-------------------|-----------|
+| Script | `bin/generate_script.py` | `SCRIPT_DRAFT` | `metadata.json` con guion V2 |
+| Assets | `bin/fetch_images_v2.py` | `ASSETS_READY` | Imágenes en `assets/` |
+| Audio | `bin/generate_audio.py` | `AUDIO_READY` | `scenes/narration.mp3` o `scene-*.mp3` |
+| Prepare | `bin/prepare_job.py` | `SUBTITLES_READY` | Subtítulos ASS, timeline de render |
+| Render | `bin/render_job.py` | `RENDERED` | `video.mp4` |
+| Validate | `bin/validate_job.py` | `VALIDATED` o `VALIDATION_FAILED` | Métricas de pacing y calidad |
 
-## Flujo de datos
+### Visual Plan V2
 
-1. Usuario introduce un tema histórico en n8n (webhook manual o formulario simple).
-2. n8n llama a un LLM externo para generar un guion estructurado en JSON.
-3. n8n valida el JSON (duración, escenas, coherencia).
-4. Script `bin/generate_audio.py` genera audio (Edge TTS) para cada escena.
-5. Script `bin/fetch_images.py` descarga imágenes (AI o stock).
-6. Script `bin/prepare_job.py` genera subtítulos (ASS) + consolida metadata.
-7. Script `bin/render_job.py` ejecuta FFmpeg (Docker) para render MP4 9:16.
-8. Metadata se actualiza con ruta del render.
-9. Revisión humana con `review_job.py`.
+El único contrato visual canónico es Visual Plan V2. Cada escena contiene un `visualPlan` con `_schemaVersion: 2`. El pipeline clasifica y rechaza metadata V1 o mixta.
 
-## Gestión de archivos
+Assets visuales V2 se almacenan bajo `assets/` en el directorio del job.
+
+### Gestión de archivos
 
 Cada vídeo es un directorio autocontenido:
 
@@ -31,191 +39,144 @@ data/
     {jobId}/
       video.mp4           <- Render final MP4
       metadata.json       <- Job metadata (canónico)
-      subtitle.ass        <- Subtítulos (ASS o SRT)
+      subtitle.ass        <- Subtítulos (ASS)
       scenes/
+        narration.mp3     <- Narración completa
+        scene-01.mp3      <- Audio por escena (alternativo)
+      assets/
         scene-01.jpg      <- Imagen escena 1
-        scene-01.mp3      <- Audio escena 1
-        scene-02.jpg
-        scene-02.mp3
-        ...
+        scene-02.jpg      <- Imagen escena 2
 ```
 
 Cada trabajo tiene un `jobId` único con formato `{tema}-YYYY-MM-DD-HHMMSS`.
 
-## Variables de entorno
+### TTS
 
-Ver `.env.example`. Todas las APIs externas se configuran vía variables de entorno.
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `TTS_PROVIDER` | `edge_tts` | Proveedor canónico (`edge_tts` u `elevenlabs`) |
+| `TTS_VOICE` | `es-ES-AlvaroNeural` | Voz TTS |
 
-## Estrategia de errores
+Edge TTS es el proveedor canónico (gratuito, sin API key, voz natural). ElevenLabs es un proveedor secundario opcional.
 
-- n8n maneja reintentos con backoff exponencial.
-- Fallos de API external se registran en logs y el trabajo pasa a estado `FAILED`.
-- No hay colas distribuidas en el MVP.
+### Providers visuales
 
-## Seguridad de claves
+| Provider | Estado | API key |
+|----------|--------|---------|
+| Wikimedia Commons | Activo, implementado | No necesita |
+| Pixabay | Activo, implementado | `PIXABAY_API_KEY` |
+| Pexels | Planificado, deshabilitado | — |
+| FreeAI | Deshabilitado, no implementado | — |
+| Pollinations | Deshabilitado, no implementado | — |
 
-- API keys solo en `.env` (excluido de Git).
-- n8n almacena credenciales en su base de datos cifrada.
-- Los workflows n8n referencian credenciales por ID, nunca por valor literal.
+### Render
 
-## Modelo de datos canónico (video job)
+FFmpeg ejecutado en Docker (`linuxserver/ffmpeg:latest`) genera vídeo MP4 9:16 (1080×1920) con transiciones, fundidos y room tone.
 
-```json
-{
-  "jobId": "hist-2026-06-29-001",
-  "status": "DRAFT",
-  "topic": "Título del vídeo",
-  "language": "es-ES",
-  "format": "shorts-9x16",
-  "targetDurationSeconds": 45,
-  "script": {
-    "title": "",
-    "hook": "",
-    "summary": "",
-    "totalTargetDurationSec": 45,
-    "scenes": [
-      {
-        "sceneNumber": 1,
-        "purpose": "",
-        "visualPrompt": "",
-        "voiceover": "",
-        "subtitle": "",
-        "targetDurationSec": 8
-      }
-    ],
-    "closingCta": ""
-  },
-  "audio": {
-    "provider": "edge-tts",
-    "scenes": [
-      {"sceneNumber": 1, "path": "data/videos/{jobId}/scenes/scene-01.mp3", "exists": false}
-    ]
-  },
-  "assets": [
-    {"sceneNumber": 1, "path": "data/videos/{jobId}/scenes/scene-01.jpg", "exists": false}
-  ],
-  "subtitles": {
-    "path": "data/videos/{jobId}/subtitle.ass",
-    "format": "ass"
-  },
-  "render": {
-    "path": "data/videos/{jobId}/video.mp4",
-    "durationSeconds": 0
-  },
-  "review": {
-    "status": "PENDING"
-  },
-  "createdAt": "",
-  "updatedAt": ""
-}
-```
-
-## Máquina de estados
-
-```
-IDEA
-  -> SCRIPT_DRAFT
-  -> SCRIPT_APPROVED
-  -> AUDIO_READY
-  -> ASSETS_READY
-  -> SUBTITLES_READY
-  -> RENDERING
-  -> RENDERED
-  -> REVIEW_PENDING
-  -> APPROVED | REJECTED | FAILED
-```
-
-## Manifiesto de ejecución (job-manifest.json)
-
-Cada job renderizado produce `data/videos/{jobId}/job-manifest.json` con:
-
-```json
-{
-  "jobId": "la-2026-07-01-173458",
-  "createdAt": "ISO-8601",
-  "scriptPath": "data/videos/{jobId}/metadata.json",
-  "renderProfile": "shorts_upper_dynamic",
-  "resolution": "1080x1920",
-  "tts": {
-    "provider": "edge_tts",
-    "voice": "es-ES-AlvaroNeural"
-  },
-  "subtitles": {
-    "provider": "edge_tts_sentence_boundary|whisper_word_timestamps|estimated",
-    "path": "data/videos/{jobId}/subtitle.ass"
-  },
-  "scenes": [
-    {
-      "sceneNumber": 1,
-      "visualType": "image",
-      "visualPath": "scenes/scene-01.jpg",
-      "audioPath": "data/videos/{jobId}/scenes/narration.mp3",
-      "audioDurationSec": 30.86
-    }
-  ],
-  "outputVideoPath": "data/videos/{jobId}/video.mp4"
-}
-```
-
-## Normalización visual.type
-
-Para compatibilidad futura con vídeos, las escenas se normalizan a:
-
-```json
-{
-  "visual": {
-    "type": "image",
-    "path": "scenes/scene-01.jpg",
-    "fit": "cover",
-    "motion": "slow_zoom_in"
-  }
-}
-```
-
-Formato futuro para clips de vídeo (documentado, no implementado):
-
-```json
-{
-  "visual": {
-    "type": "video",
-    "path": "scenes/scene-01.mp4",
-    "trimStartSec": 0,
-    "trimDurationSec": 6.4,
-    "fit": "cover"
-  }
-}
-```
-
-Los JSON legacy (sin campo `visual`) se normalizan automáticamente por `bin/visual_normalize.py`.
-
-## Validación automatizada
+### Validación
 
 ```bash
 python3 bin/validate_job.py data/videos/{jobId}/metadata.json
 ```
 
-Comprueba: assets, audio, tamaños, duraciones, ASS, cues, cobertura, manifiesto, resolución.
-Exit code 0 = PASS, != 0 = ERROR.
+Comprueba: assets, audio, duraciones, ASS, cues, cobertura de narración, pacing, manifiesto. Exit code 0 = PASS.
 
-## TTS configurable
+### Docker y servicios auxiliares
 
-El proveedor y voz TTS se configuran vía entorno:
+`docker-compose.yml` ofrece:
+- **n8n**: servicio disponible para automatizaciones (no es orquestador canónico)
+- **Postgres**: base de datos para n8n
+- **render-worker**: worker de render remoto (opcional)
+
+### Máquina de estados
+
+```
+SCRIPT_DRAFT
+  -> ASSETS_READY
+  -> AUDIO_READY
+  -> SUBTITLES_READY
+  -> RENDERED | RENDERED_WITH_WARNINGS
+  -> VALIDATED
+```
+
+Estados de fallo: `FAILED`, `REVIEW_REQUIRED`, `ASSET_UNRESOLVED`, `ASSETS_PARTIAL`.
+
+### Variables de entorno
+
+Ver `.env.example`. Las API externas se configuran vía variables de entorno. No hay secretos versionados.
+
+### Subtítulos
 
 | Variable | Default | Descripción |
 |----------|---------|-------------|
-| `TTS_PROVIDER` | `edge_tts` | Proveedor |
-| `TTS_VOICE` | `es-ES-AlvaroNeural` | Voz |
-
-CLI override: `--tts-provider edge_tts --voice es-ES-AlvaroNeural`
-
-## Subtítulos con Whisper
-
-| Variable | Default | Descripción |
-|----------|---------|-------------|
-| `SUBTITLE_PROVIDER` | `estimated` | `estimated` o `whisper` |
+| `SUBTITLE_TIMING_PROVIDER` | `auto` | `auto`, `edge_tts`, `whisper` o `estimated` |
 | `WHISPER_MODEL` | `tiny` | Modelo Whisper |
 
-`--subtitle-provider whisper` activa transcripción con faster-whisper.
-Fallback automático a `estimated` si faster-whisper no está instalado.
+El proveedor de timing se resuelve en orden: Edge TTS WordBoundary → Whisper → estimado.
 
-No hay publicación automática en el MVP.
+## Modelo de configuración del producto
+
+### Contrato disponible actualmente
+
+Los controles actualmente expuestos por CLI, variables de entorno o metadata son:
+
+| Control | Superficie |
+|---------|-----------|
+| Tema | `--topic` |
+| Duración | `--duration`, `--duration-profile`, `--duration-target`, `--duration-min`, `--duration-max`, `--strictness` |
+| Modelo LLM | `--model` |
+| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` |
+| Voz | `--voice`, `TTS_VOICE` |
+| Timing de subtítulos | `--subtitle-timing-provider`, `SUBTITLE_TIMING_PROVIDER` |
+| Estilo de subtítulos | `--subtitle-style` |
+| Providers visuales | Wikimedia Commons, Pixabay |
+| Ejecución parcial | `--stop-after` |
+| Planificación | `--dry-run` |
+
+### Contrato objetivo
+
+La arquitectura futura podrá aceptar un request o perfil unificado que incluya estos campos conceptuales:
+
+```
+topic
+format
+duration
+language
+voice
+subtitles
+music
+visuals
+quality
+reviewPolicy
+publication
+```
+
+Este contrato objetivo no está implementado. Es dirección del producto y guiará el diseño de la configuración centralizada cuando se desarrolle.
+
+## Arquitectura futura (roadmap)
+
+El proyecto se transformará hacia una arquitectura modular:
+
+```
+shorts-creator/
+├── pyproject.toml          (pendiente)
+├── src/shorts_creator/      (pendiente)
+│   ├── contracts/
+│   ├── pipeline/
+│   ├── script/
+│   ├── audio/
+│   ├── assets/
+│   ├── rendering/
+│   ├── validation/
+│   └── infrastructure/
+├── bin/                     (futura capa de adaptadores CLI)
+├── tools/                   (benchmarks y utilidades de desarrollo)
+└── tests/
+```
+
+- `src/shorts_creator/` y `pyproject.toml` no existen aún.
+- `bin/` se reducirá progresivamente de scripts monolíticos a adaptadores delgados.
+- Cada dominio (script, audio, assets, rendering, validation) migrará individualmente.
+- `tools/` albergará benchmarks y utilidades no pertenecientes al runtime.
+
+Ver `docs/architecture/modular-v2-transformation-roadmap.md` para el plan detallado.

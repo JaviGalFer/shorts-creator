@@ -1,15 +1,16 @@
 # Modular V2 Transformation Roadmap
 
 **Creado:** 2026-07-17
-**Estado:** Plan aprobado, primera fase de planificación en curso
+**Última actualización:** 2026-07-30
+**Estado:** Slice 5 en ejecución (product identity and architecture cleanup)
 
 ## 1. Estado actual y motivación
 
-shorts-creator es un generador de vídeos cortos verticales (9:16, ~1 min) con pipeline funcional. Los scripts de ejecución están en `bin/`, Docker se usa para render, y n8n actúa como orquestador legacy.
+shorts-creator es un generador de vídeos cortos verticales con duración y producción configurables. Los scripts de ejecución están en `bin/`, Docker se usa para render, y n8n actúa como orquestador legacy.
 
-El proyecto arrancó con un enfoque centrado exclusivamente en contenido histórico. A lo largo de las iteraciones, VisualPlan V1 fue el contrato visual inicial. VisualPlan V2 lo reemplazó con un contrato más robusto, neutral y extensible. Sin embargo, V1 sigue activo como default y ambas versiones conviven en el runtime.
+El proyecto arrancó con un enfoque centrado exclusivamente en contenido histórico. A lo largo de las iteraciones, VisualPlan V1 fue el contrato visual inicial. VisualPlan V2 lo reemplazó con un contrato más robusto, neutral y extensible. Visual V1 ya no es un producto ni una variante ejecutable soportada. Visual Plan V2 es el contrato visual canónico. La clasificación y rechazo defensivo de metadata legacy permanece en el runner.
 
-Esta dualidad genera:
+La dualidad histórica generó:
 
 - Duplicación de contratos y código
 - Ramificación excesiva en scripts y tests
@@ -145,19 +146,19 @@ Esta estructura es el **mapa de destino**. No todos los archivos se crean en la 
 
 ## 5. Orden de transformación
 
-| # | Fase | Cambio OpenSpec | Dependencias |
-|---|------|----------------|--------------|
-| 1 | Retirar V1 y enfoque histórico | `retire-legacy-visual-v1` | Ninguna |
-| 2 | Estabilizar pipeline V2, baseline clara | (continuación del anterior) | Fase 1 |
-| 3 | Crear pyproject.toml y src/shorts_creator/ | (futuro) | Fase 2 |
-| 4 | Extraer contracts/ e infrastructure/ | (futuro) | Fase 3 |
-| 5 | Migrar script/ | (futuro) | Fase 4 |
-| 6 | Reanudar audio pacing (Phase B) | `improve-short-form-audio-pacing-v2` | Fase 5 |
-| 7 | Migrar audio/ | (futuro) | Fase 6 |
-| 8 | Migrar assets/ | (futuro) | Fase 7 |
-| 9 | Migrar rendering/ | (futuro) | Fase 8 |
-| 10 | Migrar validation/ | (futuro) | Fase 9 |
-| 11 | Reducir bin/ a adaptadores, limpieza final | (futuro) | Fase 10 |
+| # | Fase | Cambio OpenSpec | Dependencias | Progreso |
+|---|------|----------------|--------------|----------|
+| 1 | Retirar V1 y enfoque histórico | `retire-legacy-visual-v1` | Ninguna | Slices 1-4 completados, Slice 5 en ejecución |
+| 2 | Estabilizar pipeline V2, baseline clara | (continuación del anterior) | Fase 1 | Slice 6 pendiente |
+| 3 | Crear pyproject.toml y src/shorts_creator/ | (futuro) | Fase 2 | Pendiente |
+| 4 | Extraer contracts/ e infrastructure/ | (futuro) | Fase 3 | Pendiente |
+| 5 | Migrar script/ | (futuro) | Fase 4 | Pendiente |
+| 6 | Reanudar audio pacing (Phase B) | `improve-short-form-audio-pacing-v2` | Fase 5 | Pendiente |
+| 7 | Migrar audio/ | (futuro) | Fase 6 | Pendiente |
+| 8 | Migrar assets/ | (futuro) | Fase 7 | Pendiente |
+| 9 | Migrar rendering/ | (futuro) | Fase 8 | Pendiente |
+| 10 | Migrar validation/ | (futuro) | Fase 9 | Pendiente |
+| 11 | Reducir bin/ a adaptadores, limpieza final | (futuro) | Fase 10 | Pendiente |
 
 Cada fase futura tendrá su propio change OpenSpec.
 
@@ -193,8 +194,10 @@ Los jobs existentes con metadata V1:
 
 - Se conservan en `data/` sin migración automática
 - No pueden re-ejecutarse por el pipeline canónico
-- Se rechazan con `UNSUPPORTED_LEGACY_SCHEMA`
+- Se rechazan con `UNSUPPORTED_LEGACY_SCHEMA` mediante el clasificador defensivo en `run_job.py`
 - Sus artefactos (renders, audio, metadata) permanecen como historial
+
+La clasificación y rechazo defensivo de metadata legacy es el único código V1 que permanece en el runtime.
 
 ## 9. Estrategia de tests
 

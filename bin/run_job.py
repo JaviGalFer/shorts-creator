@@ -5,7 +5,7 @@ Orchestrates pipeline stages in dependency order, verifies each stage's
 output contract (status + artifacts) before proceeding.
 
 Usage:
-  python3 bin/run_job.py --topic "La batalla de Stalingrado" --duration 42
+  python3 bin/run_job.py --topic "Cómo se forma un arcoíris" --duration 42
   python3 bin/run_job.py --topic "Prueba" --duration 35 --stop-after script
   python3 bin/run_job.py --topic "Prueba" --duration 42 --dry-run
 """
@@ -435,7 +435,7 @@ def _final_summary(data: dict | None, metadata_path: str | None, last_stage: str
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Unified job runner for shorts-creator pipeline")
-    parser.add_argument("--topic", required=True, help="Historical topic for the video")
+    parser.add_argument("--topic", required=True, help="Topic or instruction for the video")
     parser.add_argument("--model", help="LLM model override")
     parser.add_argument("--dry-run", action="store_true", help="Print execution plan without running")
     parser.add_argument("--stop-after", choices=STAGES, default="validate",
