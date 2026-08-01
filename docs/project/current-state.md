@@ -10,7 +10,7 @@ Pipeline funcional de vídeos cortos verticales con duración configurable. Scri
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4 completo. Slice 5A implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`. Slice 5B implementado, auditado, corregido y reaprobado; pendiente de cierre mediante commit estable. Slice 6 no iniciado.
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4 completo. Slice 5A implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`. Slice 5B implementado, auditado, corregido, reaprobado y cerrado mediante el commit `1d9fe37`. Slice 6 es el siguiente trabajo.
 
 ### Slice 1 completado (2026-07-17)
 
@@ -316,7 +316,11 @@ La reaprobación read-only focalizada terminó con `SLICE_5B_REAPPROVED_FOR_CLOS
 - Commit de cierre todavía pendiente en este punto.
 - Slice 6 no iniciado.
 
-Estado: **reaprobado y pendiente de cierre mediante commit estable**. No se ha creado todavía el commit de cierre.
+### Cierre de Slice 5B (2026-08-01)
+
+- Slice 5B cerrado mediante el commit `1d9fe37` (`docs(project): align Slice 5B environment and integrations`).
+- Cero push, cero MCP, cero reindexado.
+- Slice 6 es el siguiente trabajo.
 
 ## Resumen
 
@@ -328,7 +332,7 @@ Estado: **reaprobado y pendiente de cierre mediante commit estable**. No se ha c
 - Slice 4B2: implementado, revisado y cerrado mediante el commit de esta iteración
 - Slice 4: completado
 - Slice 5A: implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`
-- Slice 5B: implementado, auditado, corregido, reaprobado y pendiente de cierre
+- Slice 5B: implementado, auditado, corregido, reaprobado y cerrado mediante el commit `1d9fe37`
 - Slice 6: pendiente
 
 ## Plan de transformación modular
@@ -359,13 +363,12 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 
 ## Próximos pasos
 
-1. Cierre y commit estable de Slice 5B.
-2. Slice 6: baseline completa, E2E V2 canónico y cierre formal del change.
-3. Phase B de audio pacing tras migrar script/
-4. Crear `pyproject.toml` y estructura `src/`
-5. Investigar instalación de ffprobe en el host
-6. Registrar FreeAI para imágenes de calidad gratuitas
-7. Integrar pipeline v2 con n8n
+1. Slice 6: baseline completa, E2E V2 canónico y cierre formal del change.
+2. Phase B de audio pacing tras migrar script/
+3. Crear `pyproject.toml` y estructura `src/`
+4. Investigar instalación de ffprobe en el host
+5. Registrar FreeAI para imágenes de calidad gratuitas
+6. Integrar pipeline v2 con n8n
 
 ## Audio pacing v2 — Phase A (completada 2026-07-14)
 

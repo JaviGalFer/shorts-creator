@@ -135,3 +135,13 @@ La reaprobación read-only focalizada terminó con `SLICE_5B_REAPPROVED_FOR_CLOS
 - Repositorio sin cambios durante la reaprobación.
 - Slice 5B aprobado para cierre.
 - Commit de cierre todavía pendiente en este punto.
+
+## Cierre de Slice 5B (2026-08-01)
+
+- Commit A creado mediante staging selectivo (16 archivos: 15 modificados + 1 nuevo).
+- Hash completo: `1d9fe3780da60fe7391722a88a846fa64359660c`.
+- Hash corto: `1d9fe37`.
+- Subject: `docs(project): align Slice 5B environment and integrations`.
+- Slice 5B cerrado.
+- Cero push, cero MCP, cero reindexado.
+- Commit B pendiente únicamente para registrar el hash real del Commit A.

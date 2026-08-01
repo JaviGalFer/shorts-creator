@@ -140,7 +140,7 @@ Slice 4 completado: Slice 4A, Slice 4B1 y Slice 4B2 fueron implementados, revisa
 
 Review formal: CHANGES_REQUIRED por F1 MEDIUM en tabla Markdown del README (fila `LLM_PROVIDER` con tres celdas en tabla de dos columnas); F1 corregido con sustitución de celda única; reaprobación read-only focalizada: APPROVED_FOR_COMMIT; Slice 5A cerrado mediante el commit de esta sesión.
 
-### Slice 5B — Environment, integrations and operational references (implementado, corregido, pendiente de reaprobación)
+### Slice 5B — Environment, integrations and operational references (implementado, corregido, reaprobado y cerrado)
 
 - [x] Actualizar `docs/project/environment.md`: distinguir pipeline CLI canónico / infraestructura n8n·Postgres legacy / render worker; corregir requisitos de `ELEVENLABS_API_KEY`; documentar `SUBTITLE_GLOBAL_OFFSET_MS`; clasificar variables sin consumidor
 - [x] Actualizar `docs/project/integrations.md`: estado de providers (Wikimedia+Pixabay activos; Pexels/FreeAI/Pollinations deshabilitados); orquestador canónico `bin/run_job.py`; n8n legacy; edge_tts default; ElevenLabs alternativa opcional
@@ -155,10 +155,12 @@ Review formal: CHANGES_REQUIRED por F1 MEDIUM en tabla Markdown del README (fila
 - [x] Auditoría read-only de Slice 5B (terminó con `CHANGES_REQUIRED`)
 - [x] Correcciones derivadas del review (F1–F6)
 - [x] Reaprobación read-only focalizada de Slice 5B
-- [ ] Cierre de Slice 5B
-- [ ] Commit de cierre de Slice 5B
+- [x] Cierre de Slice 5B
+- [x] Commit de cierre de Slice 5B
 
 Reaprobación: SLICE_5B_REAPPROVED_FOR_CLOSURE; cero findings bloqueantes.
+
+Slice 5B cerrado mediante el commit `1d9fe37` (`docs(project): align Slice 5B environment and integrations`).
 
 ## Slice 6 — Baseline and closure
 
