@@ -140,14 +140,25 @@ Slice 4 completado: Slice 4A, Slice 4B1 y Slice 4B2 fueron implementados, revisa
 
 Review formal: CHANGES_REQUIRED por F1 MEDIUM en tabla Markdown del README (fila `LLM_PROVIDER` con tres celdas en tabla de dos columnas); F1 corregido con sustitución de celda única; reaprobación read-only focalizada: APPROVED_FOR_COMMIT; Slice 5A cerrado mediante el commit de esta sesión.
 
-### Slice 5B — Environment, integrations and operational references (pendiente)
+### Slice 5B — Environment, integrations and operational references (implementado, corregido, pendiente de reaprobación)
 
-- [ ] Actualizar `docs/project/environment.md`: contexto actualizado
-- [ ] Actualizar `docs/project/integrations.md`: estado de providers
-- [ ] Actualizar `docs/runbooks/n8n-operations.md`: n8n como infraestructura legacy
-- [ ] Actualizar `AGENTS.md`: contexto actualizado
-- [ ] Revisar `HANDOVER.md`: contexto actualizado
-- [ ] Revisar workflows n8n documentados
+- [x] Actualizar `docs/project/environment.md`: distinguir pipeline CLI canónico / infraestructura n8n·Postgres legacy / render worker; corregir requisitos de `ELEVENLABS_API_KEY`; documentar `SUBTITLE_GLOBAL_OFFSET_MS`; clasificar variables sin consumidor
+- [x] Actualizar `docs/project/integrations.md`: estado de providers (Wikimedia+Pixabay activos; Pexels/FreeAI/Pollinations deshabilitados); orquestador canónico `bin/run_job.py`; n8n legacy; edge_tts default; ElevenLabs alternativa opcional
+- [x] Actualizar `docs/runbooks/n8n-operations.md`: n8n como infraestructura legacy; workflows `*-v1` identificados como legacy y sin soporte de contratos/providers V2
+- [x] Actualizar `AGENTS.md`: identidad genérica y contexto V2-only
+- [x] Actualizar `docs/project/vision.md`: producto genérico configurable; historia como caso de uso posible
+- [x] Actualizar `openspec/project.md` y `Makefile`: identidad genérica (texto cosmético)
+- [x] Actualizar `.env.example`: identidad genérica; `PROJECT_ROOT` → `shorts-creator` (solo plantilla); `POSTGRES_DB` conservado con nota de compatibilidad; documentar `SUBTITLE_GLOBAL_OFFSET_MS` y variables sin consumidor
+- [x] Actualizar `.opencode/agents/*.md` (5 agentes): identidad genérica
+- [x] Revisar `HANDOVER.md`: preservado intacto (ya marcado como contexto legacy frío)
+- [x] Revisar workflows n8n documentados: JSON preservados intactos (legacy, revisión documental)
+- [x] Auditoría read-only de Slice 5B (terminó con `CHANGES_REQUIRED`)
+- [x] Correcciones derivadas del review (F1–F6)
+- [x] Reaprobación read-only focalizada de Slice 5B
+- [ ] Cierre de Slice 5B
+- [ ] Commit de cierre de Slice 5B
+
+Reaprobación: SLICE_5B_REAPPROVED_FOR_CLOSURE; cero findings bloqueantes.
 
 ## Slice 6 — Baseline and closure
 

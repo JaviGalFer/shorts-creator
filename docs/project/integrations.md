@@ -2,34 +2,47 @@
 
 Cada integración tiene un estado de validación: `VALIDADO`, `PENDIENTE_DE_VALIDAR` o `DESCARTADO`.
 
+> **Orquestador canónico:** `bin/run_job.py` es el orquestador del pipeline vigente
+> (`script → assets → audio → prepare → render → validate`). n8n es infraestructura
+> **legacy o alternativa**, no el pipeline canónico.
+
 ---
 
 ## Proveedor LLM (guion + visualPlan)
 
 - **Estado**: `VALIDADO`
-- **Opciones**: OpenAI GPT-4o-mini, Anthropic Claude Haiku, Google Gemini Flash
-- **Método**: API REST configurable vía `LLM_PROVIDER`
-- **Credenciales**: API Key en `.env`
+- **Opciones**: OpenAI GPT-4o-mini (cliente OpenAI-compatible). Anthropic/Google como opciones declaradas pero no verificadas como clientes implementados.
+- **Método**: API REST configurable vía `LLM_PROVIDER` (solo se implementa un cliente OpenAI-compatible).
+- **Credenciales**: `LLM_API_KEY` en `.env`
 - **Límites**: Depende del proveedor
-- **Validación actual**: workflow `generate-script-v1` ejecutado con OpenAI real. Script `bin/generate_script.py` creado.
+- **Pipeline vigente**: `bin/generate_script.py` (invocado por `bin/run_job.py`).
+- **Evidencia histórica**: el workflow n8n `generate-script-v1` (legacy) se ejecutó con OpenAI real durante el desarrollo; no forma parte del pipeline vigente.
 
 ## Edge TTS (narración)
 
 - **Estado**: `VALIDADO`
 - **URL**: vía librería `edge-tts` (Python)
-- **Método**: local, gratuito, sin API key
+- **Método**: cliente Python del servicio Microsoft Edge TTS, sin API key. Se ejecuta desde el entorno local, requiere conectividad de red y no es síntesis offline ni un modelo TTS autoalojado.
 - **Voz**: `es-ES-AlvaroNeural` (español de España)
 - **Dependencia**: `pip install edge-tts`
-- **Alternativa**: ElevenLabs (plan gratuito solo voces inglés, las españolas requieren plan pago)
-- **Validación actual**: `bin/generate_audio.py` probado con éxito
+- **Pipeline vigente**: `bin/generate_audio.py`; `edge_tts` es el TTS por defecto (`TTS_PROVIDER=edge_tts`).
 
-## n8n self-hosted
+## ElevenLabs (narración, alternativa opcional)
 
-- **Estado**: `VALIDADO`
+- **Estado**: `VALIDADO` (implementado como alternativa)
+- **Método**: API REST
+- **Credenciales**: `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` en `.env`
+- **Pipeline vigente**: solo se usa cuando `TTS_PROVIDER=elevenlabs` en `bin/generate_audio.py` (`bin/tts_provider.py`). No es el TTS canónico.
+- **Nota**: plan gratuito con voces españolas limitadas.
+
+## n8n self-hosted (infraestructura legacy o alternativa)
+
+- **Estado**: `VALIDADO` (infraestructura operativa)
 - **URL**: http://localhost:5679
 - **Método**: Docker Compose
-- **Credenciales**: N8N_ENCRYPTION_KEY
-- **Workflows exportados**: JSON en raíz del proyecto
+- **Credenciales**: `N8N_ENCRYPTION_KEY`
+- **Workflows exportados**: JSON en la raíz del proyecto (`workflow-*.json`), todos legacy (`*-v1`).
+- **Rol**: no es el orquestador canónico. Solo documentado como alternativa manual. Ver `docs/runbooks/n8n-operations.md`.
 
 ## FFmpeg (render local)
 
@@ -37,59 +50,54 @@ Cada integración tiene un estado de validación: `VALIDADO`, `PENDIENTE_DE_VALI
 - **Método**: Contenedor Docker `linuxserver/ffmpeg`
 - **Credenciales**: Ninguna
 - **Límites**: CPU/GPU local
-- **Validación actual**: `bin/render_job.py` probado con ASS y SRT
+- **Pipeline vigente**: `bin/render_job.py` probado con ASS y SRT.
 
-## Pexels (imágenes)
+## Wikimedia Commons (imágenes)
 
-- **Estado**: `VALIDADO`
-- **URL**: https://www.pexels.com/api/
-- **Método**: REST API
-- **Credenciales**: API Key en `.env`
-- **Límites**: 200 requests/hora en plan gratuito
-- **Atribución**: No requerida
-- **Uso**: atmospheric_broll, fallback para archive
-- **Validación actual**: workflow `fetch-assets-v1` ejecutado con éxito
-
-## Pixabay (imágenes)
-
-- **Estado**: `VALIDADO`
-- **URL**: https://pixabay.com/api/docs/
-- **Método**: REST API
-- **Credenciales**: API Key en `.env`
-- **Límites**: 5000 requests/hora en plan gratuito
-- **Atribución**: No requerida
-- **Uso**: atmospheric_broll, fallback
-
-## Wikimedia Commons (imágenes históricas)
-
-- **Estado**: `VALIDADO`
+- **Estado**: `VALIDADO` (proveedor visual implementado y activo)
 - **URL**: https://commons.wikimedia.org/w/api.php
 - **Método**: REST API (sin API key)
 - **Credenciales**: Ninguna
 - **Límites**: Rate limit no documentado (429 observado tras ~10 requests rápidas)
 - **Licencias**: Variable (Public Domain, CC0, CC-BY, CC-BY-SA)
 - **Atribución**: Requerida según licencia
-- **Uso**: historical_archive, map_or_document
+- **Uso**: archive / map_or_document
 - **Riesgos**: Rate limiting, calidad variable, atribución requerida
 
-## FreeAI (imágenes generadas)
+## Pixabay (imágenes)
 
-- **Estado**: `PENDIENTE_DE_VALIDAR`
+- **Estado**: `VALIDADO` (proveedor visual implementado y activo)
+- **URL**: https://pixabay.com/api/docs/
+- **Método**: REST API
+- **Credenciales**: `PIXABAY_API_KEY` en `.env`
+- **Límites**: 5000 requests/hora en plan gratuito
+- **Atribución**: No requerida
+- **Uso**: b-roll de stock
+
+## Pexels (imágenes, planificado)
+
+- **Estado**: `PENDIENTE_DE_VALIDAR` — **planificado, deshabilitado y no implementado** en el pipeline vigente.
+- **URL**: https://www.pexels.com/api/
+- **Método**: REST API
+- **Credenciales**: API Key (sin contrato de variable activo; `PEXELS_API_KEY` retirada de `.env.example`)
+- **Límites**: 200 requests/hora en plan gratuito
+- **Atribución**: No requerida
+- **Rol actual**: entrada de proveedor planificado en `bin/visual_provider_config_v2.py` con `enabled=false, implemented=false`. No consume recursos ni credenciales.
+- **Evidencia histórica**: el workflow n8n `fetch-assets-v1` (legacy) usó Pexels durante el desarrollo; no refleja el estado actual del pipeline CLI.
+
+## FreeAI (imágenes generadas, deshabilitado)
+
+- **Estado**: `PENDIENTE_DE_VALIDAR` — **deshabilitado y no implementado** en el pipeline vigente.
 - **URL**: https://api.free.ai/v1/image/generate/
 - **Método**: POST, OpenAI-compatible
-- **Credenciales**: `FREEAI_API_KEY` en `.env`
-- **Límites**: 30K tokens/día gratis (30+ imágenes)
+- **Credenciales**: `FREEAI_API_KEY` (sin contrato de variable activo)
 - **Modelos**: flux-schnell (gratis), sdxl, premium/flux-pro
-- **Atribución**: No requerida
-- **Uso**: generated_reconstruction, fallback
+- **Rol actual**: proveedor deshabilitado en `bin/visual_provider_config_v2.py` con `enabled=false, implemented=false`.
 
-## Pollinations (imágenes generadas, último fallback)
+## Pollinations (imágenes generadas, deshabilitado)
 
-- **Estado**: `VALIDADO` (pero baja calidad)
+- **Estado**: `PENDIENTE_DE_VALIDAR` — **deshabilitado y no implementado** en el pipeline vigente.
 - **URL**: https://image.pollinations.ai/
 - **Método**: HTTP GET sin API key
 - **Credenciales**: Ninguna
-- **Límites**: ~1 req/sec, rate-limited (429)
-- **Atribución**: No requerida
-- **Uso**: Último fallback cuando todo falla
-- **Riesgos**: Calidad baja, rate limiting, imágenes irrelevantes
+- **Rol actual**: proveedor deshabilitado en `bin/visual_provider_config_v2.py` con `enabled=false, implemented=false`. Antes actuaba como fallback de baja calidad; no es provider activo del pipeline vigente.

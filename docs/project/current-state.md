@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-**Última actualización:** 2026-07-30
+**Última actualización:** 2026-08-01
 
 ## Estado global
 
@@ -10,7 +10,7 @@ Pipeline funcional de vídeos cortos verticales con duración configurable. Scri
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4 completo. Slice 5A implementado, revisado, corregido, reaprobado y cerrado mediante el commit de esta sesión. Slice 5B es el siguiente trabajo.
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4 completo. Slice 5A implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`. Slice 5B implementado, auditado, corregido y reaprobado; pendiente de cierre mediante commit estable. Slice 6 no iniciado.
 
 ### Slice 1 completado (2026-07-17)
 
@@ -264,6 +264,60 @@ Pipeline funcional de vídeos cortos verticales con duración configurable. Scri
 - Commit de cierre: `f2a8078`, con nueve archivos incluidos; working tree final limpio.
 - Cero push, cero reindexados, cero llamadas MCP.
 
+## Slice 5B implementado, auditado con CHANGES_REQUIRED, corregido y reaprobado (2026-08-01)
+
+Slice 5B del change `retire-legacy-visual-v1` implementado. Cambios exclusivamente documentales y de configuración de plantilla; sin cambios de código productivo.
+
+Archivos modificados (implementación):
+
+- `.env.example`: identidad genérica; `PROJECT_ROOT` corregido a `/home/javi/projects/shorts-creator` (solo plantilla); `POSTGRES_DB` conservado; documentado `SUBTITLE_GLOBAL_OFFSET_MS` y variables sin consumidor
+- `AGENTS.md`, `Makefile`, `openspec/project.md`: identidad genérica
+- `docs/project/environment.md`: componentes (CLI canónico / n8n·Postgres legacy / render worker) y requisitos de variables actualizados
+- `docs/project/integrations.md`: estado de providers alineado con runtime
+- `docs/project/vision.md`: producto genérico configurable; historia como caso de uso posible
+- `docs/runbooks/n8n-operations.md`: n8n como infraestructura legacy
+- `.opencode/agents/*.md` (5): identidad genérica
+- `openspec/changes/retire-legacy-visual-v1/tasks.md`: estado de implementación de Slice 5B
+- `docs/sessions/20260801-000000-retire-legacy-visual-v1-slice-5b-build.md`: session log de implementación
+
+Decisiones de compatibilidad:
+
+- `PROJECT_ROOT` corregido solo en `.env.example` (plantilla); no se toca ningún `.env` real.
+- `POSTGRES_DB=shorts_history` conservado por compatibilidad con infraestructura n8n/PostgreSQL y datos persistidos existentes.
+- Workflows n8n JSON y `HANDOVER.md` preservados intactos (legacy / contexto legacy frío).
+- Código productivo (`bin/`, `tests/`, `docker-compose.yml`) no modificado.
+
+### Auditoría read-only y correcciones (2026-08-01)
+
+La auditoría read-only terminó con `SLICE_5B_REVIEW_CHANGES_REQUIRED`.
+
+Findings corregidos:
+
+- **F1 MEDIUM:** `.env.example` afirmaba soporte nativo `openai | anthropic | google`; se corrigió a "openai, mediante cliente OpenAI-compatible" y se eliminó el bloque alternativo Anthropic. Runtime (`bin/generate_script.py`) solo implementa `provider == "openai"`.
+- **F2 MEDIUM:** `docs/project/environment.md` conservaba el layout plano legacy de datos; se sustituyó por el layout canónico `data/videos/{jobId}/`. Python pasó a dependencia obligatoria (3.10+); Faster-Whisper queda opcional.
+- **F3 MEDIUM:** `docs/runbooks/n8n-operations.md` omitía `validate`, no presentaba `bin/run_job.py` como vía canónica y referenciaba `bin/review_job.py`; se añadió la etapa de validación, `bin/run_job.py` como orquestador canónico y se corrigió la ruta a `review_job.py`.
+- **F4 MEDIUM:** `docs/project/current-state.md` con metadata y próximos pasos obsoletos; se actualizó fecha, resumen, bloque de Slice 5B y próximos pasos.
+- **F5 LOW:** `docs/project/integrations.md` describía Edge TTS como síntesis "local"; se reformuló como cliente Python del servicio Microsoft Edge TTS (sin API key, requiere red, no es offline).
+- **F6 LOW:** `docs/project/vision.md` afirmaba que cada vídeo tiene una bitácora y un change OpenSpec; se distinguió trazabilidad del job de la trazabilidad de cambios de desarrollo.
+
+Nota no bloqueante:
+
+- **F7 NOTE:** el session log conserva el timestamp `000000`. No existe una hora real verificable del Build y no se inventa un timestamp.
+
+### Reaprobación read-only focalizada (2026-08-01)
+
+La reaprobación read-only focalizada terminó con `SLICE_5B_REAPPROVED_FOR_CLOSURE`.
+
+- F1–F6 confirmados como resueltos.
+- Un LOW no bloqueante aceptado en `docs/project/integrations.md`: la frase `Anthropic/Google como opciones declaradas pero no verificadas como clientes implementados`, desambiguada por la línea siguiente que indica que solo existe un cliente OpenAI-compatible.
+- F7 aceptado como NOTE no bloqueante (timestamp `000000`; sin hora real verificable; no se renombra ni se inventa una hora).
+- Slice 5B aprobado para cierre.
+- Repositorio sin cambios durante la reaprobación.
+- Commit de cierre todavía pendiente en este punto.
+- Slice 6 no iniciado.
+
+Estado: **reaprobado y pendiente de cierre mediante commit estable**. No se ha creado todavía el commit de cierre.
+
 ## Resumen
 
 - Slice 3B1: 157 tests focalizados pasados, 0 fallidos
@@ -273,8 +327,8 @@ Pipeline funcional de vídeos cortos verticales con duración configurable. Scri
 - Slice 4B1: implementado, revisado y cerrado mediante el commit de esta iteración
 - Slice 4B2: implementado, revisado y cerrado mediante el commit de esta iteración
 - Slice 4: completado
-- Slice 5A: implementado, revisado, corregido, reaprobado y cerrado mediante el commit de esta sesión
-- Slice 5B: pendiente
+- Slice 5A: implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`
+- Slice 5B: implementado, auditado, corregido, reaprobado y pendiente de cierre
 - Slice 6: pendiente
 
 ## Plan de transformación modular
@@ -305,7 +359,7 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 
 ## Próximos pasos
 
-1. Slice 5B del change `retire-legacy-visual-v1`: environment, integrations y referencias operacionales.
+1. Cierre y commit estable de Slice 5B.
 2. Slice 6: baseline completa, E2E V2 canónico y cierre formal del change.
 3. Phase B de audio pacing tras migrar script/
 4. Crear `pyproject.toml` y estructura `src/`

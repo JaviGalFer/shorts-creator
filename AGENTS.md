@@ -1,4 +1,4 @@
-# AGENTS.md — Shorts Históricos
+# AGENTS.md — Shorts Creator
 
 Reglas de trabajo para agentes que operan sobre este repositorio.
 
@@ -8,6 +8,7 @@ Reglas de trabajo para agentes que operan sobre este repositorio.
 - `docs/project/current-state.md` es la única fuente de contexto operativo caliente.
 - Leer un OpenSpec concreto solo cuando current-state.md indique explícitamente un cambio activo y la tarea esté relacionada.
 - No cargar `docs/sessions/`, `openspec/changes/` ni skills por defecto al iniciar.
+- El proyecto es un generador automatizado y configurable de vídeos cortos. El pipeline vigente es V2-only, orquestado por `bin/run_job.py` (`script → assets → audio → prepare → render → validate`). n8n es infraestructura legacy o alternativa, no el orquestador canónico.
 
 ## Exploración
 

@@ -20,7 +20,7 @@ help:
 	@printf "  make test           - Valida estructura del proyecto\n"
 
 doctor:
-	@echo "=== Doctor: Shorts Históricos ==="; \
+	@echo "=== Doctor: Shorts Creator ==="; \
 	status=0; \
 	if command -v docker >/dev/null 2>&1; then echo "[OK] docker"; else echo "[ERR] docker"; status=1; fi; \
 	if command -v $(DOCKER_COMPOSE) >/dev/null 2>&1; then echo "[OK] $(DOCKER_COMPOSE)"; else echo "[ERR] $(DOCKER_COMPOSE)"; status=1; fi; \

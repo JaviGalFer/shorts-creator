@@ -1,4 +1,4 @@
-# OpenSpec — Shorts Históricos
+# OpenSpec — Shorts Creator
 
 ## ¿Qué es OpenSpec?
 
