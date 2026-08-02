@@ -1,6 +1,16 @@
-"""Regression tests for subtitle timing edge cases.
+"""Regression tests for subtitle timing edge cases (hermetic).
 
-Fixtures:
+These tests validate the pure subtitle-timing pipeline from
+`bin/generate_audio.py` (canonical token matching + cue grouping) using
+deterministic synthetic WordBoundary events. They do NOT invoke Edge TTS,
+run any subprocess, open sockets, use Docker, write under `data/`, or depend
+on a `.venv` or a persisted reference job.
+
+Original integration tests exercised Edge TTS via subprocess (a real network
+service) and were blocked by the suite-wide hermeticity policy (C5). Their
+semantic invariants are preserved here against the pure functions.
+
+Fixtures (semantics preserved from the original regression suite):
 - sentence_boundary_crossing: no words leak across sentence boundaries
 - punctuation_restoration: trailing commas/periods recovered from canonical text
 - no_cross_scene_leakage: cues respect scene window boundaries
@@ -9,18 +19,32 @@ Fixtures:
 Run: python3 -m pytest tests/test_timing_regression.py -v
 """
 
-import json
+import importlib
+import re
+import socket
 import subprocess
 import sys
 from pathlib import Path
 
-PROJECT = Path("/home/javi/projects/shorts-creator")
-VENV_PYTHON = str(PROJECT / ".venv" / "bin" / "python3")
-GENERATE_AUDIO = str(PROJECT / "bin" / "generate_audio.py")
-PREPARE_JOB = str(PROJECT / "bin" / "prepare_job.py")
+import pytest
 
-TEST_JOB_DIR = PROJECT / "data/videos/test-timing-regression"
-REF_JOB_DIR = PROJECT / "data/videos/la-2026-07-01-173458"
+PROJECT = Path("/home/javi/projects/shorts-creator")
+BIN_DIR = PROJECT / "bin"
+
+# Import the pure timing functions from the production module. Importing the
+# module is side-effect free: `edge_tts` is imported lazily inside provider
+# methods, not at module load.
+if str(BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(BIN_DIR))
+
+_ga = importlib.import_module("generate_audio")
+
+split_sentences = _ga.split_sentences
+build_full_narration = _ga.build_full_narration
+_build_canonical_tokens = _ga._build_canonical_tokens
+_match_words_to_canonical = _ga._match_words_to_canonical
+group_words_into_cues = _ga.group_words_into_cues
+_strip_punct = _ga._strip_punct
 
 SENTENCE_BOUNDARY_TEXT = (
     "Primera oración. Segunda oración. Tercera oración."
@@ -31,128 +55,84 @@ CROSS_SCENE_TEXT = (
     "Escena dos comienza aquí."
 )
 
+# Deterministic scenes mirroring the original metadata fixtures, but synthetic
+# (no reference to any persisted job under data/videos/).
+SCENES = [
+    {"sceneNumber": 1, "voiceover": SENTENCE_BOUNDARY_TEXT},
+    {"sceneNumber": 2, "voiceover": CROSS_SCENE_TEXT},
+]
 
-def _build_metadata() -> dict:
-    return {
-        "jobId": "test-timing-regression",
-        "status": "SCRIPT_DRAFT",
-        "topic": "Regression tests for timing edge cases",
-        "language": "es-ES",
-        "format": "shorts-9x16",
-        "targetDurationSeconds": 14,
-        "script": {
-            "title": "Timing Regression Test",
-            "scenes": [
-                {
-                    "sceneNumber": 1,
-                    "voiceover": SENTENCE_BOUNDARY_TEXT,
-                    "subtitle": SENTENCE_BOUNDARY_TEXT,
-                    "targetDurationSec": 7,
-                    "visualPlan": {
-                        "strategy": "historical_archive",
-                        "editorialRole": "context_map",
-                        "primaryAssetType": "historical_map",
-                        "period": "Imperio Bizantino, 1453",
-                        "location": "Constantinopla",
-                        "preferredSources": ["wikimedia_commons"],
-                        "allowGeneratedImage": False,
-                    },
-                    "narrativeBeats": [
-                        {"beatIndex": 1, "text": SENTENCE_BOUNDARY_TEXT,
-                         "visualIntent": "context_map", "startCueIndex": 0, "endCueIndex": 2}
-                    ],
-                },
-                {
-                    "sceneNumber": 2,
-                    "voiceover": CROSS_SCENE_TEXT,
-                    "subtitle": CROSS_SCENE_TEXT,
-                    "targetDurationSec": 7,
-                    "visualPlan": {
-                        "strategy": "historical_archive",
-                        "editorialRole": "battle_or_assault",
-                        "primaryAssetType": "historical_art_or_document",
-                        "period": "Imperio Otomano, 1453",
-                        "location": "Constantinopla",
-                        "preferredSources": ["wikimedia_commons"],
-                        "allowGeneratedImage": False,
-                    },
-                    "narrativeBeats": [
-                        {"beatIndex": 1, "text": CROSS_SCENE_TEXT,
-                         "visualIntent": "battle_action", "startCueIndex": 0, "endCueIndex": 1}
-                    ],
-                },
-            ],
-        },
-        "assets": [
-            {
-                "sceneNumber": sn,
-                "selected": True,
-                "path": str(REF_JOB_DIR / f"scenes/scene-0{sn}-01.jpg"),
-                "strategy": "historical_archive",
-                "assetType": "historical_map" if sn == 1 else "historical_art_or_document",
-                "segments": [{
-                    "segmentIndex": 1,
-                    "path": str(REF_JOB_DIR / f"scenes/scene-0{sn}-01.jpg"),
-                    "assetType": "historical_map" if sn == 1 else "historical_art_or_document",
-                    "durationSec": 7.0,
-                    "provider": "wikimedia_commons",
-                    "sourceUrl": "https://example.com/img.jpg",
-                    "license": "Public domain",
-                    "score": 30,
-                    "width": 828,
-                    "height": 546,
-                    "editorialRole": "context_map" if sn == 1 else "battle_or_assault",
-                    "motionType": "static",
-                    "transition": "cut",
-                }],
-            }
-            for sn in (1, 2)
-        ],
-    }
+# Fixed word cadence (seconds) for synthetic WordBoundary events.
+WORD_DURATION = 0.5
 
 
-def run(cmd: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+def _build_cues():
+    """Run the pure timing pipeline and return cues grouped by scene number.
 
+    Mimics the continuous-mode path in `generate_audio.py`:
+    build_full_narration -> _build_canonical_tokens -> _match_words_to_canonical
+    -> group_words_into_cues.
+    """
+    _, narration_units = build_full_narration(SCENES)
+    canonical_tokens = _build_canonical_tokens(narration_units)
 
-def _run_audio_and_load(metadata_path: Path) -> dict:
-    """Run generate_audio.py then load metadata (tolerates REVIEW_REQUIRED exit code)."""
-    r = subprocess.run(
-        [VENV_PYTHON, GENERATE_AUDIO, str(metadata_path),
-         "--continuous", "--voice", "es-ES-AlvaroNeural",
-         "--subtitle-timing-provider", "edge_tts"],
-        capture_output=True, text=True, timeout=120
+    # Synthetic WordBoundary events: one per canonical token, with deterministic
+    # offsets/durations. Edge emits words without trailing punctuation; the
+    # canonical token carries the punctuation that must be restored.
+    words = []
+    t = 0.0
+    for ct in canonical_tokens:
+        words.append({
+            "startSec": round(t, 3),
+            "endSec": round(t + WORD_DURATION, 3),
+            "text": _strip_punct(ct["text"]),
+        })
+        t += WORD_DURATION
+
+    annotated, metrics = _match_words_to_canonical(words, canonical_tokens)
+    assert metrics["unmatchedRatio"] <= 0.10, (
+        f"canonical matching degraded: {metrics['unmatchedEdgeWords']}"
     )
-    meta = json.loads(metadata_path.read_text())
-    cues_found = any(
-        sc.get("subtitleTiming", {}).get("cues", [])
-        for sc in meta.get("script", {}).get("scenes", [])
-    )
-    assert cues_found, f"generate_audio produced no cues: stdout={r.stdout[:500]}"
-    return meta
+    cues = group_words_into_cues(annotated)
+
+    by_scene = {}
+    for cue in cues:
+        by_scene.setdefault(cue.get("sceneNumber"), []).append(cue)
+    return by_scene
 
 
-def setup_job() -> dict:
-    TEST_JOB_DIR.mkdir(parents=True, exist_ok=True)
-    scenes_dir = TEST_JOB_DIR / "scenes"
-    scenes_dir.mkdir(parents=True, exist_ok=True)
-    meta = _build_metadata()
-    meta_path = TEST_JOB_DIR / "metadata.json"
-    meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
-    for asset in meta["assets"]:
-        src = Path(asset["path"])
-        if src.exists():
-            dst = scenes_dir / src.name
-            if not dst.exists():
-                dst.write_bytes(src.read_bytes())
-    return json.loads(meta_path.read_text())
+def _cues_by_scene():
+    return _build_cues()
 
 
-def test_sentence_boundary_crossing():
+@pytest.fixture()
+def hermetic_guard(monkeypatch):
+    """Guarantee the suite never reaches external effects.
+
+    If any code path under test tries to spawn a real subprocess, open a
+    socket, or instantiate a real TTS provider, the test fails immediately.
+    `tmp_path`-scoped file writes remain allowed.
+    """
+
+    def _deny(*args, **kwargs):
+        raise AssertionError(
+            "Hermetic guard tripped: forbidden external effect in "
+            "test_timing_regression (subprocess/socket/provider)."
+        )
+
+    monkeypatch.setattr(subprocess, "run", _deny)
+    monkeypatch.setattr(subprocess, "Popen", _deny)
+    monkeypatch.setattr(socket, "create_connection", _deny)
+    monkeypatch.setattr(socket, "socket", _deny)
+    monkeypatch.setattr(_ga, "get_provider", _deny)
+    yield
+
+
+def test_sentence_boundary_crossing(hermetic_guard):
     """No words leak across sentence boundaries within the same scene."""
-    setup_job()
-    meta = _run_audio_and_load(TEST_JOB_DIR / "metadata.json")
-    scene1_cues = meta["script"]["scenes"][0].get("subtitleTiming", {}).get("cues", [])
+    by_scene = _cues_by_scene()
+    scene1_cues = by_scene.get(1, [])
+    assert scene1_cues, "expected cues for scene 1"
     all_cue_text = " ".join(c["text"] for c in scene1_cues)
     assert "oración" in all_cue_text
     cues_text = " | ".join(c["text"] for c in scene1_cues)
@@ -162,26 +142,24 @@ def test_sentence_boundary_crossing():
         f"First cue leaks into third sentence: {cues_text}"
 
 
-def test_punctuation_restoration():
+def test_punctuation_restoration(hermetic_guard):
     """Trailing punctuation recovered from canonical text in Edge mode."""
-    setup_job()
-    meta = _run_audio_and_load(TEST_JOB_DIR / "metadata.json")
-    scene1_cues = meta["script"]["scenes"][0].get("subtitleTiming", {}).get("cues", [])
+    by_scene = _cues_by_scene()
+    scene1_cues = by_scene.get(1, [])
+    assert scene1_cues, "expected cues for scene 1"
     has_period = any("oración." in c["text"] for c in scene1_cues)
     assert has_period, \
         f"No cue contains period: {[c['text'] for c in scene1_cues]}"
 
 
-def test_no_cross_scene_leakage():
+def test_no_cross_scene_leakage(hermetic_guard):
     """Cues from scene 1 do not leak into scene 2 window and vice versa.
     Uses unique words from each scene to avoid false positives."""
-    setup_job()
-    meta = _run_audio_and_load(TEST_JOB_DIR / "metadata.json")
-    scene1_cues = meta["script"]["scenes"][0].get("subtitleTiming", {}).get("cues", [])
-    scene2_cues = meta["script"]["scenes"][1].get("subtitleTiming", {}).get("cues", [])
-    # Scene 1 has "Primera oración" — should not appear in scene 2 cues
+    by_scene = _cues_by_scene()
+    scene1_cues = by_scene.get(1, [])
+    scene2_cues = by_scene.get(2, [])
+    assert scene1_cues and scene2_cues, "expected cues for both scenes"
     scene1_unique = "Primera"
-    # Scene 2 has "comienza aquí" — should not appear in scene 1 cues
     scene2_unique = "comienza"
     for cue in scene1_cues:
         assert scene2_unique not in cue["text"], \
@@ -191,13 +169,13 @@ def test_no_cross_scene_leakage():
             f"Scene 2 cue contains scene 1 text: {cue['text']}"
 
 
-def test_no_single_word_by_boundary():
+def test_no_single_word_by_boundary(hermetic_guard):
     """No single-word cue is created solely by sentence-boundary handling
     (a single-word cue is allowed if it's a brief word like an
     interjection, or is the last cue at a scene boundary)."""
-    setup_job()
-    meta = _run_audio_and_load(TEST_JOB_DIR / "metadata.json")
-    scene1_cues = meta["script"]["scenes"][0].get("subtitleTiming", {}).get("cues", [])
+    by_scene = _cues_by_scene()
+    scene1_cues = by_scene.get(1, [])
+    assert scene1_cues, "expected cues for scene 1"
     scene1_end = scene1_cues[-1]["endSec"] if scene1_cues else 999
     for cue in scene1_cues:
         word_count = len(cue["text"].split())

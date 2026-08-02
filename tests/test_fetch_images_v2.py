@@ -972,14 +972,26 @@ class TestSourceIsolation:
             "fetch_images", "asset_validation", "editorial_asset_contract",
             "generate_script", "prepare_job", "render_job", "run_job",
         ]
-        for mod in v1_modules:
-            saved = sys.modules.pop(mod, None)
-            monkeypatch.setattr(sys, "modules", sys.modules)
+        v1_original_modules = {mod: sys.modules.get(mod) for mod in v1_modules}
 
-        fetch_images_v2.main([str(metadata_path)])
+        with monkeypatch.context() as scoped:
+            for mod in v1_modules:
+                scoped.delitem(sys.modules, mod, raising=False)
+
+            fetch_images_v2.main([str(metadata_path)])
+
+            for mod in v1_modules:
+                assert mod not in sys.modules, f"v1 module '{mod}' was imported"
 
         for mod in v1_modules:
-            assert mod not in sys.modules, f"v1 module '{mod}' was imported"
+            if v1_original_modules[mod] is not None:
+                assert sys.modules.get(mod) is v1_original_modules[mod], (
+                    f"module identity not restored for '{mod}'"
+                )
+            else:
+                assert mod not in sys.modules, (
+                    f"module '{mod}' should remain absent after context exit"
+                )
 
 
 class TestNoLegacyFields:

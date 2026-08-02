@@ -164,12 +164,90 @@ Slice 5B cerrado mediante el commit `1d9fe37` (`docs(project): align Slice 5B en
 
 ## Slice 6 — Baseline and closure
 
-- [ ] Ejecutar tests focalizados por slice
-- [ ] Ejecutar suite completa
-- [ ] Clasificar fallos ligados a V1
-- [ ] Resolver o documentar fallos V1
-- [ ] Obtener baseline limpia
+### Slice 6A — baseline y corrección focalizada de tests
+
+Estado: la corrección de los 11 tests neutrales (C2), la hermetización de
+`test_timing_regression.py` (C5) y la corrección del aislamiento de
+`test_fetch_images_v2.py::TestSourceIsolation::test_no_v1_runtime_imports`
+(C4) están completas. La suite completa queda verde: baseline limpia
+`1102 passed, 0 failed`. La auditoría read-only terminó con
+`CHANGES_REQUIRED` exclusivamente documental; las correcciones documentales
+F4–F9 están aplicadas; la reaprobación read-only focalizada terminó con
+`SLICE_6A_REAPPROVED_FOR_COMMIT`. Pendiente exclusivamente de cierre y commit.
+
+- [x] Ejecutar tests focalizados por slice
+- [x] Ejecutar suite completa — `1102 passed, 0 failed`
+- [x] Clasificar fallos ligados a V1
+- [x] Resolver o documentar fallos V1
+- [x] Obtener baseline limpia — `1102 passed, 0 failed`
 - [ ] Ejecutar E2E V2 canónico
-- [ ] Actualizar `docs/project/current-state.md`
-- [ ] Actualizar session document
+- [x] Actualizar `docs/project/current-state.md` (progreso de 6A; la actualización final de cierre queda en el cierre)
+- [x] Actualizar session document (session log 6A; la actualización de cierre queda en el cierre)
 - [ ] Cierre formal del change
+- [x] Auditoría read-only de Slice 6A — CHANGES_REQUIRED
+- [x] Correcciones documentales F4–F9
+- [x] Reaprobación read-only focalizada de Slice 6A
+
+Reaprobación: SLICE_6A_REAPPROVED_FOR_COMMIT.
+Cero findings bloqueantes.
+F1/F2 LOW y F3 NOTE aceptados como no bloqueantes.
+
+Pendientes:
+
+- [ ] Cierre de Slice 6A
+- [ ] Commit de Slice 6A
+- [ ] Ejecutar E2E V2 canónico
+- [ ] Cierre formal del change
+
+### Nota sobre la hermetización de `test_timing_regression.py` (6A2)
+
+- Los 4 tests de timing se reescribieron bajo Estrategia A: importan las funciones
+  puras de `bin/generate_audio.py` (`build_full_narration`, `_build_canonical_tokens`,
+  `_match_words_to_canonical`, `group_words_into_cues`, `_strip_punct`) y usan
+  WordBoundary/cues sintéticos deterministas. No se contacta Edge TTS en la suite
+  normal. Resultado focalizado: `4 passed`.
+- Resultado focalizado combinado (`test_run_job.py` + `test_timing_regression.py` +
+  `test_semantic_asset_validation.py`): `103 passed`.
+
+### Corrección de aislamiento de imports (6A3)
+
+- Causa raíz C4: `tests/test_fetch_images_v2.py::TestSourceIsolation::test_no_v1_runtime_imports`
+  hacía `sys.modules.pop("run_job", None)` (y otros módulos) sin restauración; el
+  `monkeypatch.setattr(sys, "modules", sys.modules)` era un no-op. Por orden
+  alfabético, `test_run_job.py` corría después y sus `patch("run_job.*")`
+  reimportaban un módulo `run_job` nuevo, distinto del objeto que `main()` usaba
+  ya importado. Resultado: `20 failed, 1082 passed` en la suite completa.
+- Corrección: las eliminaciones de `sys.modules` se movieron a
+  `with monkeypatch.context() as scoped:` usando `scoped.delitem(sys.modules, mod, raising=False)`,
+  que registra y restaura el valor original al salir del bloque. Se añadió
+  verificación de identidad post-contexto (objeto original restaurado, o ausencia
+  conservada).
+- Contrato conservado: durante el contexto, el test sigue comprobando que
+  `fetch_images_v2.main()` no reimporta los módulos legacy retirados
+  (`fetch_images`, `asset_validation`, `editorial_asset_contract`) ni los módulos
+  productivos vigentes bloqueados por aislamiento de capas (`generate_script`,
+  `prepare_job`, `render_job`, `run_job`). La variable de test continúa llamándose
+  `v1_modules`, aunque su nombre es impreciso y no implica que los siete módulos
+  sean legacy. Sin debilitar la lista prohibida ni eliminar assertions.
+- Ambos órdenes del par contaminante/inverso: `2 passed` cada uno; prueba mínima
+  de 4 tests: `4 passed`; archivos `test_fetch_images_v2.py` + `test_run_job.py`
+  en ambos órdenes: `130 passed` cada uno.
+- Slice 6A reaprobado read-only (`SLICE_6A_REAPPROVED_FOR_COMMIT`), pendiente de cierre y commit. Slice 6B no iniciado.
+
+### Fallo adicional de suite (Caso B, resuelto en 6A3)
+
+Resultado intermedio histórico de 6A2: suite completa `20 failed, 1082 passed`.
+Resuelto en 6A3. C4 ya no está pendiente.
+
+- `test_run_job.py`: `91 passed` en aislamiento.
+- Los 20 fallos eran de `test_run_job.py`, preexistentes (reproducibles con
+  `--ignore=tests/test_timing_regression.py`).
+- Causa C4: `tests/test_fetch_images_v2.py::test_no_v1_runtime_imports` hacía
+  `sys.modules.pop("run_job", None)` sin restauración (el `monkeypatch.setattr(sys,
+  "modules", sys.modules)` es un no-op). Por orden alfabético, `test_run_job.py`
+  corría después y sus `patch("run_job.*")` quedaban rotos.
+- Clasificación: C4 — test demasiado acoplado por mutar estado global sin restaurar.
+- Corrección (6A3): las eliminaciones de `sys.modules` se movieron a
+  `with monkeypatch.context() as scoped:` usando
+  `scoped.delitem(sys.modules, mod, raising=False)`.
+- Baseline posterior: `1102 passed, 0 failed`. C4 ya no está pendiente.

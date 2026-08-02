@@ -82,6 +82,21 @@ def initial_metadata_file(fake_job_dir):
     return str(path)
 
 
+def _v2_meta(meta: dict) -> dict:
+    """Return a copy of a neutral metadata dict enriched with a minimal V2 visual plan.
+
+    The runner's fail-closed classifier requires script.scenes[].visualPlan._schemaVersion == 2
+    for SUPPORTED_V2. This helper adds the minimal valid V2 structure without mutating the
+    caller's dict and without inventing contract fields.
+    """
+    enriched = dict(meta)
+    if "script" not in enriched:
+        enriched["script"] = {
+            "scenes": [{"sceneNumber": 1, "visualPlan": {"_schemaVersion": 2}}]
+        }
+    return enriched
+
+
 # ---------------------------------------------------------------------------
 # Command construction
 # ---------------------------------------------------------------------------
@@ -366,11 +381,11 @@ def test_review_required_stops_before_assets(fake_job_dir, capsys):
 def test_non_zero_exit_fails_metadata(fake_job_dir, capsys):
     meta_path = str(fake_job_dir / "metadata.json")
     script_output = json.dumps({"jobId": "test-1", "path": meta_path, "status": "SCRIPT_DRAFT"})
-    metadata = {
+    metadata = _v2_meta({
         "jobId": "test-1",
         "status": "SCRIPT_DRAFT",
         "createdAt": "2000-01-01T00:00:00.000Z",
-    }
+    })
 
     def _side_effect(cmd, **kw):
         if "generate_script.py" in " ".join(cmd):
@@ -427,10 +442,13 @@ def test_stop_after_assets_does_not_run_audio(fake_job_dir, initial_metadata_fil
     meta_path = str(fake_job_dir / "metadata.json")
     script_output = json.dumps({"jobId": "test-1", "path": meta_path, "status": "SCRIPT_DRAFT"})
 
-    # Create a scene image so contract verification passes
+    # Create a scene image and an asset image so contract verification passes
     scenes_dir = fake_job_dir / "scenes"
     scenes_dir.mkdir(exist_ok=True)
     (scenes_dir / "scene-1.jpg").touch()
+    assets_dir = fake_job_dir / "assets"
+    assets_dir.mkdir(exist_ok=True)
+    (assets_dir / "seg_001.jpg").touch()
 
     call_count = {"script": 0, "assets": 0, "audio": 0}
 
@@ -439,7 +457,7 @@ def test_stop_after_assets_does_not_run_audio(fake_job_dir, initial_metadata_fil
         if "generate_script.py" in cmd_str:
             call_count["script"] += 1
             return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
-        if "fetch_images.py" in cmd_str:
+        if "fetch_images_v2.py" in cmd_str:
             call_count["assets"] += 1
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         if "generate_audio.py" in cmd_str:
@@ -447,8 +465,8 @@ def test_stop_after_assets_does_not_run_audio(fake_job_dir, initial_metadata_fil
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    metadata = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
-    assets_meta = {"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
+    metadata = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
+    assets_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
 
     with patch("run_job.subprocess.run", side_effect=side_effect):
         with patch("run_job.load_metadata",
@@ -492,7 +510,7 @@ def test_final_summary_failed(capsys):
 def test_asset_failure_stops_before_audio(fake_job_dir, capsys):
     meta_path = str(fake_job_dir / "metadata.json")
     script_output = json.dumps({"jobId": "test-1", "path": meta_path, "status": "SCRIPT_DRAFT"})
-    metadata = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
+    metadata = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
 
     call_count = {"script": 0, "assets": 0, "audio": 0}
 
@@ -501,7 +519,7 @@ def test_asset_failure_stops_before_audio(fake_job_dir, capsys):
         if "generate_script.py" in cmd_str:
             call_count["script"] += 1
             return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
-        if "fetch_images.py" in cmd_str:
+        if "fetch_images_v2.py" in cmd_str:
             call_count["assets"] += 1
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="Asset error")
         if "generate_audio.py" in cmd_str:
@@ -846,8 +864,8 @@ def test_assets_exit0_but_stale_status_fails(fake_job_dir, initial_metadata_file
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    script_meta = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
-    stale_meta = {"jobId": "test-1", "status": "ASSETS_FETCHING", "createdAt": "2000-01-01T00:00:00.000Z"}
+    script_meta = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
+    stale_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_FETCHING", "createdAt": "2000-01-01T00:00:00.000Z"})
 
     with patch("run_job.subprocess.run", side_effect=side_effect):
         with patch("run_job.load_metadata", side_effect=[script_meta, stale_meta, stale_meta]):
@@ -869,6 +887,9 @@ def test_audio_exit0_but_no_audio_file_fails(fake_job_dir, initial_metadata_file
     scenes_dir = fake_job_dir / "scenes"
     scenes_dir.mkdir()
     (scenes_dir / "scene-1.jpg").touch()
+    assets_dir = fake_job_dir / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "seg_001.jpg").touch()
 
     call_count = {}
 
@@ -883,9 +904,9 @@ def test_audio_exit0_but_no_audio_file_fails(fake_job_dir, initial_metadata_file
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    script_meta = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
-    assets_meta = {"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    audio_meta = {"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
+    script_meta = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
+    assets_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    audio_meta = _v2_meta({"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
 
     with patch("run_job.subprocess.run", side_effect=side_effect):
         with patch("run_job.load_metadata", side_effect=[script_meta, assets_meta, audio_meta, audio_meta]):
@@ -907,6 +928,9 @@ def test_prepare_missing_subtitle_fails_pipeline(fake_job_dir, initial_metadata_
     scenes_dir.mkdir()
     (scenes_dir / "scene-1.jpg").touch()
     (scenes_dir / "narration.mp3").touch()
+    assets_dir = fake_job_dir / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "seg_001.jpg").touch()
 
     call_count = {}
 
@@ -917,16 +941,16 @@ def test_prepare_missing_subtitle_fails_pipeline(fake_job_dir, initial_metadata_
             return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    script_meta = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
-    assets_meta = {"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    audio_meta = {"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    prepare_meta = {
+    script_meta = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
+    assets_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    audio_meta = _v2_meta({"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    prepare_meta = _v2_meta({
         "jobId": "test-1",
         "status": "SUBTITLES_READY",
         "subtitles": {"path": str(fake_job_dir / "subtitle.ass"), "format": "ass"},
         "render": {"path": str(fake_job_dir / "video.mp4")},
         # no renderTimeline — will trigger contract failure
-    }
+    })
 
     with patch("run_job.subprocess.run", side_effect=side_effect):
         with patch("run_job.load_metadata",
@@ -950,6 +974,9 @@ def test_render_exit0_but_no_video_fails(fake_job_dir, initial_metadata_file, ca
     scenes_dir.mkdir()
     (scenes_dir / "scene-1.jpg").touch()
     (scenes_dir / "narration.mp3").touch()
+    assets_dir = fake_job_dir / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "seg_001.jpg").touch()
     subtitle_path = fake_job_dir / "subtitle.ass"
     subtitle_path.touch()
 
@@ -959,17 +986,17 @@ def test_render_exit0_but_no_video_fails(fake_job_dir, initial_metadata_file, ca
             return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    script_meta = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
-    assets_meta = {"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    audio_meta = {"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    prepare_meta = {
+    script_meta = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
+    assets_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    audio_meta = _v2_meta({"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    prepare_meta = _v2_meta({
         "jobId": "test-1",
         "status": "SUBTITLES_READY",
         "subtitles": {"path": str(subtitle_path), "format": "ass"},
         "render": {"path": str(fake_job_dir / "video.mp4")},
         "renderTimeline": [{"start": 0, "end": 10}],
-    }
-    render_meta = {"jobId": "test-1", "status": "RENDERED"}
+    })
+    render_meta = _v2_meta({"jobId": "test-1", "status": "RENDERED"})
 
     with patch("run_job.subprocess.run", side_effect=side_effect):
         with patch("run_job.load_metadata",
@@ -997,6 +1024,9 @@ def test_render_exit1_with_warnings_and_video_succeeds(fake_job_dir, initial_met
     subtitle_path.touch()
     video_path = fake_job_dir / "video.mp4"
     video_path.touch()
+    assets_dir = fake_job_dir / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "seg_001.jpg").touch()
 
     def side_effect(cmd, **kw):
         cmd_str = " ".join(cmd)
@@ -1007,17 +1037,17 @@ def test_render_exit1_with_warnings_and_video_succeeds(fake_job_dir, initial_met
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    script_meta = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
-    assets_meta = {"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    audio_meta = {"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    prepare_meta = {
+    script_meta = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
+    assets_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    audio_meta = _v2_meta({"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    prepare_meta = _v2_meta({
         "jobId": "test-1",
         "status": "SUBTITLES_READY",
         "subtitles": {"path": str(subtitle_path), "format": "ass"},
         "render": {"path": str(video_path)},
         "renderTimeline": [{"start": 0}],
-    }
-    render_meta = {"jobId": "test-1", "status": "RENDERED_WITH_WARNINGS"}
+    })
+    render_meta = _v2_meta({"jobId": "test-1", "status": "RENDERED_WITH_WARNINGS"})
 
     with patch("run_job.subprocess.run", side_effect=side_effect):
         with patch("run_job.load_metadata",
@@ -1037,6 +1067,9 @@ def test_render_exit1_with_failure_and_no_video_fails(fake_job_dir, initial_meta
     scenes_dir.mkdir()
     (scenes_dir / "scene-1.jpg").touch()
     (scenes_dir / "narration.mp3").touch()
+    assets_dir = fake_job_dir / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "seg_001.jpg").touch()
     subtitle_path = fake_job_dir / "subtitle.ass"
     subtitle_path.touch()
 
@@ -1047,17 +1080,17 @@ def test_render_exit1_with_failure_and_no_video_fails(fake_job_dir, initial_meta
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="FFmpeg error")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    script_meta = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
-    assets_meta = {"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    audio_meta = {"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    prepare_meta = {
+    script_meta = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
+    assets_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    audio_meta = _v2_meta({"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    prepare_meta = _v2_meta({
         "jobId": "test-1",
         "status": "SUBTITLES_READY",
         "subtitles": {"path": str(subtitle_path), "format": "ass"},
         "render": {"path": str(fake_job_dir / "video.mp4")},
         "renderTimeline": [{"start": 0}],
-    }
-    render_meta = {"jobId": "test-1", "status": "RENDER_FAILED"}
+    })
+    render_meta = _v2_meta({"jobId": "test-1", "status": "RENDER_FAILED"})
 
     with patch("run_job.subprocess.run", side_effect=side_effect):
         with patch("run_job.load_metadata",
@@ -1080,6 +1113,9 @@ def test_validate_exit0_sets_validated(fake_job_dir, initial_metadata_file, caps
     scenes_dir.mkdir()
     (scenes_dir / "scene-1.jpg").touch()
     (scenes_dir / "narration.mp3").touch()
+    assets_dir = fake_job_dir / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "seg_001.jpg").touch()
     subtitle_path = fake_job_dir / "subtitle.ass"
     subtitle_path.touch()
     video_path = fake_job_dir / "video.mp4"
@@ -1092,18 +1128,18 @@ def test_validate_exit0_sets_validated(fake_job_dir, initial_metadata_file, caps
             return subprocess.CompletedProcess(cmd, 0, stdout="All checks passed", stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    script_meta = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
-    assets_meta = {"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    audio_meta = {"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    prepare_meta = {
+    script_meta = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
+    assets_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    audio_meta = _v2_meta({"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    prepare_meta = _v2_meta({
         "jobId": "test-1",
         "status": "SUBTITLES_READY",
         "subtitles": {"path": str(subtitle_path), "format": "ass"},
         "render": {"path": str(video_path)},
         "renderTimeline": [{"start": 0}],
-    }
-    render_meta = {"jobId": "test-1", "status": "RENDERED"}
-    validated_meta = {"jobId": "test-1", "status": "RENDERED"}
+    })
+    render_meta = _v2_meta({"jobId": "test-1", "status": "RENDERED"})
+    validated_meta = _v2_meta({"jobId": "test-1", "status": "RENDERED"})
 
     with patch("run_job.subprocess.run", side_effect=side_effect):
         with patch("run_job.load_metadata",
@@ -1128,6 +1164,9 @@ def test_prepare_exit1_fails_pipeline(fake_job_dir, initial_metadata_file, capsy
     scenes_dir.mkdir()
     (scenes_dir / "scene-1.jpg").touch()
     (scenes_dir / "scene-1.mp3").touch()
+    assets_dir = fake_job_dir / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "seg_001.jpg").touch()
 
     def side_effect(cmd, **kw):
         cmd_str = " ".join(cmd)
@@ -1137,9 +1176,9 @@ def test_prepare_exit1_fails_pipeline(fake_job_dir, initial_metadata_file, capsy
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="Asset failures")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    script_meta = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
-    assets_meta = {"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
-    audio_meta = {"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
+    script_meta = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
+    assets_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
+    audio_meta = _v2_meta({"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
 
     with patch("run_job.subprocess.run", side_effect=side_effect):
         with patch("run_job.load_metadata",
