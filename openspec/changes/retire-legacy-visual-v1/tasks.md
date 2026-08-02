@@ -173,7 +173,8 @@ Estado: la corrección de los 11 tests neutrales (C2), la hermetización de
 `1102 passed, 0 failed`. La auditoría read-only terminó con
 `CHANGES_REQUIRED` exclusivamente documental; las correcciones documentales
 F4–F9 están aplicadas; la reaprobación read-only focalizada terminó con
-`SLICE_6A_REAPPROVED_FOR_COMMIT`. Pendiente exclusivamente de cierre y commit.
+`SLICE_6A_REAPPROVED_FOR_COMMIT`. Slice 6A cerrado mediante el commit `86170d3`
+(`test(v2): establish clean Slice 6A baseline`). Slice 6B no iniciado.
 
 - [x] Ejecutar tests focalizados por slice
 - [x] Ejecutar suite completa — `1102 passed, 0 failed`
@@ -192,10 +193,14 @@ Reaprobación: SLICE_6A_REAPPROVED_FOR_COMMIT.
 Cero findings bloqueantes.
 F1/F2 LOW y F3 NOTE aceptados como no bloqueantes.
 
+- [x] Cierre de Slice 6A
+- [x] Commit de Slice 6A
+
+Commit de Slice 6A:
+`86170d3` test(v2): establish clean Slice 6A baseline
+
 Pendientes:
 
-- [ ] Cierre de Slice 6A
-- [ ] Commit de Slice 6A
 - [ ] Ejecutar E2E V2 canónico
 - [ ] Cierre formal del change
 
@@ -232,7 +237,7 @@ Pendientes:
 - Ambos órdenes del par contaminante/inverso: `2 passed` cada uno; prueba mínima
   de 4 tests: `4 passed`; archivos `test_fetch_images_v2.py` + `test_run_job.py`
   en ambos órdenes: `130 passed` cada uno.
-- Slice 6A reaprobado read-only (`SLICE_6A_REAPPROVED_FOR_COMMIT`), pendiente de cierre y commit. Slice 6B no iniciado.
+- Slice 6A cerrado mediante el commit `86170d3`. Slice 6B no iniciado.
 
 ### Fallo adicional de suite (Caso B, resuelto en 6A3)
 

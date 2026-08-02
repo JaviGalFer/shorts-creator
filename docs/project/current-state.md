@@ -10,7 +10,7 @@ Pipeline funcional de vídeos cortos verticales con duración configurable. Scri
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4 completo. Slice 5A implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`. Slice 5B implementado, auditado, corregido, reaprobado y cerrado mediante el commit `1d9fe37`. Slice 6A implementado, auditado, corregido y reaprobado; baseline vigente `1102 passed, 0 failed`; pendiente exclusivamente de cierre y commit. Slice 6B no iniciado.
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4 completo. Slice 5A implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`. Slice 5B implementado, auditado, corregido, reaprobado y cerrado mediante el commit `1d9fe37`. Slice 6A implementado, auditado, corregido, reaprobado y cerrado mediante el commit `86170d3`. Slice 6B es el siguiente trabajo y todavía no se ha iniciado.
 
 ### Slice 1 completado (2026-07-17)
 
@@ -324,11 +324,12 @@ La reaprobación read-only focalizada terminó con `SLICE_5B_REAPPROVED_FOR_CLOS
 
 ## Slice 6A — Baseline y corrección (2026-08-01)
 
-Estado: `SLICE_6A_REAPPROVED_FOR_COMMIT`. Slice 6A implementado, auditado,
-corregido y reaprobado. La corrección focalizada de tests (11 neutrales, C2)
-está completa y verde, el bloqueo de `test_timing_regression.py` fue resuelto
-hermetizando sus cuatro tests (Estrategia A, C5), y el fallo C4 de aislamiento
-de `test_fetch_images_v2.py::TestSourceIsolation::test_no_v1_runtime_imports`
+Estado: `SLICE_6A_REAPPROVED_FOR_COMMIT`; Slice 6A cerrado mediante el commit
+`86170d3`. Slice 6A implementado, auditado, corregido, reaprobado y cerrado.
+La corrección focalizada de tests (11 neutrales, C2) está completa y verde, el
+bloqueo de `test_timing_regression.py` fue resuelto hermetizando sus cuatro
+tests (Estrategia A, C5), y el fallo C4 de aislamiento de
+`test_fetch_images_v2.py::TestSourceIsolation::test_no_v1_runtime_imports`
 fue corregido con restauración gestionada de `sys.modules`. La suite completa
 queda verde: **baseline funcional `1102 passed, 0 failed`**. Los cambios
 funcionales están validados; la auditoría read-only terminó con CHANGES_REQUIRED
@@ -337,8 +338,9 @@ La reaprobación read-only focalizada finalizó con `SLICE_6A_REAPPROVED_FOR_COM
 con cero findings bloqueantes; F1/F2 LOW y F3 NOTE fueron aceptados como no
 bloqueantes y no se corrigieron. Los tres tests (`test_run_job.py`,
 `test_timing_regression.py`, `test_fetch_images_v2.py`) no cambiaron durante las
-correcciones documentales ni durante la reaprobación. Pendiente exclusivamente de
-cierre y commit. No existe commit de Slice 6A todavía. Slice 6B no iniciado.
+correcciones documentales ni durante la reaprobación. Slice 6A cerrado mediante
+el commit `86170d3` (`test(v2): establish clean Slice 6A baseline`). Slice 6B es
+el siguiente trabajo y todavía no se ha iniciado.
 
 ### HEAD inicial
 
@@ -480,12 +482,14 @@ cierre y commit. No existe commit de Slice 6A todavía. Slice 6B no iniciado.
   `test_fetch_images_v2.py`) no cambiaron durante las correcciones documentales
   ni durante la reaprobación.
 - Baseline funcional vigente: `1102 passed, 0 failed`.
-- Slice 6A implementado, auditado, corregido y reaprobado; pendiente
-  exclusivamente de cierre y commit.
-- Slice 6B no iniciado.
-- No existe commit de Slice 6A.
+- Slice 6A implementado, auditado, corregido, reaprobado y cerrado mediante el
+  commit `86170d3` (`test(v2): establish clean Slice 6A baseline`).
+- Slice 6B es el siguiente trabajo y todavía no se ha iniciado.
+- Commit A (Slice 6A) incluyó los seis archivos del slice; cero push, cero MCP,
+  cero reindexado, cero E2E real.
+- F1/F2 LOW y F3 NOTE conservados como no bloqueantes.
 - Cero E2E real.
-- Cero commit, cero push, cero MCP, cero reindexado.
+- Cero push, cero MCP, cero reindexado.
 
 ## Resumen
 
@@ -498,7 +502,7 @@ cierre y commit. No existe commit de Slice 6A todavía. Slice 6B no iniciado.
 - Slice 4: completado
 - Slice 5A: implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`
 - Slice 5B: implementado, auditado, corregido, reaprobado y cerrado mediante el commit `1d9fe37`
-- Slice 6: pendiente (6A: implementado, auditado, corregido y reaprobado; baseline funcional `1102 passed, 0 failed`; pendiente exclusivamente de cierre y commit; 6B no iniciado)
+- Slice 6A: implementado, auditado, corregido, reaprobado y cerrado mediante el commit `86170d3`; baseline funcional `1102 passed, 0 failed`; 6B no iniciado
 
 ## Plan de transformación modular
 
@@ -528,8 +532,8 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 
 ## Próximos pasos
 
-1. Cierre y commit de Slice 6A.
-2. Tras el cierre de Slice 6A, iniciar Slice 6B: E2E V2 canónico.
+1. Iniciar Slice 6B: E2E V2 canónico.
+2. Tras 6B, realizar auditoría y cierre formal del change.
 3. Phase B de audio pacing tras migrar script/
 4. Crear `pyproject.toml` y estructura `src/`
 5. Investigar instalación de ffprobe en el host

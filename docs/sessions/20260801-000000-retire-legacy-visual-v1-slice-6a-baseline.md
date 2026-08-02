@@ -586,3 +586,33 @@ Verdict: `SLICE_6A_REAPPROVED_FOR_COMMIT`.
 - Slice 6B no iniciado.
 - Commit de Slice 6A pendiente.
 - No se declara cierre todavía.
+
+---
+
+# Cierre y commit de Slice 6A
+
+- **Sesión:** `retire-legacy-visual-v1-slice-6a-closure`
+- **Modelo:** `opencode/deepseek-v4-flash-free`
+- **Variante:** `default`
+- **Modo:** Build
+- **MCP:** desactivado; llamadas MCP: 0.
+
+Commit A — `SLICE_6A_COMMIT`:
+
+- Hash completo: `86170d3f6edefbfb6b6e115d61ecca5922de43bf`
+- Hash corto: `86170d3`
+- Subject: `test(v2): establish clean Slice 6A baseline`
+- Staging selectivo de los seis archivos de Slice 6A:
+  - `tests/test_run_job.py`
+  - `tests/test_timing_regression.py`
+  - `tests/test_fetch_images_v2.py`
+  - `docs/project/current-state.md`
+  - `openspec/changes/retire-legacy-visual-v1/tasks.md`
+  - `docs/sessions/20260801-000000-retire-legacy-visual-v1-slice-6a-baseline.md`
+- Baseline funcional: `1102 passed, 0 failed`.
+- Slice 6A cerrado.
+- Slice 6B no iniciado.
+- Change completo `retire-legacy-visual-v1` todavía abierto.
+- Cero push, cero MCP, cero reindexado, cero red, cero providers, cero Docker,
+  cero E2E real.
+- Commit B pendiente exclusivamente para registrar el hash de Commit A.
