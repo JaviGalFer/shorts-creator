@@ -218,3 +218,17 @@ diagram`; no ejecutar otro E2E.
 - Hashes de código y tests inmutables durante la reaprobación.
 - Cero edición; cero staging; cero commit; cero nuevo E2E.
 - Commit de la corrección pendiente.
+
+# Cierre y commit de la corrección
+
+- Hash completo del Commit A: `f48f98f264b3f24f384c7a0a5f9fe16b7f65f351`.
+- Hash corto: `f48f98f`.
+- Subject: `fix(script): harden V2 prompt and retry contract`.
+- Siete archivos incluidos.
+- Baseline vigente: `1117 passed, 0 failed`.
+- Corrección de prompt/retry cerrada.
+- Slice 6B todavía abierto.
+- Nuevo E2E no ejecutado.
+- Change completo `retire-legacy-visual-v1` abierto.
+- Cero push; cero MCP; cero reindexado; cero red; cero providers; cero Docker.
+- Commit B pendiente únicamente para registrar el hash de Commit A.

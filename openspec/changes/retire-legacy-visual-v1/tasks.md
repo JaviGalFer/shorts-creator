@@ -210,7 +210,7 @@ Commit de Slice 6A:
 - [x] Auditoría read-only de la corrección — SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED
 - [x] Aplicar correcciones F1–F6 del review
 - [x] Reaprobación read-only focalizada
-- [ ] Commit de la corrección
+- [x] Commit de la corrección
 - [ ] Nuevo E2E V2 canónico
 - [ ] Obtener E2E V2 canónico PASS
 - [ ] Cierre formal del change
@@ -220,6 +220,9 @@ SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT.
 
 Cero findings bloqueantes.
 Baseline confirmada: 1117 passed, 0 failed.
+
+Commit de la corrección:
+f48f98f fix(script): harden V2 prompt and retry contract
 
 Resultado del primer intento: BLOCKED por contrato (`REVIEW_REQUIRED`), no PASS.
 

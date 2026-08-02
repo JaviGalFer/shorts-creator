@@ -615,16 +615,30 @@ Reaprobación read-only focalizada:
 - Ningún PASS; ningún vídeo nuevo.
 - Slice 6B y el change completo continúan abiertos.
 
-Próximos pasos antes del Commit A:
-1. cierre y commit de la corrección;
-2. después, nuevo E2E V2 canónico desde un HEAD limpio.
+Cierre de la corrección:
+- La corrección de prompt/retry de Slice 6B fue implementada, auditada, corregida,
+  reaprobada y cerrada mediante `f48f98f`.
+- Subject: `fix(script): harden V2 prompt and retry contract`.
+- Siete archivos incluidos.
+- Validator (`visual_plan_v2.py`), runner (`run_job.py`) y perfiles de duración
+  (`duration_profiles.py`) intactos.
+- F1–F6 resueltos; un NOTE futuro no bloqueante sobre la rama `allow_generated_images=True`.
+- Baseline vigente: **`1117 passed, 0 failed`**.
+- Cero push; cero MCP; cero reindexado; cero E2E durante el cierre.
+- Slice 6B continúa abierto hasta obtener un E2E V2 canónico PASS.
+- Change completo `retire-legacy-visual-v1` continúa abierto.
+
+Próximos pasos:
+1. ejecutar nuevo E2E V2 canónico;
+2. si obtiene PASS, realizar auditoría read-only;
+3. cerrar formalmente el change.
 
 Estado vigente:
 - Primer E2E V2 canónico BLOCKED controlado por contrato en `script`.
 - Auditoría inicial del E2E: `SLICE_6B_REVIEW_CHANGES_REQUIRED`.
 - Primer Build (prompt/retry) implementado (baseline funcional `1110 passed, 0 failed`).
 - Review del Build: `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED` por F1/F2 (MEDIUM); F3–F6 aceptados para corrección conjunta.
-- Correcciones F1–F6 aplicadas y reaprobadas read-only.
+- Correcciones F1–F6 aplicadas, reaprobadas read-only y cerradas mediante `f48f98f`.
 - Change `retire-legacy-visual-v1` continúa abierto.
 
 ## Resumen
@@ -639,7 +653,7 @@ Estado vigente:
 - Slice 5A: implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`
 - Slice 5B: implementado, auditado, corregido, reaprobado y cerrado mediante el commit `1d9fe37`
 - Slice 6A: implementado, auditado, corregido, reaprobado y cerrado mediante el commit `86170d3`; baseline funcional `1102 passed, 0 failed`
-- Slice 6B: ejecutado con E2E V2 canónico BLOCKED (controlado por contrato en `script`); auditado read-only con `SLICE_6B_REVIEW_CHANGES_REQUIRED`; corrección de prompt/retry implementada (baseline funcional `1110 passed, 0 failed`); auditado read-only con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED` y correcciones F1–F6 aplicadas (baseline funcional `1117 passed, 0 failed`); reaprobada read-only con `SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT`; pendiente de cierre, commit y de un nuevo E2E
+- Slice 6B: ejecutado con E2E V2 canónico BLOCKED (controlado por contrato en `script`); auditado read-only con `SLICE_6B_REVIEW_CHANGES_REQUIRED`; corrección de prompt/retry implementada (baseline funcional `1110 passed, 0 failed`); auditado read-only con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED` y correcciones F1–F6 aplicadas (baseline funcional `1117 passed, 0 failed`); reaprobada read-only con `SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT`; corrección cerrada mediante el commit `f48f98f`; pendiente de un nuevo E2E V2 canónico
 
 ## Plan de transformación modular
 
@@ -670,7 +684,7 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 ## Próximos pasos
 
 1. Ejecutado Slice 6B: E2E V2 canónico BLOCKED en `script` (enums V2 inválidos + duración fuera de rango); auditado read-only con `SLICE_6B_REVIEW_CHANGES_REQUIRED`.
-2. Implementada la corrección de prompt/retry (baseline `1110 passed, 0 failed`); auditado read-only de la corrección con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED`; correcciones F1–F6 aplicadas (baseline `1117 passed, 0 failed`); reaprobada read-only con `SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT`; pendiente de cierre y commit de la corrección y de un nuevo E2E V2 canónico.
+2. Implementada la corrección de prompt/retry (baseline `1110 passed, 0 failed`); auditado read-only de la corrección con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED`; correcciones F1–F6 aplicadas (baseline `1117 passed, 0 failed`); reaprobada read-only con `SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT`; corrección cerrada mediante `f48f98f`; pendiente de un nuevo E2E V2 canónico.
 3. Tras un E2E V2 canónico PASS, realizar auditoría y cierre formal del change.
 4. Phase B de audio pacing tras migrar script/
 5. Crear `pyproject.toml` y estructura `src/`
