@@ -174,17 +174,16 @@ Estado: la corrección de los 11 tests neutrales (C2), la hermetización de
 `CHANGES_REQUIRED` exclusivamente documental; las correcciones documentales
 F4–F9 están aplicadas; la reaprobación read-only focalizada terminó con
 `SLICE_6A_REAPPROVED_FOR_COMMIT`. Slice 6A cerrado mediante el commit `86170d3`
-(`test(v2): establish clean Slice 6A baseline`). Slice 6B no iniciado.
+(`test(v2): establish clean Slice 6A baseline`). Slice 6B se ejecutó
+posteriormente (E2E V2 canónico BLOCKED); ver sección «Slice 6B».
 
 - [x] Ejecutar tests focalizados por slice
 - [x] Ejecutar suite completa — `1102 passed, 0 failed`
 - [x] Clasificar fallos ligados a V1
 - [x] Resolver o documentar fallos V1
 - [x] Obtener baseline limpia — `1102 passed, 0 failed`
-- [ ] Ejecutar E2E V2 canónico
 - [x] Actualizar `docs/project/current-state.md` (progreso de 6A; la actualización final de cierre queda en el cierre)
 - [x] Actualizar session document (session log 6A; la actualización de cierre queda en el cierre)
-- [ ] Cierre formal del change
 - [x] Auditoría read-only de Slice 6A — CHANGES_REQUIRED
 - [x] Correcciones documentales F4–F9
 - [x] Reaprobación read-only focalizada de Slice 6A
@@ -199,10 +198,116 @@ F1/F2 LOW y F3 NOTE aceptados como no bloqueantes.
 Commit de Slice 6A:
 `86170d3` test(v2): establish clean Slice 6A baseline
 
-Pendientes:
+> Nota: el E2E V2 canónico pertenece a Slice 6B y no forma parte de las tareas
+> de cierre de Slice 6A.
 
-- [ ] Ejecutar E2E V2 canónico
+### Slice 6B — E2E V2 canónico (ejecutado 2026-08-02)
+
+- [x] Ejecutar primer intento controlado del E2E V2 canónico
+- [x] Auditoría read-only del primer intento — SLICE_6B_REVIEW_CHANGES_REQUIRED
+- [x] Implementar corrección de prompt/retry
+- [x] Añadir cobertura de enum y retries
+- [x] Auditoría read-only de la corrección — SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED
+- [x] Aplicar correcciones F1–F6 del review
+- [x] Reaprobación read-only focalizada
+- [ ] Commit de la corrección
+- [ ] Nuevo E2E V2 canónico
+- [ ] Obtener E2E V2 canónico PASS
 - [ ] Cierre formal del change
+
+Reaprobación:
+SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT.
+
+Cero findings bloqueantes.
+Baseline confirmada: 1117 passed, 0 failed.
+
+Resultado del primer intento: BLOCKED por contrato (`REVIEW_REQUIRED`), no PASS.
+
+- Job ID: `cmo-2026-08-02-192443`
+- Comando exacto: `python3 bin/run_job.py --topic "Cómo se forma un arcoíris" --duration 30`
+- Exit code: 0 (el runner terminó de forma controlada, pero con estado final `REVIEW_REQUIRED`)
+- Status final: `REVIEW_REQUIRED`; `lastCompletedStage`: `script`
+- `qualityGate`: N/D (no se alcanzó la etapa `validate`)
+- Duración solicitada: 30s (perfil `short_25_30`)
+- Provider LLM: `openai` (cliente OpenAI-compatible); modelo `gpt-4o-mini`
+- Providers visuales: Wikimedia activo, Pixabay activo (con key); Pexels/FreeAI/Pollinations deshabilitados
+- Provider TTS: `edge_tts` (no alcanzado)
+- Vídeo final: no producido (se detuvo en `script`)
+
+Causa (documentada, sin corrección de código en esta sesión):
+- `VISUAL_PLAN_V2_INVALID: v2 plan validation failed after 3 attempts`
+  - `V2_STRUCTURE_INVALID_ENUM_VALUE:assetPreferences[0]: scene 3: got 'animation'`
+  - `V2_STRUCTURE_INVALID_ENUM_VALUE:visualSequence[0].assetPreference: scene 3: got 'animation'`
+  - `V2_STRUCTURE_INVALID_ENUM_VALUE:assetPreferences[0]: scene 5: got 'infographic'`
+  - `V2_STRUCTURE_INVALID_ENUM_VALUE:visualSequence[0].assetPreference: scene 5: got 'infographic'`
+  - Los enum permitidos son: archive, diagram, document, generated, illustration, map, painting, photograph, stock.
+- `DURATION_OUT_OF_RANGE: estimated=30.9s (spoken=29.5s + pauses=1.4s), target=30s, min=27s, max=30s, words=54, scenes=5`
+- Retry history: retry 0 = 74 words (reduce_content); retry 1 = 59 words (reduce_content); retry 2 = 54 words + enums inválidos (fix_v2_structure_then_duration). Tras 3 intentos el plan V2 siguió inválido → REVIEW_REQUIRED.
+
+Auditoría de contrato V2 del job:
+- `request.visuals.schemaVersion == 2`
+- `script.scenes` = 5, todas con `visualPlan._schemaVersion == 2` (sin mezcla V1/V2)
+- Campos V1 residuales (`editorialRole`, `strategy`, `primaryAssetType`, `secondaryAssetType`, `visualTemporalIntent`): 0 apariciones
+- El orquestador respetó el contrato y terminó de forma controlada en `script`.
+
+Corrección de prompt/retry (Build):
+- Prompt: el enum de `assetPreferences` se deriva de `ALLOWED_ASSET_PREFERENCES`
+  vía `_build_asset_preferences_section()`; sin listas manuales divergentes.
+  `generated` condicionado a `allowGeneratedImage`; `diagram` definido como valor
+  exacto; regla de enum cerrado y términos prohibidos (animation, animated,
+  infographic, photo, image, video).
+- Retry: `_build_retry_instruction_v2` es ahora siempre contractual — toda rama
+  (incluida `reduce_content`) re-declara el enum cerrado, prohíbe sinónimos,
+  ordena preservar campos `visualPlan` válidos, fija el límite absoluto de
+  palabras y pide revalidar estructura y duración antes de responder.
+- Alias `infographic → diagram`: NO implementado (requeriría segunda
+  canonicalización; se documenta como mejora futura). `animation` e `infographic`
+  continúan inválidos.
+- Validator (`visual_plan_v2.py`), runner (`run_job.py`), perfiles
+  (`duration_profiles.py`) y contrato temporal intactos. `MAX_SCRIPT_ATTEMPTS == 3`.
+- Tests: 8 añadidos (T1–T7) en `tests/test_generate_script_v2.py`.
+- Suite completa: `1110 passed, 0 failed`. Cero providers reales; cero commit.
+
+Session log del E2E: `docs/sessions/20260802-212305-retire-legacy-visual-v1-slice-6b-e2e.md`
+Session log del fix (Build): `docs/sessions/20260802-214507-retire-legacy-visual-v1-slice-6b-script-contract-fix.md`
+
+La corrección de prompt/retry y la cobertura de enum/retries están implementadas
+(ver el session log del Build y `current-state.md`). La auditoría read-only de la
+corrección terminó con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED` (F1/F2 MEDIUM,
+F3–F6 LOW); las correcciones F1–F6 están aplicadas. Reaprobación read-only
+focalizada, commit de la corrección y nuevo E2E V2 canónico quedan para la
+siguiente sesión.
+
+Correcciones F1–F6 aplicadas (Build del review fixes):
+- F1: gate request-scoped de `generated`. `allow_generated_images` se define antes
+  de construir `base_prompt` y gobierna primer prompt, retry, validación y
+  `request.visuals.allowGeneratedImages` (mismo booleano, sin duplicación). El
+  primer prompt incluye un bloque `## Restricción visual de esta request` con el
+  valor real (false). `_build_user_prompt_v2` recibe `allow_generated_images`
+  (keyword-only) y admite el caso futuro true.
+- F2: Slice 6A en `tasks.md` ya no lista el E2E (pertenece a 6B); se añadió una
+  nota y se eliminó la sección `Pendientes` que re-listaba E2E/cierre.
+- F3: los términos prohibidos (animation, animated, infographic, photo, image,
+  video) se limitan explícitamente a valores del enum en
+  `_build_asset_preferences_section` y `_build_asset_preference_constraint_block`,
+  con aclaración de que pueden aparecer en `searchQueries`/`subjects`.
+- F4: `_build_retry_instruction_v2` transmite `issue["path"]` explícitamente
+  (código, path y mensaje separados), sin duplicar `scenes[x].visualPlan` cuando
+  el path ya está cualificado, y también para issues sin `sceneNumber`.
+- F5: test integrado hermético del flujo real `reduce_content` vía `main()`
+  (2 calls, status SCRIPT_DRAFT, durationContract PASS).
+- F6: T1 (asserts de slice), T2 (gate real false/true), T4 (paths explícitos en
+  issues independientes) y T5 (parametrizado; valida ambos paths) reforzados.
+
+Resultados del review fixes:
+- Tests focalizados: `test_generate_script_v2.py` = 92 passed; generación
+  combinada = 138 passed; `test_run_job.py` = 91 passed.
+- Collect-only: `1117 tests collected`, cero errores de colección.
+- Suite completa: **`1117 passed, 0 failed`** (baseline anterior `1110`; +7 tests).
+  Cero skips, cero xfail, cero warnings.
+- Cero providers reales; cero commit; ningún nuevo E2E; ningún PASS.
+- Pendiente: reaprobación read-only focalizada, commit de la corrección, nuevo E2E
+  y cierre formal del change.
 
 ### Nota sobre la hermetización de `test_timing_regression.py` (6A2)
 
@@ -237,7 +342,8 @@ Pendientes:
 - Ambos órdenes del par contaminante/inverso: `2 passed` cada uno; prueba mínima
   de 4 tests: `4 passed`; archivos `test_fetch_images_v2.py` + `test_run_job.py`
   en ambos órdenes: `130 passed` cada uno.
-- Slice 6A cerrado mediante el commit `86170d3`. Slice 6B no iniciado.
+- Slice 6A cerrado mediante el commit `86170d3`. Slice 6B ejecutado posteriormente
+  (E2E V2 canónico BLOCKED); ver sección «Slice 6B».
 
 ### Fallo adicional de suite (Caso B, resuelto en 6A3)
 

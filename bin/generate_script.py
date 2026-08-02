@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from duration_profiles import add_duration_profile_args, resolve_requested_duration, calculate_word_budget
-from visual_plan_v2 import canonicalize_visual_plan_v2
+from visual_plan_v2 import ALLOWED_ASSET_PREFERENCES, canonicalize_visual_plan_v2
 
 DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 
@@ -34,6 +34,44 @@ ESTIMATED_SCENE_PAUSE_MS = 350
 # With 9 transitions (10 scenes): 9 * 350ms = 3.15s pause overhead.
 MAX_SCENES = 6
 MIN_WORDS_PER_SCENE = 7
+
+
+def _build_asset_preferences_section() -> str:
+    """Build the AssetPreferences enum section of the prompt from the contractual source.
+
+    The single source of truth is ALLOWED_ASSET_PREFERENCES; we render a stable,
+    sorted representation so the prompt never diverges from the validator.
+    """
+    lines = [
+        "### AssetPreferences permitidos",
+        "",
+        "Valores únicos permitidos para cada elemento de `assetPreferences` y para cada `visualSequence[].assetPreference`, usados literalmente:",
+        "",
+    ]
+    for v in sorted(ALLOWED_ASSET_PREFERENCES):
+        if v == "generated":
+            lines.append(
+                "- `generated`: Solo si `allowGeneratedImage` es true y la request lo permite. No lo uses en caso contrario."
+            )
+        else:
+            lines.append(f"- `{v}`: {_ASSET_PREF_DESCRIPTIONS.get(v, '')}")
+    lines.append("")
+    lines.append("Cada valor debe usarse exactamente como está escrito. Nunca inventes sinónimos ni categorías de medios.")
+    lines.append("No uses animation, animated, infographic, photo, image ni video como valores de `assetPreferences` o `visualSequence[].assetPreference`.")
+    lines.append("Esos términos pueden aparecer en `searchQueries`, `subjects` o texto descriptivo cuando sean semánticamente necesarios; la prohibición afecta únicamente al valor del enum.")
+    return "\n".join(lines)
+
+
+_ASSET_PREF_DESCRIPTIONS: dict[str, str] = {
+    "archive": "Material de archivo histórico",
+    "diagram": "Diagramas, esquemas explicativos y composiciones tipo infografía; el valor del enum debe ser exactamente \"diagram\"",
+    "document": "Documentos, cartas, periódicos",
+    "illustration": "Ilustraciones, dibujos artísticos",
+    "map": "Mapas, cartografía",
+    "painting": "Pinturas, obras de arte",
+    "photograph": "Fotografías",
+    "stock": "Imágenes de stock genéricas",
+}
 
 SYSTEM_PROMPT_V2 = """Eres un guionista senior especializado en Shorts/TikTok/Reels divulgativos con obsesión por la retención y la calidad visual.
 
@@ -71,7 +109,7 @@ Cada escena DEBE contener un objeto `visualPlan` con los siguientes campos oblig
 | `visualIntent` | string | Uno de: explain, show, compare, contextualize, immerse, emphasize |
 | `subjects` | string[] | Sujetos visuales de la escena. No vacío. |
 | `searchQueries` | string[] | Queries de búsqueda en inglés. No vacío. Concretas y específicas. |
-| `assetPreferences` | string[] | Tipos de asset preferidos para esta escena. No vacío. Valores: diagram, illustration, photograph, painting, archive, map, document, stock |
+| `assetPreferences` | string[] | Tipos de asset preferidos para esta escena. No vacío. Valores del enum cerrado de AssetPreferences (ver sección «AssetPreferences permitidos»). |
 | `visualSequence` | object[] | Secuencia de segmentos visuales. No vacío. |
 
 ### Campos opcionales (solo cuando aporten información real)
@@ -126,16 +164,7 @@ No incluyas ninguno de estos campos. No los conviertas a equivalentes v2. Simple
 - `immerse`: Crear atmósfera inmersiva
 - `emphasize`: Destacar o enfatizar un detalle concreto
 
-### AssetPreferences permitidos
-
-- `diagram`: Diagramas, esquemas, infografías
-- `illustration`: Ilustraciones, dibujos artísticos
-- `photograph`: Fotografías
-- `painting`: Pinturas, obras de arte
-- `archive`: Material de archivo histórico
-- `map`: Mapas, cartografía
-- `document`: Documentos, cartas, periódicos
-- `stock`: Imágenes de stock genéricas
+__ASSET_PREFERENCES_BLOCK__
 
 ### Transiciones permitidas
 
@@ -185,6 +214,10 @@ No incluyas ninguno de estos campos. No los conviertas a equivalentes v2. Simple
     }
   ]
 }"""
+
+SYSTEM_PROMPT_V2 = SYSTEM_PROMPT_V2.replace(
+    "__ASSET_PREFERENCES_BLOCK__", _build_asset_preferences_section()
+)
 
 
 def load_env():
@@ -299,16 +332,42 @@ MIN_SCENE_COUNT = 4
 MAX_SCRIPT_ATTEMPTS = 3  # initial generation + up to 2 corrective retries
 
 
-def _build_user_prompt_v2(topic: str, budget: dict, strictness: str) -> str:
+def _build_generated_images_gate_block(allow_generated_images: bool) -> str:
+    """Build the request-scoped generated-images restriction for the user prompt.
+
+    The value is taken from the real request flag, never a generic default.
+    """
+    if allow_generated_images:
+        return (
+            "## Restricción visual de esta request\n\n"
+            "- request.visuals.allowGeneratedImages es true.\n"
+            "- Puedes usar \"generated\" en `assetPreferences` o `visualSequence[].assetPreference` "
+            "únicamente cuando la escena declare `visualPlan.allowGeneratedImage=true` "
+            "y aporte `imageGenerationPrompt` y `negativePrompt`.\n"
+            "- En caso contrario mantén `visualPlan.allowGeneratedImage=false` y no uses \"generated\".\n"
+        )
+    return (
+        "## Restricción visual de esta request\n\n"
+        "- request.visuals.allowGeneratedImages es false.\n"
+        "- Mantén visualPlan.allowGeneratedImage=false en todas las escenas.\n"
+        "- No uses \"generated\" en `assetPreferences`.\n"
+        "- No uses \"generated\" en `visualSequence[].assetPreference`.\n"
+        "- No incluyas `imageGenerationPrompt` ni `negativePrompt`.\n"
+    )
+
+
+def _build_user_prompt_v2(topic: str, budget: dict, strictness: str, *, allow_generated_images: bool) -> str:
     """Build the v2 user prompt — neutral, no historical domain requirements."""
     duration_instruction = _build_duration_prompt_instruction_v2(budget, strictness)
+    gate = _build_generated_images_gate_block(allow_generated_images)
     return (
         f"Genera un guion divulgativo muy atractivo para vídeo vertical sobre: {topic}. "
         f"Quiero que el arranque tenga máxima retención, que cada escena tenga un plan visual detallado "
         f"con visualPlan schema v2, y que la progresión visual sea coherente. "
         f"IMPORTANTE: Cada escena DEBE tener un visualPlan completo con _schemaVersion=2, "
         f"visualIntent, subjects, searchQueries, assetPreferences y visualSequence.\n\n"
-        f"{duration_instruction}"
+        f"{duration_instruction}\n\n"
+        f"{gate}"
     )
 
 
@@ -485,6 +544,33 @@ def _validate_and_canonicalize_script_v2(
     return canonical_script, [], []
 
 
+def _build_asset_preference_constraint_block(allow_generated_images: bool) -> str:
+    """Build the closed-enum constraint block for retry instructions.
+
+    Every retry branch must re-state the exact closed enum and forbid synonyms,
+    so the model can never fall back to a stale manual list.
+    """
+    lines = [
+        "### Enum cerrado de assetPreferences y visualSequence.assetPreference",
+        "Cada elemento de `assetPreferences` y cada `visualSequence[].assetPreference` DEBE ser exactamente uno de estos valores, usado literalmente:",
+        "",
+    ]
+    for v in sorted(ALLOWED_ASSET_PREFERENCES):
+        if v == "generated":
+            if allow_generated_images:
+                note = " (solo si allowGeneratedImage=true y la request lo permite)"
+            else:
+                note = " (prohibido: allowGeneratedImage es false)"
+            lines.append(f"- {v}{note}")
+        else:
+            lines.append(f"- {v}")
+    lines.append("")
+    lines.append("Nunca inventes sinónimos ni categorías de medios.")
+    lines.append("No uses animation, animated, infographic, photo, image ni video como valores de `assetPreferences` o `visualSequence[].assetPreference`.")
+    lines.append("Esos términos pueden aparecer en `searchQueries`, `subjects` o texto descriptivo cuando sean semánticamente necesarios; la prohibición afecta únicamente al valor del enum.")
+    return "\n".join(lines)
+
+
 def _build_retry_instruction_v2(
     budget: dict,
     actual_word_count: int,
@@ -493,7 +579,13 @@ def _build_retry_instruction_v2(
     structural_issues: list[dict],
     allow_generated_images: bool,
 ) -> str:
-    """Build v2-specific retry instruction with per-scene error details."""
+    """Build v2-specific retry instruction.
+
+    Every retry branch re-states the closed enum, the absolute word limit and
+    the rule to preserve currently valid visualPlan fields, so the model is
+    always reminded of the full V2 contract regardless of which error triggered
+    the retry.
+    """
     min_w = budget.get("minimumWords", 0)
     pref_w = budget.get("preferredWords", 0)
     max_w = budget.get("maximumWords", 0)
@@ -512,22 +604,32 @@ def _build_retry_instruction_v2(
         "",
     ]
 
-    # Structural issues
+    # Structural issues (paths + messages)
     if structural_issues:
         lines.append("### Problemas estructurales que debes corregir:")
         lines.append("")
         by_scene: dict[int, list[dict]] = {}
         for issue in structural_issues:
             sn = issue.get("sceneNumber")
+            code = issue.get("code", "UNKNOWN")
+            path = issue.get("path", "")
+            message = issue.get("message", "")
             if sn is not None:
                 by_scene.setdefault(sn, []).append(issue)
             else:
-                lines.append(f"- [{issue.get('code', 'UNKNOWN')}] {issue.get('message', '')}")
+                lines.append(f"- [{code}]")
+                lines.append(f"  Path: {path}")
+                lines.append(f"  Message: {message}")
 
         for sn in sorted(by_scene.keys()):
             lines.append(f"**Escena {sn}:**")
             for issue in by_scene[sn]:
-                lines.append(f"  - [{issue.get('code', 'UNKNOWN')}] {issue.get('message', '')}")
+                code = issue.get("code", "UNKNOWN")
+                path = issue.get("path", "")
+                message = issue.get("message", "")
+                lines.append(f"  - [{code}]")
+                lines.append(f"    Path: {path}")
+                lines.append(f"    Message: {message}")
         lines.append("")
 
         lines.append("Instrucciones para corregir la estructura:")
@@ -539,14 +641,23 @@ def _build_retry_instruction_v2(
         lines.append("- La suma de durationFraction de todos los segmentos debe ser 1.0.")
         lines.append("- subjects y searchQueries no pueden estar vacíos.")
         lines.append("- assetPreference de cada segmento debe estar en assetPreferences de la escena.")
-        if not allow_generated_images:
-            lines.append("- NO uses 'generated' como assetPreference. allowGeneratedImage es false.")
         lines.append("")
 
-    # Duration correction
+    # Closed enum — always present, every branch
+    lines.append(_build_asset_preference_constraint_block(allow_generated_images))
+    lines.append("")
+
+    # Preserve valid fields — always present
+    lines.append("### Preserva los campos ya válidos")
+    lines.append("- Conserva el número de escenas, cada `sceneNumber` y todos los campos `visualPlan` ya válidos.")
+    lines.append("- No cambies `assetPreferences` ni `visualSequence` válidos únicamente para acortar la narración.")
+    lines.append("")
+
+    # Duration contract
     lines.append("### Contrato de duración:")
     lines.append(f"- Duración: {dur_target}s objetivo, ventana {dur_min}-{dur_max}s")
     lines.append(f"- Palabras totales: mínimo {min_w}, preferidas ~{pref_w}, máximo {max_w}")
+    lines.append(f"- LÍMITE ABSOLUTO: la narración total NO debe superar {max_w} palabras.")
     lines.append(f"- Pausas entre escenas: ~{pause_ms}ms cada una")
 
     if missing > 0:
@@ -554,13 +665,17 @@ def _build_retry_instruction_v2(
         lines.append(
             f"El guion se queda corto por aproximadamente {missing} palabras. "
             f"Añade entre {missing} y {missing + 5} palabras "
-            f"significativas distribuidas naturalmente entre las escenas existentes."
+            f"significativas distribuidas naturalmente entre las escenas existentes. "
+            f"La narración total DEBE quedar entre {min_w} y {max_w} palabras."
         )
     elif excess > 0:
         lines.append("")
         lines.append(
             f"El guion excede por aproximadamente {excess} palabras. "
-            f"Reduce aproximadamente {excess} palabras del contenido."
+            f"Reduce la narración total a como máximo {max_w} palabras. No superes {max_w}. "
+            f"Conserva el número de escenas, cada `sceneNumber` y todos los campos `visualPlan` "
+            f"ya válidos. No cambies `assetPreferences` ni `visualSequence` válidos únicamente "
+            f"para acortar la narración."
         )
 
     lines.append("")
@@ -571,6 +686,7 @@ def _build_retry_instruction_v2(
     lines.append("- Cada escena DEBE tener visualPlan v2 completo con _schemaVersion=2.")
     lines.append("- No incluyas campos prohibidos en visualPlan.")
     lines.append("- No incluyas campos desconocidos en visualPlan ni en segmentos.")
+    lines.append("- Revalida mentalmente la estructura (schema V2, enum cerrado de assetPreferences y assetPreference) y la duración (límite de palabras) antes de responder.")
     lines.append("- Responde SOLO con JSON válido, sin markdown ni explicaciones.")
 
     return "\n".join(lines)
@@ -639,7 +755,15 @@ def main() -> int:
     )
 
     active_system_prompt = SYSTEM_PROMPT_V2
-    base_prompt = _build_user_prompt_v2(args.topic, provisional_budget, strictness)
+
+    # Request-scoped flag: governs the first prompt, retries, validation and the
+    # persisted request.metadata. False for now; True is future-ready.
+    allow_generated_images = False
+
+    base_prompt = _build_user_prompt_v2(
+        args.topic, provisional_budget, strictness,
+        allow_generated_images=allow_generated_images,
+    )
 
     if args.dry_run:
         print("=== SYSTEM PROMPT ===")
@@ -663,8 +787,6 @@ def main() -> int:
     current_prompt = base_prompt
     final_budget = dict(provisional_budget)
     v2_structural_issues: list[dict] = []
-
-    allow_generated_images = False  # default for request
 
     while retries < MAX_SCRIPT_ATTEMPTS:
         if retries > 0:
@@ -692,7 +814,8 @@ def main() -> int:
                 structural_issues=v2_errs if not v2_valid else [],
                 allow_generated_images=allow_generated_images,
             )
-            base_retry = _build_user_prompt_v2(args.topic, retry_budget, strictness)
+            base_retry = _build_user_prompt_v2(args.topic, retry_budget, strictness,
+                                               allow_generated_images=allow_generated_images)
             current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
             print(f"Retry {retries}/{MAX_SCRIPT_ATTEMPTS - 1}: generated {word_count} words, "
                   f"estimated {estimated_dur:.1f}s, "
@@ -800,7 +923,7 @@ def main() -> int:
 
     visuals_request = {
         "mode": "images",
-        "allowGeneratedImages": False,
+        "allowGeneratedImages": allow_generated_images,
     }
     visuals_request["schemaVersion"] = 2
 

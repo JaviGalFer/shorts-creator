@@ -24,12 +24,11 @@ from visual_plan_v2 import (
 
 import generate_script as gs
 
-# ── Re-parse SYSTEM_PROMPT_V2 from file ──────────────────────────────────────
-
-_PROMPT_TEXT = (_PROJECT / "bin" / "generate_script.py").read_text()
-import re
-_m = re.search(r'SYSTEM_PROMPT_V2\s*=\s*"""(.+?)"""', _PROMPT_TEXT, re.DOTALL)
-SYSTEM_PROMPT_V2 = _m.group(1) if _m else ""
+# ── SYSTEM_PROMPT_V2 ─────────────────────────────────────────────────────────
+# SYSTEM_PROMPT_V2 is built at module import from ALLOWED_ASSET_PREFERENCES
+# (see _build_asset_preferences_section), so we use the runtime constant rather
+# than re-parsing the source template.
+SYSTEM_PROMPT_V2 = gs.SYSTEM_PROMPT_V2
 
 
 # ── V2 fixtures ──────────────────────────────────────────────────────────────
@@ -1178,3 +1177,293 @@ class TestRetryFixIntegration:
         assert calls[0] == 3
         meta = _json.loads(out_path.read_text())
         assert meta["status"] == "REVIEW_REQUIRED"
+
+
+# ── Slice 6B script-contract fix ─────────────────────────────────────────────
+# Tests T1-T7: closed-enum prompt derived from the contract, unambiguous prompt,
+# always-contractual retries, real-value regression and unchanged attempts.
+
+
+def _prompt_asset_pref_enum_values():
+    """Extract the closed enum values exposed in the AssetPreferences section."""
+    start = SYSTEM_PROMPT_V2.find("### AssetPreferences permitidos")
+    end = SYSTEM_PROMPT_V2.find("### Transiciones permitidas", start)
+    assert start >= 0, "AssetPreferences header not found; cannot slice the enum section"
+    assert end > start, "Transiciones header must come after AssetPreferences; slice would be empty"
+    section = SYSTEM_PROMPT_V2[start:end]
+    return set(__import__("re").findall(r"- `([a-z]+)`:", section))
+
+
+class TestScriptContractFix:
+    """Slice 6B correction: prompt + retry driven by the contractual enum."""
+
+    # T1 — enum parity prompt/contract
+    def test_t1_enum_parity_prompt_contract(self):
+        values = _prompt_asset_pref_enum_values()
+        assert values == set(ALLOWED_ASSET_PREFERENCES)
+        assert len(values) == len(ALLOWED_ASSET_PREFERENCES) == 9
+        assert values == {
+            "archive", "diagram", "document", "generated", "illustration",
+            "map", "painting", "photograph", "stock",
+        }
+
+    # T2 — unambiguous prompt
+    def test_t2_prompt_unambiguous(self):
+        assert "- `diagram`:" in SYSTEM_PROMPT_V2
+        assert 'el valor del enum debe ser exactamente "diagram"' in SYSTEM_PROMPT_V2
+        enum_values = _prompt_asset_pref_enum_values()
+        assert "infographic" not in enum_values
+        assert "animation" not in enum_values
+        assert "Nunca inventes sinónimos ni categorías de medios" in SYSTEM_PROMPT_V2
+        assert "allowGeneratedImage" in SYSTEM_PROMPT_V2
+        gen_lines = [l for l in SYSTEM_PROMPT_V2.splitlines() if l.strip().startswith("- `generated`")]
+        assert gen_lines and "allowGeneratedImage" in gen_lines[0]
+
+    # T2 (request gate) — the real request value must reach the first prompt
+    def _gate_prompt(self, allow_generated_images):
+        budget = {
+            "targetSec": 30, "minSec": 27, "maxSec": 30,
+            "minimumWords": 47, "preferredWords": 52, "maximumWords": 52,
+            "sceneCount": 5, "pauseSec": 1.4,
+            "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
+        }
+        return gs._build_user_prompt_v2(
+            "Arcoíris", budget, "balanced",
+            allow_generated_images=allow_generated_images,
+        )
+
+    def test_t2_request_gate_false(self):
+        prompt = self._gate_prompt(False)
+        assert "allowGeneratedImages es false" in prompt
+        assert "allowGeneratedImage=false" in prompt
+        assert "No uses \"generated\" en `assetPreferences`" in prompt
+        assert "No uses \"generated\" en `visualSequence[].assetPreference`" in prompt
+        assert "No incluyas `imageGenerationPrompt` ni `negativePrompt`" in prompt
+        # The false gate is unconditional: it must not defer the decision to a
+        # request value the model cannot know.
+        assert "es true" not in prompt
+        assert "cuando la escena declare" not in prompt
+
+    def test_t2_request_gate_true(self):
+        prompt = self._gate_prompt(True)
+        assert "allowGeneratedImages es true" in prompt
+        assert "allowGeneratedImage=true" in prompt
+        assert "imageGenerationPrompt" in prompt
+        assert "negativePrompt" in prompt
+
+    def test_t2_first_prompt_contains_false_gate(self, monkeypatch, capsys):
+        """The real first user prompt in main() includes the false gate."""
+        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Arcoíris",
+                                           "--dry-run", "--model", "gpt-4o-mini", "--duration", "30"])
+        gs.main()
+        out = capsys.readouterr().out
+        assert "allowGeneratedImages es false" in out
+        assert "allowGeneratedImage=false" in out
+
+    # T3 — duration retry: absolute limit, enum recall, preserve, not vague
+    def test_t3_duration_retry_absolute_limit(self):
+        budget = {
+            "targetSec": 30, "minSec": 27, "maxSec": 30,
+            "minimumWords": 47, "preferredWords": 52, "maximumWords": 52,
+            "sceneCount": 5, "pauseSec": 1.4,
+            "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
+        }
+        inst = gs._build_retry_instruction_v2(
+            budget, actual_word_count=54, actual_scene_count=5, estimated_dur=30.9,
+            structural_issues=[], allow_generated_images=False,
+        )
+        assert "52" in inst
+        assert "superar 52" in inst
+        assert "como máximo 52" in inst
+        assert "No superes 52" in inst
+        assert "archive" in inst and "photograph" in inst
+        assert "Preserva los campos ya válidos" in inst
+        assert "Reduce aproximadamente 2 palabras" not in inst
+
+    # T4 — combined structural + duration retry
+    def test_t4_combined_structural_duration_retry(self):
+        budget = {
+            "targetSec": 30, "minSec": 27, "maxSec": 30,
+            "minimumWords": 47, "preferredWords": 52, "maximumWords": 52,
+            "sceneCount": 5, "pauseSec": 1.4,
+            "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
+        }
+        issues = [
+            {"sceneNumber": 3, "code": "V2_STRUCTURE_INVALID_ENUM_VALUE",
+             "path": "assetPreferences[0]", "message": "scene 3: got 'animation'"},
+            {"sceneNumber": 5, "code": "V2_STRUCTURE_INVALID_ENUM_VALUE",
+             "path": "visualSequence[0].assetPreference", "message": "scene 5: got 'infographic'"},
+        ]
+        inst = gs._build_retry_instruction_v2(
+            budget, actual_word_count=54, actual_scene_count=5, estimated_dur=30.9,
+            structural_issues=issues, allow_generated_images=False,
+        )
+        assert "assetPreferences" in inst
+        assert "animation" in inst
+        assert "infographic" in inst
+        assert "diagram" in inst
+        assert "superar 52" in inst
+        assert "Problemas estructurales que debes corregir" in inst
+        assert "Contrato de duración" in inst
+
+    # T4 (explicit paths) — issue["path"] must be printed separately, not only
+    # embedded in code/message. Fails if the explicit path emission is removed.
+    def test_t4_explicit_paths_asset_preferences(self):
+        budget = {
+            "targetSec": 30, "minSec": 27, "maxSec": 30,
+            "minimumWords": 47, "preferredWords": 52, "maximumWords": 52,
+            "sceneCount": 5, "pauseSec": 1.4,
+            "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
+        }
+        issues = [
+            {"sceneNumber": 1, "code": "INVALID_ENUM_VALUE",
+             "path": "assetPreferences[0]", "message": "scene 1: got 'animation'"},
+        ]
+        inst = gs._build_retry_instruction_v2(
+            budget, actual_word_count=54, actual_scene_count=5, estimated_dur=30.9,
+            structural_issues=issues, allow_generated_images=False,
+        )
+        assert "Path: assetPreferences[0]" in inst
+        assert "[INVALID_ENUM_VALUE]" in inst
+        assert "scene 1: got 'animation'" in inst
+
+    def test_t4_explicit_paths_visual_sequence(self):
+        budget = {
+            "targetSec": 30, "minSec": 27, "maxSec": 30,
+            "minimumWords": 47, "preferredWords": 52, "maximumWords": 52,
+            "sceneCount": 5, "pauseSec": 1.4,
+            "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
+        }
+        issues = [
+            {"sceneNumber": 2, "code": "INVALID_ENUM_VALUE",
+             "path": "visualSequence[0].assetPreference", "message": "scene 2: got 'infographic'"},
+        ]
+        inst = gs._build_retry_instruction_v2(
+            budget, actual_word_count=54, actual_scene_count=5, estimated_dur=30.9,
+            structural_issues=issues, allow_generated_images=False,
+        )
+        assert "Path: visualSequence[0].assetPreference" in inst
+        assert "[INVALID_ENUM_VALUE]" in inst
+        assert "scene 2: got 'infographic'" in inst
+
+    def test_t4_explicit_path_without_scene_number(self):
+        budget = {
+            "targetSec": 30, "minSec": 27, "maxSec": 30,
+            "minimumWords": 47, "preferredWords": 52, "maximumWords": 52,
+            "sceneCount": 5, "pauseSec": 1.4,
+            "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
+        }
+        issues = [
+            {"sceneNumber": None, "code": "EMPTY_SCENES",
+             "path": "scenes", "message": "script has no scenes"},
+        ]
+        inst = gs._build_retry_instruction_v2(
+            budget, actual_word_count=0, actual_scene_count=0, estimated_dur=0.0,
+            structural_issues=issues, allow_generated_images=False,
+        )
+        assert "Path: scenes" in inst
+        assert "[EMPTY_SCENES]" in inst
+        assert "script has no scenes" in inst
+
+    # T5 — real-value regression: animation and infographic stay rejected and the
+    # validator reports both the assetPreferences and visualSequence paths.
+    def _rejected_script(self, enum_value):
+        return _v2_script(scenes=[
+            _v2_scene(1, vp_overrides={
+                "assetPreferences": [enum_value],
+                "visualSequence": [
+                    {"segmentIndex": 1, "assetPreference": enum_value,
+                     "durationFraction": 1.0, "transition": "cut"},
+                ],
+            }),
+            _v2_scene(2), _v2_scene(3), _v2_scene(4),
+        ])
+
+    @pytest.mark.parametrize("enum_value", ["animation", "infographic"])
+    def test_t5_invalid_enum_rejected(self, enum_value):
+        canonical, errors, _ = gs._validate_and_canonicalize_script_v2(
+            self._rejected_script(enum_value), allow_generated_images=False)
+        assert canonical is None
+        assert errors, "expected structural errors for invalid enum value"
+        paths = {e["path"] for e in errors}
+        assert "scenes[1].visualPlan.assetPreferences[0]" in paths, f"paths={paths}"
+        assert "scenes[1].visualPlan.visualSequence[0].assetPreference" in paths, f"paths={paths}"
+        assert any("INVALID_ENUM_VALUE" in e["code"] for e in errors), \
+            f"codes={[e['code'] for e in errors]}"
+
+    # T6 — preserve valid fields during reduce_content
+    def test_t6_preserve_during_reduce_content(self):
+        budget = {
+            "targetSec": 30, "minSec": 27, "maxSec": 30,
+            "minimumWords": 47, "preferredWords": 52, "maximumWords": 52,
+            "sceneCount": 5, "pauseSec": 1.4,
+            "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
+        }
+        inst = gs._build_retry_instruction_v2(
+            budget, actual_word_count=60, actual_scene_count=5, estimated_dur=33.0,
+            structural_issues=[], allow_generated_images=False,
+        )
+        assert "Conserva el número de escenas" in inst
+        assert "sceneNumber" in inst
+        assert "campos `visualPlan` ya válidos" in inst
+        assert "assetPreferences` ni `visualSequence` válidos" in inst
+        assert "No cambies" in inst
+
+    # T7 — attempts unchanged
+    def test_t7_max_script_attempts_unchanged(self):
+        assert gs.MAX_SCRIPT_ATTEMPTS == 3
+
+    # F5 — integrated reduce_content flow through main()
+    def _five_scene_script(self, words_per_scene):
+        scenes = []
+        for i in range(1, 6):
+            voiceover = " ".join(f"palabra{i}_{j}" for j in range(1, words_per_scene + 1))
+            scenes.append(_v2_scene(i, vp_overrides={}, voiceover=voiceover))
+        return _v2_script(scenes=scenes)
+
+    def test_f5_integrated_reduce_content_through_main(self, monkeypatch, tmp_path):
+        """Reproduces the original reduce_content bug end-to-end via main().
+
+        First attempt: structurally valid, 5 scenes, but 12 words/scene (60 > 52).
+        Second attempt: valid, <=52 words, no generated, in range.
+        """
+        bad = self._five_scene_script(12)   # 60 words → above maximumWords=52
+        good = self._five_scene_script(10)  # 50 words → within range
+
+        calls = [0]
+        prompts = []
+
+        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
+            calls[0] += 1
+            prompts.append(prompt)
+            return _json.dumps(bad) if calls[0] == 1 else _json.dumps(good)
+
+        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
+        monkeypatch.setattr(gs, "call_llm", mock_call)
+        out_path = tmp_path / "metadata.json"
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Arcoíris",
+                                           "--duration", "30", "--output", str(out_path)])
+
+        exit_code = gs.main()
+        assert exit_code == 0
+        assert calls[0] == 2
+
+        meta = _json.loads(out_path.read_text())
+        assert meta["status"] == "SCRIPT_DRAFT"
+        assert meta["durationContract"]["status"] == "PASS"
+
+        # The second prompt must carry the full reduce_content contract.
+        second = prompts[1]
+        assert "allowGeneratedImages es false" in second
+        assert "prohibido" in second
+        assert "generated" in second
+        for v in ALLOWED_ASSET_PREFERENCES:
+            assert v in second, f"enum value {v} missing from second prompt"
+        assert "52" in second
+        assert "como máximo 52" in second
+        assert "Conserva el número de escenas" in second
+        assert "sceneNumber" in second
+        assert "visualPlan" in second
+        assert "assetPreferences" in second
+        assert "visualSequence" in second
