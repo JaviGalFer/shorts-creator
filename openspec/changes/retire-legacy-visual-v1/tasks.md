@@ -211,9 +211,23 @@ Commit de Slice 6A:
 - [x] Aplicar correcciones F1–F6 del review
 - [x] Reaprobación read-only focalizada
 - [x] Commit de la corrección
-- [ ] Nuevo E2E V2 canónico
+- [x] Nuevo E2E V2 canónico
 - [ ] Obtener E2E V2 canónico PASS
 - [ ] Cierre formal del change
+
+Resultado del nuevo E2E (2026-08-02):
+
+- Job: `cmo-2026-08-02-204451`; path `data/videos/cmo-2026-08-02-204451`
+- Comando: `python3 bin/run_job.py --topic "Cómo se forma un arcoíris" --duration 30`
+- Exit code top-level: 0; una única invocación
+- Resultado: `REVIEW_REQUIRED`; etapa final `script` (BLOCKED controlado por contrato)
+- Providers: LLM `openai` (`gpt-4o-mini`); Wikimedia activo + Pixabay activo; Pexels/FreeAI/Pollinations deshabilitados; TTS `edge_tts` (no alcanzado)
+- Vídeo: ninguno (pipeline detenido en `script`)
+- `qualityGate`: no ejecutado
+- Causa: `DURATION_OUT_OF_RANGE: estimated=39.0s (spoken=37.6s + pauses=1.4s), target=30s, min=27s, max=30s, words=69, scenes=5`
+- Session log: `docs/sessions/20260802-224326-retire-legacy-visual-v1-slice-6b-canonical-e2e-rerun.md`
+- La corrección de prompt/retry sí funcionó para el contrato visual: `structureValid=true`, `request.visuals.schemaVersion=2`, `request.visuals.allowGeneratedImages=false`, cero enums inválidos (`assetPreferences`/`visualSequence` todos dentro de `ALLOWED_ASSET_PREFERENCES`), cero campos V1, `sceneNumber` secuencial 1–5.
+- Persiste el exceso de palabras: wordCount=69 > maximumWords=52; retry history 60 → 56 → 69 (el retry 2 empeoró).
 
 Reaprobación:
 SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT.
@@ -277,9 +291,9 @@ Session log del fix (Build): `docs/sessions/20260802-214507-retire-legacy-visual
 La corrección de prompt/retry y la cobertura de enum/retries están implementadas
 (ver el session log del Build y `current-state.md`). La auditoría read-only de la
 corrección terminó con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED` (F1/F2 MEDIUM,
-F3–F6 LOW); las correcciones F1–F6 están aplicadas. Reaprobación read-only
-focalizada, commit de la corrección y nuevo E2E V2 canónico quedan para la
-siguiente sesión.
+F3–F6 LOW); las correcciones F1–F6 están aplicadas y fueron reaprobadas
+read-only (`SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT`), commiteadas
+(`f48f98f`) y seguidas del nuevo E2E V2 canónico. [histórico, ya cerrado]
 
 Correcciones F1–F6 aplicadas (Build del review fixes):
 - F1: gate request-scoped de `generated`. `allow_generated_images` se define antes
@@ -308,9 +322,13 @@ Resultados del review fixes:
 - Collect-only: `1117 tests collected`, cero errores de colección.
 - Suite completa: **`1117 passed, 0 failed`** (baseline anterior `1110`; +7 tests).
   Cero skips, cero xfail, cero warnings.
-- Cero providers reales; cero commit; ningún nuevo E2E; ningún PASS.
-- Pendiente: reaprobación read-only focalizada, commit de la corrección, nuevo E2E
-  y cierre formal del change.
+- Cero providers reales; cero commit; ningún nuevo E2E; ningún PASS en el momento
+  del Build del review. [histórico del primer Build del review; cerrado después
+  mediante `f48f98f` y el nuevo E2E]
+- Pendiente (estado vigente): la corrección temporal de duración (exceso de
+  palabras) del nuevo E2E, revisión read-only de esa corrección, commit de la
+  corrección temporal, un siguiente E2E V2 canónico PASS y el cierre formal del
+  change.
 
 ### Nota sobre la hermetización de `test_timing_regression.py` (6A2)
 
@@ -365,3 +383,76 @@ Resuelto en 6A3. C4 ya no está pendiente.
   `with monkeypatch.context() as scoped:` usando
   `scoped.delitem(sys.modules, mod, raising=False)`.
 - Baseline posterior: `1102 passed, 0 failed`. C4 ya no está pendiente.
+
+### Slice 6B — Follow-up temporal (retry de duración por compresión de voiceovers)
+
+Sesión: `retire-legacy-visual-v1-slice-6b-duration-retry-fix` (Build).
+
+- [x] Auditoría read-only del segundo E2E — SLICE_6B_DURATION_REVIEW_CHANGES_REQUIRED
+- [x] Implementar retry temporal basado en voiceovers anteriores
+- [x] Añadir budget determinista por escena
+- [x] Añadir protección anti-regresión y best attempt
+- [x] Añadir cobertura de convergencia
+- [x] Review read-only de la corrección temporal — SLICE_6B_DURATION_FIX_REVIEW_CHANGES_REQUIRED
+- [x] Aplicar correcciones F1–F4 del review
+- [x] Aplicar hardening F5–F7
+- [x] Primera reaprobación focalizada — SLICE_6B_DURATION_REVIEW_FIXES_REAPPROVAL_CHANGES_REQUIRED
+- [x] Corregir F8: usar candidato canónico en compression prompt y merge
+- [x] Añadir cobertura canónica del prompt y merge
+- [x] Reaprobación final read-only de la corrección temporal — SLICE_6B_DURATION_CANONICAL_FOLLOWUP_REAPPROVED_FOR_COMMIT
+- [x] Commit de la corrección temporal — 9eb1f13
+- [ ] Siguiente E2E V2 canónico
+
+Estado del follow-up temporal:
+
+- El segundo E2E V2 canónico (job `cmo-2026-08-02-204451`) quedó BLOCKED
+  (`REVIEW_REQUIRED`) en `script` **únicamente** por duración
+  (`DURATION_OUT_OF_RANGE`); el contrato visual ya era válido
+  (`structureValid=true`, cero enums inválidos).
+- Auditoría read-only: `SLICE_6B_DURATION_REVIEW_CHANGES_REQUIRED`, diagnóstico
+  D1/D2/D3/D4/D6/D7 confirmado y D8 como factor contribuyente.
+- Corrección implementada (Build): retry temporal especializado de compresión de
+  voiceovers, reparto determinista del máximo global por escena
+  (`_allocate_scene_word_caps`), merge local seguro (`_apply_voiceover_repair`),
+  protección anti-regresión con best attempt y trazabilidad ampliada en
+  `retryHistory`.
+- Review read-only de la corrección: `SLICE_6B_DURATION_FIX_REVIEW_CHANGES_REQUIRED`
+  — F1 HIGH (system prompt de compresión usaba `SYSTEM_PROMPT_V2`), F2 MEDIUM
+  (`{expected}` literal), F3 MEDIUM (caps solo telemetría), F4 MEDIUM (flag de
+  regresión), F5–F7 LOW.
+- Correcciones aplicadas (esta sesión):
+  - F1: constant `VOICEOVER_COMPRESSION_SYSTEM_PROMPT`; selección por estrategia
+    (`compression` → prompt dedicado; resto → `SYSTEM_PROMPT_V2`).
+  - F2: `{expected}` interpolado a la secuencia real (p. ej. `[1, 2, 3, 4, 5]`).
+  - F3: enforcement real de caps (`MIN_WORDS_PER_SCENE <= wordCount <= sceneWordCap`)
+    con `REPAIR_SCENE_WORD_MINIMUM_NOT_MET`, `REPAIR_SCENE_WORD_CAP_EXCEEDED` y
+    `REPAIR_INVALID_SCENE_CAPS`; semántica `repairShapeValid`/`repairBudgetValid`/
+    `repairPayloadValid`.
+  - F4: flag `lastAttemptDiscardedAsRegression` corregido vía ranking centralizado
+    (`_candidate_rank`) y telemetría `candidateUpdated`/`candidateRank`.
+  - F5: representación canónica siempre participa (best candidate, compresión,
+    persistencia) aunque falle la duración.
+  - F6: telemetría de payload rechazado (`candidateReused`, `wordCountSource`).
+  - F7: `acceptedAsBest` final inequívoco (uno solo) con `becameBestCandidate` de
+    telemetría durante el bucle.
+- Validator (`visual_plan_v2.py`), runner (`run_job.py`) y perfiles
+  (`duration_profiles.py`) intactos. `MAX_SCRIPT_ATTEMPTS == 3`.
+- Suite completa vigente: **`1155 passed, 0 failed`** (baseline anterior `1138`;
+  +17 tests). Cero skips, cero xfail, cero warnings.
+- Primera reaprobación read-only focalizada:
+  `SLICE_6B_DURATION_REVIEW_FIXES_REAPPROVAL_CHANGES_REQUIRED`. F1–F4 y F6–F7
+  resueltos; **F8 MEDIUM bloqueante** (compression prompt y merge usaban la
+  representación raw en lugar de la canónica); **F9–F11 LOW** (F9 aceptado como
+  no bloqueante; F10 gaps de cobertura; F11 tracking documental corregido).
+- F8 corregido en el follow-up canónico: representación activa única y canónica
+  (`candidate_script = canonical` cuando `v2_valid == true`) usada en el
+  compression prompt, el merge, el siguiente retry, el best candidate y la
+  persistencia. Rama estructural inválida intacta (sin candidato inventado).
+- Cobertura canónica añadida: compression prompt recibe candidato canónico,
+  base del merge canonicalizada, y seis escenas en el prompt.
+- Suite completa vigente tras F8: **`1158 passed, 0 failed`** (baseline anterior
+  `1155`; +3 tests). Cero skips, cero xfail, cero warnings.
+- Pendiente: reaprobación final read-only, commit de la corrección y siguiente
+  E2E V2 canónico.
+- No se ejecutó un tercer E2E; ningún PASS; sin commit; sin cierre. El change
+  `retire-legacy-visual-v1` continúa abierto.

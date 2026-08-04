@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-**Última actualización:** 2026-08-02
+**Última actualización:** 2026-08-04
 
 ## Estado global
 
@@ -10,7 +10,7 @@ Pipeline funcional de vídeos cortos verticales con duración configurable. Scri
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script)
 
-**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4 completo. Slice 5A implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`. Slice 5B implementado, auditado, corregido, reaprobado y cerrado mediante el commit `1d9fe37`. Slice 6A implementado, auditado, corregido, reaprobado y cerrado mediante el commit `86170d3`. Slice 6B ejecutado con E2E V2 canónico BLOCKED (controlado por contrato en `script`); auditado read-only con `SLICE_6B_REVIEW_CHANGES_REQUIRED`; corrección de prompt/retry implementada; auditado read-only de la corrección con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED` y correcciones F1–F6 aplicadas; pendiente de reaprobación read-only focalizada y de un nuevo E2E.
+**Change activo:** `retire-legacy-visual-v1` — Primera fase del plan de transformación modular. Slice 1 implementado, revisado y commiteado. Slice 2 implementado, revisado y cerrado mediante commit. Slice 3A implementado, revisado y cerrado mediante commit. Slice 3B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 3B3 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4A implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B1 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4B2 implementado, revisado y cerrado mediante el commit de esta iteración. Slice 4 completo. Slice 5A implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`. Slice 5B implementado, auditado, corregido, reaprobado y cerrado mediante el commit `1d9fe37`. Slice 6A implementado, auditado, corregido, reaprobado y cerrado mediante el commit `86170d3`. Slice 6B ejecutado con E2E V2 canónico BLOCKED (controlado por contrato en `script`); auditado read-only con `SLICE_6B_REVIEW_CHANGES_REQUIRED`; corrección de prompt/retry implementada; auditado read-only de la corrección con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED` y correcciones F1–F6 aplicadas; corrección de prompt/retry reaprobada y cerrada mediante `f48f98f`; nuevo E2E ejecutado en esta sesión; auditado read-only del nuevo E2E con `SLICE_6B_DURATION_REVIEW_CHANGES_REQUIRED`; corrección del retry temporal de duración implementada (baseline `1138 passed, 0 failed`); auditado read-only de la corrección con `SLICE_6B_DURATION_FIX_REVIEW_CHANGES_REQUIRED` y correcciones F1–F7 aplicadas (baseline `1155 passed, 0 failed`); primera reaprobación read-only con `SLICE_6B_DURATION_REVIEW_FIXES_REAPPROVAL_CHANGES_REQUIRED` (F8 MEDIUM detectado); F8 corregido en el follow-up canónico mediante candidato canónico en compression prompt y merge (baseline `1158 passed, 0 failed`); corrección temporal reaprobada (`SLICE_6B_DURATION_CANONICAL_FOLLOWUP_REAPPROVED_FOR_COMMIT`), cerrada y versionada mediante `9eb1f13`; F1–F8 resueltos; F9 LOW aceptado; pendiente del tercer E2E V2 canónico.
 
 ### Slice 1 completado (2026-07-17)
 
@@ -633,13 +633,289 @@ Próximos pasos:
 2. si obtiene PASS, realizar auditoría read-only;
 3. cerrar formalmente el change.
 
+### Nuevo E2E V2 canónico (segundo intento, ejecutado 2026-08-02)
+
+Segundo E2E V2 canónico ejecutado tras la corrección de prompt/retry, en la
+sesión `docs/sessions/20260802-224326-retire-legacy-visual-v1-slice-6b-canonical-e2e-rerun.md`.
+
+- HEAD inicial: `e5e2a4eb25746bf10645e0c1c2fe458482bedc48`; working tree limpio.
+- Inicio: `2026-08-02T22:44:02+02:00`; fin: `2026-08-02T22:44:51+02:00`; duración 49s.
+- Tema: `Cómo se forma un arcoíris`; duración 30s (perfil `short_25_30`).
+- Comando exacto: `python3 bin/run_job.py --topic "Cómo se forma un arcoíris" --duration 30`.
+- Una única invocación top-level de `bin/run_job.py`.
+- Job ID: `cmo-2026-08-02-204451`; path `data/videos/cmo-2026-08-02-204451`.
+- Providers: LLM `openai` (`gpt-4o-mini`); Wikimedia activo + Pixabay activo (con key); Pexels/FreeAI/Pollinations deshabilitados; TTS `edge_tts` (no alcanzado).
+- Exit code: 0; el runner terminó de forma controlada, pero con estado final `REVIEW_REQUIRED`.
+- `lastCompletedStage`: `script`; `outputVideoPath`: null; `validationStatus`: null.
+- Vídeo: ninguno; `qualityGate`: no ejecutado.
+
+### Resultado del contrato visual de la corrección (segundo E2E)
+
+La corrección de prompt/retry funcionó para el contrato visual:
+
+- `request.visuals.schemaVersion == 2`
+- `request.visuals.allowGeneratedImages == false`
+- `structureValid == true`; `structureIssues == []`
+- 5 escenas, todas con `visualPlan._schemaVersion == 2`; `sceneNumber` secuencial 1–5
+- Cero campos V1 (`editorialRole`, `strategy`, `primaryAssetType`, `secondaryAssetType`, `visualTemporalIntent`)
+- Cero enums inválidos en `assetPreferences` y `visualSequence`; todos dentro de `ALLOWED_ASSET_PREFERENCES`
+- Cero `animation`, `animated`, `infographic`, `photo`, `image`, `video`, `generated` como enum
+- Cero `imageGenerationPrompt`; cero `negativePrompt`
+
+Comparado con el primer E2E `cmo-2026-08-02-192443`, desaparecieron los enums
+inválidos (`animation`, `infographic`). No desapareció el exceso de palabras.
+
+### Persistencia del exceso de palabras (segundo E2E)
+
+- `durationContract`: targetSec=30, minSec=27, maxSec=30, strictness=balanced, spokenWordsPerMinute=110
+- `wordCount`=69, `sceneCount`=5, `spokenDurationSec`=37.6, `pauseDurationSec`=1.4, `estimatedDurationSec`=39.0
+- `minimumWords`=47, `preferredWords`=52, `maximumWords`=52
+- `status`=FAIL; retries=3; `retryHistory`: retry 0 = 60 palabras (reduce_content); retry 1 = 56 palabras (reduce_content); retry 2 = 69 palabras (reduce_content; empeoró).
+- `reviewReasons`: `DURATION_OUT_OF_RANGE: estimated=39.0s (spoken=37.6s + pauses=1.4s), target=30s, min=27s, max=30s, words=69, scenes=5`
+- El modelo volvió a superar `maximumWords` (52) en el tercer intento, incluso tras dos retries de reducción. A diferencia del primer E2E, esta vez la estructura y los enums son válidos; el único bloqueo es el contrato de duración.
+
+### Estado de etapas (segundo E2E)
+
+| Etapa | Estado |
+|-------|--------|
+| script | `REVIEW_REQUIRED` (detenido por contrato de duración) |
+| assets | no ejecutada |
+| audio | no ejecutada |
+| prepare | no ejecutada |
+| render | no ejecutada |
+| validate | no ejecutada |
+
+### Resultado del segundo E2E
+
+- Resultado: **BLOCKED** (`REVIEW_REQUIRED` controlado por contrato en `script`), por `DURATION_OUT_OF_RANGE` (69 > 52 palabras).
+- Verdict: `SLICE_6B_E2E_RERUN_NEEDS_FOLLOWUP`
+- Cero cambios productivos (bin/tests/src intactos).
+- Cero MCP, cero reindexado, cero staging, cero commit, cero push.
+- No se ejecutó una segunda invocación.
+- Slice 6B pendiente de auditoría read-only y de una sesión de corrección (exceso de palabras).
+- Change completo `retire-legacy-visual-v1` continúa abierto.
+
 Estado vigente:
 - Primer E2E V2 canónico BLOCKED controlado por contrato en `script`.
 - Auditoría inicial del E2E: `SLICE_6B_REVIEW_CHANGES_REQUIRED`.
 - Primer Build (prompt/retry) implementado (baseline funcional `1110 passed, 0 failed`).
 - Review del Build: `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED` por F1/F2 (MEDIUM); F3–F6 aceptados para corrección conjunta.
 - Correcciones F1–F6 aplicadas, reaprobadas read-only y cerradas mediante `f48f98f`.
+- Segundo E2E V2 canónico ejecutado en esta sesión: **BLOCKED** (`REVIEW_REQUIRED`) en `script` por `DURATION_OUT_OF_RANGE`; contrato visual corregido (cero enums inválidos, `structureValid=true`, `allowGeneratedImages=false`); persiste exceso de palabras (69 > 52).
 - Change `retire-legacy-visual-v1` continúa abierto.
+
+## Slice 6B — Retry temporal de duración (Build, ejecutado 2026-08-04)
+
+Sesión: `retire-legacy-visual-v1-slice-6b-duration-retry-fix`.
+
+### Diagnóstico
+
+Auditoría read-only del segundo E2E: `SLICE_6B_DURATION_REVIEW_CHANGES_REQUIRED`.
+
+- El segundo E2E V2 canónico quedó BLOCKED únicamente por duración
+  (`DURATION_OUT_OF_RANGE`, 69 > 52 palabras); el contrato visual era válido.
+- Causas confirmadas: D1 (regeneración completa estocástica), D2 (el retry no
+  recibía el texto anterior que debe comprimir), D3 (sin reparto estricto del
+  budget por escena), D4 (se pedía preservar campos que no se proporcionan),
+  D6 (sin protección anti-regresión), D7 (cobertura insuficiente). D8
+  (incumplimiento del modelo) se mantiene como factor contribuyente.
+- Decisiones: no modificar `visual_plan_v2.py`; no modificar `run_job.py`; no
+  modificar `duration_profiles.py`; no aumentar `MAX_SCRIPT_ATTEMPTS` (sigue 3);
+  no relajar `minimumWords`/`preferredWords`/`maximumWords`; no implementar
+  truncado ciego; no ejecutar otro E2E en esta sesión.
+
+### Corrección implementada (Build)
+
+- `bin/generate_script.py`: separación del retry estructural (regeneración
+  completa contractual) y del retry temporal (compresión de voiceovers).
+  Cuando `v2_valid == true` y `wordCount > maximumWords`, se usa un prompt
+  especializado que comprime exclusivamente los voiceovers anteriores.
+- `_allocate_scene_word_caps(maximum_words, scene_count)`: reparto determinista
+  del máximo global por escena (suma exacta, `max - min <= 1`). Ejemplo:
+  52/5 → `[11, 11, 10, 10, 10]`. Caps: 52/4 → `[13,13,13,13]`; 52/6 →
+  `[9,9,9,9,8,8]`.
+- `_build_voiceover_compression_prompt(...)`: contexto del intento anterior
+  (`sceneNumber`, `currentVoiceover`, `maximumWords`), contador `str.split()`,
+  mínimo/máximo global, caps exactos, formato de salida reducido
+  (`{"scenes":[{"sceneNumber":1,"voiceover":"..."}]}`) y prohibición de campos
+  adicionales.
+- `_apply_voiceover_repair(base_script, payload, expected_scene_numbers=...)`:
+  merge local sobre `copy.deepcopy`, que sustituye únicamente
+  `scenes[i].voiceover` y rechaza escenas faltantes/extra/duplicadas, orden
+  incorrecto, voiceover vacío/no string y campos adicionales.
+- Best attempt: solo participan scripts `structureValid == true`; métrica de
+  distancia al rango global (`_distance_to_allowed_range`), con empate por
+  cercanía a `preferredWords` y conservación del anterior ante empate completo.
+  La protección solo aplica al agotamiento sin PASS; el bucle termina de forma
+  inmediata al encontrar PASS.
+- `retryHistory` ampliado con: `attempt`, `strategy`, `wordCount`,
+  `structureValid`, `durationStatus`, `sceneWordCounts`, `sceneWordCaps`,
+  `distanceToAllowedRange`, `acceptedAsBest`, `repairPayloadValid`. Se añaden a
+  `durationContract`: `bestAttempt`, `bestAttemptWordCount`,
+  `lastAttemptDiscardedAsRegression`.
+- Validator (`visual_plan_v2.py`), runner (`run_job.py`) y perfiles
+  (`duration_profiles.py`) intactos. `MAX_SCRIPT_ATTEMPTS == 3`.
+
+### Tests
+
+- `tests/test_generate_script_v2.py`: 92 → 113 tests (T1 caps deterministas,
+  T2 prompt de compresión, T3 merge solo voiceover, T4 payloads inválidos,
+  T5/T6 flujos integrados 60→50 y 60→56→69, T7 no perder PASS, T8 visual plan
+  inmutable ante payload hostil, T9 caps por escena, T10 estructura inválida
+  mantiene retry completo, T12 agotamiento sin candidato válido; T11 cubierto
+  por el test existente `MAX_SCRIPT_ATTEMPTS == 3`).
+- `tests/test_generate_script.py`: el test legacy
+  `test_main_retry_loop_3_attempts_3rd_succeeds` codificaba el comportamiento
+  antiguo de regeneración completa en exceso de palabras; se actualizó al nuevo
+  flujo de compresión (desviación de alcance documentada en el session log).
+
+### Resultados
+
+- `test_generate_script_v2.py`: 113 passed.
+- Generación combinada: 159 passed.
+- `test_run_job.py`: 91 passed.
+- Collect-only: `1138 tests collected`, cero errores.
+- Suite completa: **`1138 passed, 0 failed`** (baseline anterior `1117`; +21).
+  Cero skips, cero xfail, cero warnings.
+- Pendiente: review read-only de la corrección, commit de la corrección y un
+  siguiente E2E V2 canónico.
+- No se ejecutó otro E2E; ningún PASS; sin vídeo nuevo; change abierto.
+
+## Slice 6B — Review fixes del retry temporal (ejecutado 2026-08-04)
+
+Sesión: `retire-legacy-visual-v1-slice-6b-duration-retry-review-fixes`.
+
+### Review read-only de la corrección temporal
+
+La auditoría read-only de la corrección temporal terminó con
+`SLICE_6B_DURATION_FIX_REVIEW_CHANGES_REQUIRED`. Findings:
+
+- **F1 HIGH** — `compression` usaba `SYSTEM_PROMPT_V2`, contradiciendo el user
+  prompt reducido.
+- **F2 MEDIUM** — `{expected}` llegaba literalmente al modelo.
+- **F3 MEDIUM** — `sceneWordCaps` se declaraban pero no se validaban.
+- **F4 MEDIUM** — `lastAttemptDiscardedAsRegression=true` cuando el último
+  intento era best.
+- **F5 LOW** — best candidate válido se persistía en representación raw, no
+  canónica.
+- **F6 LOW** — `repairPayloadValid` y `retryHistory.wordCount` con semántica
+  ambigua.
+- **F7 LOW** — `acceptedAsBest` significaba best-so-far y podía quedar `true` en
+  varios intentos.
+
+### Correcciones aplicadas (esta sesión)
+
+- **F1** — constant `VOICEOVER_COMPRESSION_SYSTEM_PROMPT`; selección del system
+  prompt por estrategia (`compression` → prompt dedicado; inicial / estructural /
+  expansión → `SYSTEM_PROMPT_V2`). La llamada usa `system_prompt=attempt_system_prompt`.
+- **F2** — `{expected}` interpolado a la secuencia real de `sceneNumber`
+  (p. ej. `[1, 2, 3, 4, 5]`).
+- **F3** — enforcement real de caps: `_apply_voiceover_repair` recibe
+  `scene_word_caps` y valida `MIN_WORDS_PER_SCENE <= wordCount <= sceneWordCap`
+  con `REPAIR_SCENE_WORD_MINIMUM_NOT_MET`, `REPAIR_SCENE_WORD_CAP_EXCEEDED` y
+  `REPAIR_INVALID_SCENE_CAPS`. Sin merge parcial: si falla cualquier condición,
+  no se modifica `script_data` y el intento se consume dentro de
+  `MAX_SCRIPT_ATTEMPTS`.
+- **F3/F6** — semántica `repairShapeValid` (shape/estructura) + `repairBudgetValid`
+  (budget por escena) + `repairPayloadValid = repairShapeValid and repairBudgetValid`.
+- **F4** — `lastAttemptDiscardedAsRegression` corregido: solo `true` cuando el
+  último intento produjo un nuevo candidato estructuralmente válido con ranking
+  estrictamente peor que el best final. Ranking centralizado en
+  `_candidate_rank(word_count, budget)`.
+- **F5** — la representación canónica participa siempre (best candidate, siguiente
+  retry, compresión, persistencia) aunque falle la duración; se persiste canónico
+  si la estructura es válida.
+- **F6** — telemetría de payload rechazado: `candidateUpdated`, `candidateReused`,
+  `wordCountSource` (`previous_candidate` / `repaired_candidate` /
+  `generated_candidate`), `candidateRank`.
+- **F7** — `acceptedAsBest` final inequívoco (uno solo cuando existe best;
+  `becameBestCandidate` queda como telemetría durante el bucle).
+
+### Escenarios históricos 56/69
+
+Con enforcement de caps, los payloads de 56 y 69 palabras son shape-valid pero no
+budget-valid para caps `[11,11,10,10,10]`; no entran como nuevos best candidates
+y el candidato persistido sigue siendo el inicial. La regresión real solo se
+evalúa entre candidatos cap-valid.
+
+### Resultados
+
+- `test_generate_script_v2.py`: 130 passed (113 → 130).
+- Generación combinada (`test_generate_script.py` + `test_generate_script_v2.py` +
+  `test_duration_profiles.py` + `test_v2_only_generation_contract.py`): 176 passed.
+- `test_run_job.py`: 91 passed.
+- Collect-only: `1155 tests collected`, cero errores.
+- Suite completa: **`1155 passed, 0 failed`** (baseline anterior `1138`; +17
+  tests). Cero skips, cero xfail, cero warnings.
+- Validator (`visual_plan_v2.py`), runner (`run_job.py`) y perfiles
+  (`duration_profiles.py`) intactos. `MAX_SCRIPT_ATTEMPTS == 3`.
+- Pendiente: reaprobación read-only focalizada, commit de la corrección y un
+  siguiente E2E V2 canónico.
+- Cero tercer E2E; ningún PASS; sin vídeo nuevo; sin commit; sin cierre. Slice 6B
+  y el change completo continúan abiertos.
+
+## Slice 6B — Follow-up canónico F8 (ejecutado 2026-08-04)
+
+Sesión: `retire-legacy-visual-v1-slice-6b-duration-canonical-followup`.
+
+### Primera reaprobación (read-only)
+
+- La primera reaprobación read-only focalizada de la corrección temporal terminó
+  con `SLICE_6B_DURATION_REVIEW_FIXES_REAPPROVAL_CHANGES_REQUIRED`.
+- **F1–F4 y F6–F7 resueltos.**
+- **F8 MEDIUM bloqueante:** `_build_voiceover_compression_prompt` y
+  `_apply_voiceover_repair` recibían la representación raw en lugar de la
+  canónica, pese a que `canonical` ya estaba disponible cuando `v2_valid == true`.
+- **F9–F11 LOW no bloqueantes:**
+  - F9: aceptado como LOW pendiente; posible normalización futura de
+    `repairShapeValid`/`repairBudgetValid`/`repairPayloadValid` a null/N/A para
+    estrategias `initial`, `structural` y `duration`. No afecta al retry, al
+    PASS ni al best candidate. Sin ampliación del schema.
+  - F10: gaps de cobertura (atendidos con la cobertura canónica de esta sesión).
+  - F11: tracking documental de los logs corregido (`??` UNTRACKED).
+
+### Corrección F8 — candidato canónico activo
+
+- Cuando `v2_valid is True` y `canonical is not None`, se define
+  `candidate_script = canonical`. La representación raw deja de participar en el
+  flujo de un candidato estructuralmente válido.
+- `candidate_script` alimenta: `_count_voiceover_words`, `_scene_word_counts`,
+  `scene_count`, el best candidate, `_build_voiceover_compression_prompt`,
+  `_apply_voiceover_repair` (base del merge), la construcción del siguiente retry
+  y la persistencia al agotar sin PASS.
+- Tras un repair válido, el resultado parte de una copia profunda del candidato
+  canónico, modifica únicamente `voiceover`, continúa siendo la representación
+  activa y vuelve a pasar por validación/canonicalización; no recupera campos raw.
+- Rama estructural inválida intacta: no se inventa candidato canónico, se
+  conserva el retry estructural y la respuesta raw se usa solo como evidencia.
+
+### Tests y resultados
+
+- `tests/test_generate_script_v2.py`: 130 → 133 (compression prompt recibe
+  candidato canónico; base del merge canonicalizada; seis escenas en el prompt).
+- `test_generate_script_v2.py`: 133 passed.
+- Generación combinada (con `test_generate_script.py`, `test_duration_profiles.py`,
+  `test_v2_only_generation_contract.py`): 179 passed.
+- `test_run_job.py`: 91 passed.
+- Collect-only: `1158 tests collected`, cero errores.
+- Suite completa: **`1158 passed, 0 failed`** (baseline anterior `1155`; +3
+  tests). Cero skips, cero xfail, cero warnings.
+- Validator (`visual_plan_v2.py`), runner (`run_job.py`) y perfiles
+  (`duration_profiles.py`) intactos. `MAX_SCRIPT_ATTEMPTS == 3`.
+
+### Reaprobación final y cierre (2026-08-04)
+
+- Verdict final de reaprobación: `SLICE_6B_DURATION_CANONICAL_FOLLOWUP_REAPPROVED_FOR_COMMIT`.
+- Cero findings bloqueantes; F9 aceptado como LOW no bloqueante.
+- F1–F8 resueltos.
+- Baseline vigente: **`1158 passed, 0 failed`**.
+- La corrección temporal está reaprobada, cerrada y versionada mediante el Commit A
+  `9eb1f13` (`fix(script): harden canonical duration retries`).
+- Pendiente del tercer E2E V2 canónico.
+- Cero PASS todavía; sin vídeo nuevo.
+- Cero push; cero reindexado; cero MCP.
+- Slice 6B abierto.
+- Change completo `retire-legacy-visual-v1` abierto.
 
 ## Resumen
 
@@ -653,7 +929,7 @@ Estado vigente:
 - Slice 5A: implementado, revisado, corregido, reaprobado y cerrado mediante el commit `f2a8078`
 - Slice 5B: implementado, auditado, corregido, reaprobado y cerrado mediante el commit `1d9fe37`
 - Slice 6A: implementado, auditado, corregido, reaprobado y cerrado mediante el commit `86170d3`; baseline funcional `1102 passed, 0 failed`
-- Slice 6B: ejecutado con E2E V2 canónico BLOCKED (controlado por contrato en `script`); auditado read-only con `SLICE_6B_REVIEW_CHANGES_REQUIRED`; corrección de prompt/retry implementada (baseline funcional `1110 passed, 0 failed`); auditado read-only con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED` y correcciones F1–F6 aplicadas (baseline funcional `1117 passed, 0 failed`); reaprobada read-only con `SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT`; corrección cerrada mediante el commit `f48f98f`; pendiente de un nuevo E2E V2 canónico
+- Slice 6B: ejecutado con E2E V2 canónico BLOCKED (controlado por contrato en `script`); auditado read-only con `SLICE_6B_REVIEW_CHANGES_REQUIRED`; corrección de prompt/retry implementada (baseline funcional `1110 passed, 0 failed`); auditado read-only con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED` y correcciones F1–F6 aplicadas (baseline funcional `1117 passed, 0 failed`); reaprobada read-only con `SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT`; corrección cerrada mediante el commit `f48f98f`; nuevo E2E V2 canónico ejecutado en esta sesión BLOCKED (`REVIEW_REQUIRED`) en `script` por `DURATION_OUT_OF_RANGE` (contrato visual corregido; persiste exceso de palabras 69 > 52); auditado read-only con `SLICE_6B_DURATION_REVIEW_CHANGES_REQUIRED`; corrección del retry temporal de duración implementada (baseline funcional `1138 passed, 0 failed`); auditado read-only de la corrección con `SLICE_6B_DURATION_FIX_REVIEW_CHANGES_REQUIRED` y correcciones F1–F7 aplicadas (baseline funcional `1155 passed, 0 failed`); primera reaprobación read-only con `SLICE_6B_DURATION_REVIEW_FIXES_REAPPROVAL_CHANGES_REQUIRED`; F8 MEDIUM corregido en el follow-up canónico (candidato canónico en compression prompt y merge; baseline funcional `1158 passed, 0 failed`); corrección temporal reaprobada (`SLICE_6B_DURATION_CANONICAL_FOLLOWUP_REAPPROVED_FOR_COMMIT`), cerrada y versionada mediante `9eb1f13`; F1–F8 resueltos; F9 LOW aceptado; pendiente del tercer E2E V2 canónico
 
 ## Plan de transformación modular
 
@@ -684,13 +960,19 @@ Roadmap completo: `docs/architecture/modular-v2-transformation-roadmap.md`
 ## Próximos pasos
 
 1. Ejecutado Slice 6B: E2E V2 canónico BLOCKED en `script` (enums V2 inválidos + duración fuera de rango); auditado read-only con `SLICE_6B_REVIEW_CHANGES_REQUIRED`.
-2. Implementada la corrección de prompt/retry (baseline `1110 passed, 0 failed`); auditado read-only de la corrección con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED`; correcciones F1–F6 aplicadas (baseline `1117 passed, 0 failed`); reaprobada read-only con `SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT`; corrección cerrada mediante `f48f98f`; pendiente de un nuevo E2E V2 canónico.
-3. Tras un E2E V2 canónico PASS, realizar auditoría y cierre formal del change.
-4. Phase B de audio pacing tras migrar script/
-5. Crear `pyproject.toml` y estructura `src/`
-6. Investigar instalación de ffprobe en el host
-7. Registrar FreeAI para imágenes de calidad gratuitas
-8. Integrar pipeline v2 con n8n
+2. Implementada la corrección de prompt/retry (baseline `1110 passed, 0 failed`); auditado read-only de la corrección con `SLICE_6B_FIX_REVIEW_CHANGES_REQUIRED`; correcciones F1–F6 aplicadas (baseline `1117 passed, 0 failed`); reaprobada read-only con `SLICE_6B_REVIEW_FIXES_REAPPROVED_FOR_COMMIT`; corrección cerrada mediante `f48f98f`.
+3. Ejecutado nuevo E2E V2 canónico (job `cmo-2026-08-02-204451`): BLOCKED (`REVIEW_REQUIRED`) en `script` por `DURATION_OUT_OF_RANGE` (69 > 52 palabras). Contrato visual corregido (cero enums inválidos, `structureValid=true`, `allowGeneratedImages=false`); persiste exceso de palabras.
+4. Auditado read-only del segundo E2E con `SLICE_6B_DURATION_REVIEW_CHANGES_REQUIRED` (diagnóstico D1/D2/D3/D4/D6/D7 confirmado; D8 como factor contribuyente).
+5. Implementada la corrección del retry temporal (compresión de voiceovers + caps deterministas + best attempt). Suite completa vigente `1138 passed, 0 failed`. Validator, runner y perfiles intactos.
+6. Auditado read-only de la corrección temporal con `SLICE_6B_DURATION_FIX_REVIEW_CHANGES_REQUIRED` (F1 HIGH, F2/F3/F4 MEDIUM, F5–F7 LOW). Aplicadas las correcciones F1–F7 (system prompt dedicado, interpolación de `{expected}`, enforcement de caps, flag de regresión corregido, candidato canónico, telemetría aclarada, `acceptedAsBest` inequívoco). Suite completa vigente `1155 passed, 0 failed`.
+7. Primera reaprobación read-only con `SLICE_6B_DURATION_REVIEW_FIXES_REAPPROVAL_CHANGES_REQUIRED`: F1–F4 y F6–F7 resueltos; **F8 MEDIUM** (compression prompt y merge usaban la representación raw) corregido en el follow-up canónico mediante candidato canónico activo (`candidate_script = canonical`). Suite completa vigente `1158 passed, 0 failed`. F9 aceptado como LOW pendiente; F11 tracking documental corregido.
+8. Pendiente: reaprobación final read-only de la corrección temporal, commit de la corrección temporal y un siguiente E2E V2 canónico.
+9. Tras un E2E V2 canónico PASS, realizar auditoría y cierre formal del change.
+10. Phase B de audio pacing tras migrar script/
+11. Crear `pyproject.toml` y estructura `src/`
+12. Investigar instalación de ffprobe en el host
+13. Registrar FreeAI para imágenes de calidad gratuitas
+14. Integrar pipeline v2 con n8n
 
 ## Audio pacing v2 — Phase A (completada 2026-07-14)
 
