@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import copy
 import json
 import math
 import os
@@ -218,6 +219,24 @@ __ASSET_PREFERENCES_BLOCK__
 SYSTEM_PROMPT_V2 = SYSTEM_PROMPT_V2.replace(
     "__ASSET_PREFERENCES_BLOCK__", _build_asset_preferences_section()
 )
+
+
+VOICEOVER_COMPRESSION_SYSTEM_PROMPT = """Eres un editor de voz en off.
+
+Devuelve SOLO JSON válido, sin markdown ni explicaciones.
+
+La respuesta debe tener exclusivamente esta forma:
+{
+  "scenes": [
+    {
+      "sceneNumber": 1,
+      "voiceover": "..."
+    }
+  ]
+}
+
+No devuelvas title, hook, summary, subtitle, targetDurationSec, visualPlan
+ni ningún otro campo."""
 
 
 def load_env():
@@ -702,6 +721,292 @@ def _count_v2_structural_issue_messages(issues: list[dict]) -> list[str]:
     return [i.get("message", "") for i in issues]
 
 
+# ── Temporal (duration) retry helpers ────────────────────────────────
+
+
+def _allocate_scene_word_caps(maximum_words: int, scene_count: int) -> list[int]:
+    """Deterministically distribute a global max word budget across scenes.
+
+    Contract:
+    * scene_count > 0;
+    * length equals scene_count;
+    * every cap is a positive integer;
+    * sum exactly equals maximum_words;
+    * max - min <= 1;
+    * deterministic distribution.
+
+    Example: maximum_words=52, scene_count=5 -> [11, 11, 10, 10, 10].
+    """
+    if scene_count <= 0:
+        raise ValueError("scene_count must be > 0")
+    if maximum_words < scene_count:
+        raise ValueError("maximum_words must be >= scene_count")
+    base = maximum_words // scene_count
+    remainder = maximum_words % scene_count
+    caps = [base + 1] * remainder + [base] * (scene_count - remainder)
+    return caps
+
+
+def _scene_word_counts(script_data: dict) -> list[int]:
+    """Return the productive voiceover word count per scene in sceneNumber order."""
+    counts = []
+    for scene in sorted(script_data.get("scenes", []), key=lambda s: s.get("sceneNumber", 0)):
+        counts.append(len((scene.get("voiceover") or "").split()))
+    return counts
+
+
+def _distance_to_allowed_range(word_count: int, budget: dict) -> int:
+    """Distance of a word count to the global allowed range.
+
+    In-range -> 0; below minimum -> (minimum - word_count); above maximum -> (word_count - maximum).
+    """
+    min_w = budget.get("minimumWords", 0)
+    max_w = budget.get("maximumWords", 0)
+    if word_count < min_w:
+        return min_w - word_count
+    if word_count > max_w:
+        return word_count - max_w
+    return 0
+
+
+def _candidate_rank(word_count: int, budget: dict) -> tuple[int, int]:
+    """Rank a candidate by distance to the allowed range, then by proximity
+    to preferredWords. Smaller tuple is better."""
+    return (
+        _distance_to_allowed_range(word_count, budget),
+        abs(word_count - budget.get("preferredWords", 0)),
+    )
+
+
+def _build_voiceover_compression_prompt(
+    canonical_script: dict,
+    budget: dict,
+    actual_word_count: int,
+    scene_word_caps: list[int],
+    *,
+    allow_generated_images: bool,
+) -> str:
+    """Build the specialized voiceover-only compression prompt.
+
+    Used when the previous attempt is structurally valid but exceeds the
+    maximum word budget. The model compresses the existing voiceovers only —
+    it never regenerates the full script or the visual plan.
+    """
+    min_w = budget.get("minimumWords", 0)
+    pref_w = budget.get("preferredWords", 0)
+    max_w = budget.get("maximumWords", 0)
+    scenes = canonical_script.get("scenes", [])
+    expected = list(range(1, len(scene_word_caps) + 1))
+
+    lines = [
+        "## Compresión de voz en off — intento anterior excede la duración",
+        "",
+        f"El guion anterior es estructuralmente V2 válido, pero tiene "
+        f"{actual_word_count} palabras habladas, por encima del máximo global de {max_w}.",
+        "",
+        "Comprime EXCLUSIVAMENTE los voiceovers que se proporcionan a continuación.",
+        "No añadas ni elimines escenas. Conserva exactamente los `sceneNumber`.",
+        "No regeneres ni modifiques el plan visual.",
+        "",
+        "## Voiceovers a comprimir",
+        "",
+        "```json",
+        json.dumps({
+            "scenes": [
+                {
+                    "sceneNumber": scenes[i]["sceneNumber"],
+                    "currentVoiceover": scenes[i].get("voiceover", ""),
+                    "maximumWords": scene_word_caps[i],
+                }
+                for i in range(len(scenes))
+            ]
+        }, ensure_ascii=False, indent=2),
+        "```",
+        "",
+        "## Reglas de compresión",
+        "",
+        "- Comprime cada voiceover para que NO supere su `maximumWords` de esa escena.",
+        f"- Presupuesto global: mínimo {min_w}, preferido ~{pref_w}, máximo {max_w} palabras en total.",
+        f"- El total reparado DEBE quedar dentro de [{min_w}, {max_w}] palabras.",
+        "- No superes NINGÚN cap individual por escena.",
+        "- Conserva el número de escenas y cada `sceneNumber` exactamente.",
+        "- No cambies el plan visual ni ningún otro campo del guion.",
+        "",
+        "## Cómo se cuenta una palabra",
+        "",
+        "- Una palabra es cada token separado por espacios mediante Python `str.split()`.",
+        "- La puntuación unida a una palabra NO crea una palabra adicional.",
+        "",
+        "## Formato de respuesta",
+        "",
+        "Devuelve SOLO JSON válido, sin markdown ni explicaciones, con este formato exacto:",
+        "",
+        "```json",
+        '{"scenes": [{"sceneNumber": 1, "voiceover": "..."}]}',
+        "```",
+        "",
+        "- Devuelve únicamente los campos `sceneNumber` y `voiceover` por escena.",
+        "- No devuelvas `visualPlan`, `subtitle`, `title`, `hook`, `summary` ni ningún otro campo.",
+        "- Los demás campos se preservarán localmente; no los repitas.",
+        "",
+        "## Autocomprobación final",
+        "",
+        "- Revisa que cada voiceover esté dentro de su cap de `maximumWords`.",
+        "- Revisa que la suma total esté dentro de [{min_w}, {max_w}].",
+        f"- Revisa que los `sceneNumber` sean {expected}.",
+        "- Las restricciones visuales no son editables durante esta reparación.",
+    ]
+
+    if allow_generated_images:
+        lines.append("- El gate de imágenes generadas NO se modifica en esta reparación.")
+    else:
+        lines.append("- El gate de imágenes generadas (desactivado) NO se modifica en esta reparación.")
+
+    return "\n".join(lines)
+
+
+def _apply_voiceover_repair(
+    base_script: dict,
+    repair_payload: dict,
+    *,
+    expected_scene_numbers: list[int],
+    scene_word_caps: list[int],
+) -> tuple[dict | None, list[dict], list[dict]]:
+    """Merge a voiceover-only repair payload into a deep copy of base_script.
+
+    Accepts only:
+        {"scenes": [{"sceneNumber": 1, "voiceover": "..."}]}
+
+    Returns (merged_script | None, shape_errors, budget_errors).
+
+    * shape_errors cover structural validity (object shape, scene list, item
+      fields, sceneNumber type/sequence, voiceover string/non-empty).
+    * budget_errors cover per-scene word budgets:
+        MIN_WORDS_PER_SCENE <= wordCount <= sceneWordCap
+
+    The merge is applied ONLY when both shape and budget are valid; otherwise
+    base_script is never mutated and no partial merge happens. scene_word_caps
+    is indexed by sceneNumber (cap for scene i+1 is scene_word_caps[i]).
+    """
+    shape_errors: list[dict] = []
+    budget_errors: list[dict] = []
+
+    expected = list(expected_scene_numbers)
+
+    # ── Cap contract validation ─────────────────────────────────────────
+    if (
+        not isinstance(scene_word_caps, list)
+        or len(scene_word_caps) != len(expected)
+        or any(
+            not isinstance(c, int) or isinstance(c, bool) or c < MIN_WORDS_PER_SCENE
+            for c in scene_word_caps
+        )
+    ):
+        budget_errors.append({
+            "sceneNumber": None,
+            "code": "REPAIR_INVALID_SCENE_CAPS",
+            "path": "scenes",
+            "message": (
+                f"scene_word_caps must be a list of {len(expected)} integers, "
+                f"each >= {MIN_WORDS_PER_SCENE}, got {scene_word_caps!r}"
+            ),
+        })
+        return None, [], budget_errors
+
+    if not isinstance(repair_payload, dict):
+        shape_errors.append({"code": "REPAIR_NOT_OBJECT", "path": ".",
+                             "message": "repair payload must be a JSON object"})
+        return None, shape_errors, []
+
+    top_keys = set(repair_payload.keys())
+    if top_keys != {"scenes"}:
+        extra = sorted(top_keys - {"scenes"})
+        shape_errors.append({"code": "REPAIR_UNEXPECTED_TOP_FIELD", "path": ".",
+                             "message": f"unexpected top-level fields: {extra}"})
+        return None, shape_errors, []
+
+    payload_scenes = repair_payload.get("scenes")
+    if not isinstance(payload_scenes, list):
+        shape_errors.append({"code": "REPAIR_SCENES_NOT_LIST", "path": "scenes",
+                             "message": "scenes must be a list"})
+        return None, shape_errors, []
+
+    seen: set[int] = set()
+    for i, item in enumerate(payload_scenes):
+        if not isinstance(item, dict):
+            shape_errors.append({"sceneNumber": None, "code": "REPAIR_ITEM_NOT_OBJECT",
+                                 "path": f"scenes[{i}]", "message": "scene item must be an object"})
+            continue
+        item_keys = set(item.keys())
+        if item_keys != {"sceneNumber", "voiceover"}:
+            extra = sorted(item_keys - {"sceneNumber", "voiceover"})
+            shape_errors.append({"sceneNumber": item.get("sceneNumber"),
+                                 "code": "REPAIR_UNEXPECTED_FIELD",
+                                 "path": f"scenes[{i}]",
+                                 "message": f"unexpected fields: {extra}"})
+        sn = item.get("sceneNumber")
+        if not isinstance(sn, int) or isinstance(sn, bool):
+            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_BAD_SCENE_NUMBER",
+                                 "path": f"scenes[{i}].sceneNumber",
+                                 "message": "sceneNumber must be an int"})
+            continue
+        if sn in seen:
+            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_DUPLICATE_SCENE",
+                                 "path": f"scenes[{i}].sceneNumber",
+                                 "message": f"duplicate sceneNumber {sn}"})
+        seen.add(sn)
+        vo = item.get("voiceover")
+        if not isinstance(vo, str):
+            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_VOICEOVER_NOT_STRING",
+                                 "path": f"scenes[{i}].voiceover",
+                                 "message": "voiceover must be a string"})
+        elif not vo.strip():
+            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_VOICEOVER_EMPTY",
+                                 "path": f"scenes[{i}].voiceover",
+                                 "message": "voiceover cannot be empty"})
+
+    if shape_errors:
+        return None, shape_errors, []
+
+    got_numbers = [item["sceneNumber"] for item in payload_scenes]
+    if got_numbers != expected:
+        shape_errors.append({"sceneNumber": None, "code": "REPAIR_SCENE_SEQUENCE",
+                             "path": "scenes",
+                             "message": f"expected sceneNumber {expected}, got {got_numbers}"})
+        return None, shape_errors, []
+
+    # ── Per-scene word budget enforcement ───────────────────────────────
+    for i, item in enumerate(payload_scenes):
+        sn = item["sceneNumber"]
+        cap = scene_word_caps[i]
+        wc = len((item.get("voiceover") or "").split())
+        if wc < MIN_WORDS_PER_SCENE:
+            budget_errors.append({
+                "sceneNumber": sn,
+                "code": "REPAIR_SCENE_WORD_MINIMUM_NOT_MET",
+                "path": f"scenes[{i}].voiceover",
+                "message": f"scene {sn}: voiceover has {wc} words, below the minimum {MIN_WORDS_PER_SCENE}",
+            })
+        elif wc > cap:
+            budget_errors.append({
+                "sceneNumber": sn,
+                "code": "REPAIR_SCENE_WORD_CAP_EXCEEDED",
+                "path": f"scenes[{i}].voiceover",
+                "message": f"scene {sn}: voiceover has {wc} words, exceeding cap {cap}",
+            })
+
+    if budget_errors:
+        return None, [], budget_errors
+
+    merged = copy.deepcopy(base_script)
+    by_number = {item["sceneNumber"]: item["voiceover"] for item in payload_scenes}
+    for scene in merged.get("scenes", []):
+        sn = scene.get("sceneNumber")
+        if sn in by_number:
+            scene["voiceover"] = by_number[sn]
+    return merged, [], []
+
+
 # ── main ─────────────────────────────────────────────────────────────
 
 
@@ -788,10 +1093,37 @@ def main() -> int:
     final_budget = dict(provisional_budget)
     v2_structural_issues: list[dict] = []
 
+    # Active representation. A structurally valid candidate always flows from
+    # the canonical representation; the raw response stops participating.
+    candidate_script: dict | None = None
+
+    # Best structurally-valid candidate (only used on exhaustion without PASS).
+    best_candidate: dict | None = None
+    best_word_count: int | None = None
+    best_attempt_idx: int | None = None
+    best_distance: int | None = None
+    best_scene_word_counts: list[int] | None = None
+    best_candidate_rank: tuple[int, int] | None = None
+
     while retries < MAX_SCRIPT_ATTEMPTS:
+        prompt_strategy = "initial"
+        scene_caps: list[int] | None = None
+
         if retries > 0:
-            word_count = _count_voiceover_words(script_data)
-            scene_count = len(script_data.get("scenes", []))
+            # V2 structural validation
+            canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
+                script_data, allow_generated_images=allow_generated_images,
+            )
+            v2_structural_issues = v2_errs
+            v2_valid = canonical is not None
+
+            # F8: a structurally valid candidate always flows from the canonical
+            # representation. The raw response no longer participates once the
+            # structure is valid.
+            candidate_script = canonical if v2_valid else script_data
+
+            word_count = _count_voiceover_words(candidate_script)
+            scene_count = len(candidate_script.get("scenes", []))
             estimated_dur, _, _ = _estimate_narration_duration_sec(word_count, scene_count)
             retry_budget = calculate_word_budget(
                 target_sec=target_dur,
@@ -802,37 +1134,103 @@ def main() -> int:
                 estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
             )
 
-            # V2 structural validation
-            canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
-                script_data, allow_generated_images=allow_generated_images,
-            )
-            v2_structural_issues = v2_errs
-            v2_valid = canonical is not None
+            if not v2_valid:
+                # Case A — invalid structure: keep the full contractual regeneration.
+                # No canonical candidate is invented; the raw response is used only
+                # as evidence of errors and compression is never entered.
+                prompt_strategy = "structural"
+                retry_inst = _build_retry_instruction_v2(
+                    retry_budget, word_count, scene_count, estimated_dur,
+                    structural_issues=v2_errs,
+                    allow_generated_images=allow_generated_images,
+                )
+                base_retry = _build_user_prompt_v2(args.topic, retry_budget, strictness,
+                                                   allow_generated_images=allow_generated_images)
+                current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
+            elif word_count > retry_budget["maximumWords"]:
+                # Case B — valid structure but excessive duration: compress the
+                # existing voiceovers from the current canonical candidate only.
+                prompt_strategy = "compression"
+                scene_caps = _allocate_scene_word_caps(retry_budget["maximumWords"], scene_count)
+                current_prompt = _build_voiceover_compression_prompt(
+                    candidate_script, retry_budget, word_count, scene_caps,
+                    allow_generated_images=allow_generated_images,
+                )
+            else:
+                # Case C — valid structure, not excessive: keep existing strategy.
+                prompt_strategy = "duration"
+                retry_inst = _build_retry_instruction_v2(
+                    retry_budget, word_count, scene_count, estimated_dur,
+                    structural_issues=[],
+                    allow_generated_images=allow_generated_images,
+                )
+                base_retry = _build_user_prompt_v2(args.topic, retry_budget, strictness,
+                                                   allow_generated_images=allow_generated_images)
+                current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
 
-            retry_inst = _build_retry_instruction_v2(
-                retry_budget, word_count, scene_count, estimated_dur,
-                structural_issues=v2_errs if not v2_valid else [],
-                allow_generated_images=allow_generated_images,
-            )
-            base_retry = _build_user_prompt_v2(args.topic, retry_budget, strictness,
-                                               allow_generated_images=allow_generated_images)
-            current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
             print(f"Retry {retries}/{MAX_SCRIPT_ATTEMPTS - 1}: generated {word_count} words, "
-                  f"estimated {estimated_dur:.1f}s, "
+                  f"estimated {estimated_dur:.1f}s, strategy={prompt_strategy}, "
                   f"v2 valid={v2_valid}, errors={len(v2_errs)}")
 
         try:
-            content = call_llm(current_prompt, api_key, model, provider, system_prompt=SYSTEM_PROMPT_V2)
+            if prompt_strategy == "compression":
+                attempt_system_prompt = VOICEOVER_COMPRESSION_SYSTEM_PROMPT
+            else:
+                attempt_system_prompt = SYSTEM_PROMPT_V2
+            content = call_llm(current_prompt, api_key, model, provider, system_prompt=attempt_system_prompt)
         except Exception as e:
             print(f"ERROR calling LLM: {e}")
             return 1
 
-        try:
-            script_data = json.loads(content)
-        except json.JSONDecodeError as e:
-            print(f"ERROR parsing LLM response as JSON: {e}")
-            print(f"Raw response: {content[:500]}")
-            return 1
+        repair_payload_valid = True
+        repair_shape_valid = True
+        repair_budget_valid = True
+        repair_errors: list[dict] = []
+        candidate_updated = True
+        candidate_reused = False
+        word_count_source = "generated_candidate"
+        if prompt_strategy == "compression":
+            try:
+                parsed = json.loads(content)
+            except json.JSONDecodeError:
+                parsed = None
+            if not isinstance(parsed, dict):
+                repair_payload_valid = False
+                repair_shape_valid = False
+                candidate_updated = False
+                candidate_reused = True
+                word_count_source = "previous_candidate"
+                repair_errors = [{"code": "REPAIR_NOT_JSON",
+                                  "path": ".", "message": "compression response was not a JSON object"}]
+            else:
+                expected_nums = list(range(1, len(scene_caps) + 1))
+                repaired, shape_errors, budget_errors = _apply_voiceover_repair(
+                    candidate_script, parsed, expected_scene_numbers=expected_nums,
+                    scene_word_caps=scene_caps,
+                )
+                repair_shape_valid = not shape_errors
+                repair_budget_valid = not budget_errors
+                repair_payload_valid = repair_shape_valid and repair_budget_valid
+                repair_errors = shape_errors + budget_errors
+                if repaired is not None:
+                    script_data = repaired
+                    candidate_updated = True
+                    candidate_reused = False
+                    word_count_source = "repaired_candidate"
+                else:
+                    candidate_updated = False
+                    candidate_reused = True
+                    word_count_source = "previous_candidate"
+        else:
+            try:
+                script_data = json.loads(content)
+            except json.JSONDecodeError as e:
+                print(f"ERROR parsing LLM response as JSON: {e}")
+                print(f"Raw response: {content[:500]}")
+                return 1
+            candidate_updated = True
+            candidate_reused = False
+            word_count_source = "generated_candidate"
 
         word_count = _count_voiceover_words(script_data)
         scene_count = len(script_data.get("scenes", []))
@@ -883,27 +1281,100 @@ def main() -> int:
             retry_reason = "duration_out_of_range"
             retry_instruction = "expand_content"
 
+        distance = _distance_to_allowed_range(word_count, final_budget)
+        scene_word_counts = _scene_word_counts(script_data)
+        duration_status = "PASS" if duration_ok else "FAIL"
+        candidate_rank = _candidate_rank(word_count, final_budget)
+
         retry_entry: dict = {
             "retry": retries,
+            "attempt": retries,
+            "strategy": prompt_strategy,
             "reason": retry_reason,
             "actualWordCount": word_count,
+            "wordCount": word_count,
             "minimumWords": final_budget["minimumWords"],
             "preferredWords": final_budget["preferredWords"],
             "maximumWords": final_budget["maximumWords"],
             "estimatedDurationSec": round(estimated_dur, 1),
             "instructionType": retry_instruction,
+            "structureValid": v2_valid,
+            "durationStatus": duration_status,
+            "sceneWordCounts": scene_word_counts,
+            "sceneWordCaps": scene_caps,
+            "distanceToAllowedRange": distance,
+            "candidateUpdated": candidate_updated,
+            "candidateReused": candidate_reused,
+            "candidateRank": [candidate_rank[0], candidate_rank[1]],
+            "wordCountSource": word_count_source,
+            "repairShapeValid": repair_shape_valid,
+            "repairBudgetValid": repair_budget_valid,
+            "repairPayloadValid": repair_payload_valid,
+            "becameBestCandidate": False,
+            "acceptedAsBest": False,
         }
         if not v2_valid:
             retry_entry["structuralIssues"] = _count_v2_structural_issue_codes(v2_errs)
             retry_entry["structuralIssueDetails"] = _count_v2_structural_issue_messages(v2_errs)
+        if not repair_payload_valid:
+            retry_entry["repairErrors"] = repair_errors
         retry_history.append(retry_entry)
+
+        # ── Best structurally-valid candidate (canonical) ──────────
+        if v2_valid:
+            candidate_script = canonical
+            if best_candidate is None or candidate_rank < best_candidate_rank:
+                best_candidate = copy.deepcopy(candidate_script)
+                best_word_count = word_count
+                best_attempt_idx = retries
+                best_distance = distance
+                best_scene_word_counts = scene_word_counts
+                best_candidate_rank = candidate_rank
+                retry_entry["becameBestCandidate"] = True
 
         if v2_valid and duration_ok:
             script_data = canonical
+            best_candidate = copy.deepcopy(canonical)
+            best_word_count = word_count
+            best_attempt_idx = retries
+            best_distance = distance
+            best_scene_word_counts = scene_word_counts
+            best_candidate_rank = candidate_rank
             print(f"  Accepted v2: canonical valid + duration OK ({estimated_dur:.1f}s within range)")
             break
 
         retries += 1
+
+    # ── acceptedAsBest: single unambiguous best ───────────────────
+    for entry in retry_history:
+        entry["acceptedAsBest"] = False
+    if best_attempt_idx is not None:
+        for entry in retry_history:
+            if entry["attempt"] == best_attempt_idx:
+                entry["acceptedAsBest"] = True
+                break
+
+    # ── Best candidate on exhaustion without PASS ───────────────────
+    last_attempt_discarded_as_regression = False
+    if retries >= MAX_SCRIPT_ATTEMPTS and best_candidate is not None:
+        last_entry = retry_history[-1] if retry_history else None
+        if last_entry is not None and best_candidate_rank is not None:
+            is_last_new_valid_candidate = (
+                last_entry.get("candidateUpdated")
+                and last_entry.get("structureValid")
+            )
+            last_rank = last_entry.get("candidateRank")
+            if is_last_new_valid_candidate and last_rank is not None:
+                last_rank_t = tuple(last_rank)
+                if (
+                    last_rank_t > best_candidate_rank
+                    and best_attempt_idx is not None
+                    and best_attempt_idx != (len(retry_history) - 1)
+                ):
+                    last_attempt_discarded_as_regression = True
+        script_data = best_candidate
+        best_word_count = best_word_count if best_word_count is not None else _count_voiceover_words(script_data)
+        best_scene_word_counts = best_scene_word_counts if best_scene_word_counts is not None else _scene_word_counts(script_data)
 
     job_id = generate_job_id(args.topic)
 
@@ -967,6 +1438,18 @@ def main() -> int:
     scene_count = len(script_data.get("scenes", []))
     estimated_dur, spoken_sec, pause_sec = _estimate_narration_duration_sec(word_count, scene_count)
 
+    # Recompute the budget for the persisted script's scene count so the
+    # durationContract stays consistent when the best candidate is selected
+    # (it may differ from the last loop iteration's scene count).
+    final_budget = calculate_word_budget(
+        target_sec=target_dur,
+        min_sec=min_sec,
+        max_sec=max_sec,
+        spoken_words_per_minute=SPOKEN_WORDS_PER_MINUTE,
+        scene_count=scene_count,
+        estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
+    )
+
     # ── Final determination ──────────────────────────────────────────
     duration_ok_after_retries = False
     if strictness == "strict":
@@ -1019,14 +1502,14 @@ def main() -> int:
         "durationProfile": duration_profile_name,
     }
 
-    # Use canonical script if available
+    # Use canonical script whenever the structure is valid (canonical is the
+    # contract representation; it must be persisted even when duration fails).
     script_to_persist = script_data
-    if all_ok:
-        canonical, _, _ = _validate_and_canonicalize_script_v2(
-            script_data, allow_generated_images=allow_generated_images,
-        )
-        if canonical is not None:
-            script_to_persist = canonical
+    canonical_final, _, _ = _validate_and_canonicalize_script_v2(
+        script_data, allow_generated_images=allow_generated_images,
+    )
+    if canonical_final is not None:
+        script_to_persist = canonical_final
 
     metadata = {
         "jobId": job_id,
@@ -1060,6 +1543,9 @@ def main() -> int:
             "retryHistory": retry_history,
             "structureValid": structure_valid_after_retries,
             "structureIssues": structure_issue_codes,
+            "bestAttempt": best_attempt_idx,
+            "bestAttemptWordCount": best_word_count,
+            "lastAttemptDiscardedAsRegression": last_attempt_discarded_as_regression,
             "status": "PASS" if all_ok else "FAIL",
         },
         "createdAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),

@@ -47,12 +47,6 @@ _V2_VALID_4_SCENE = {
     "scenes": [_v2_scene(i, voiceover=_v2_long_vo) for i in range(1, 5)],
 }
 
-_many_words_v2 = " ".join(["concepto divulgativo"] * 15)
-_V2_ABOVE_MAX_WORDS = {
-    "title": "Test",
-    "scenes": [_v2_scene(i, voiceover=_many_words_v2) for i in range(1, 5)],
-}
-
 _V2_SINGLE_SCENE_CTA = {
     "title": "Test",
     "scenes": [
@@ -72,16 +66,36 @@ def test_max_script_attempts_is_three():
 
 
 def test_main_retry_loop_3_attempts_3rd_succeeds(monkeypatch, tmp_path):
-    """Integration: main() calls LLM 3 times, retry 1 has V2 structural issue,
-    retry 2 is structural CTA (insufficient scenes), retry 3 produces valid V2 script -> SCRIPT_DRAFT."""
+    """Integration: main() calls LLM 3 times.
+
+    Attempt 1 is structurally valid but over the maximum word budget, so the
+    retry uses the specialized voiceover-compression prompt. Attempt 2's repair
+    payload (40 words) is cap-valid but below the minimum, so attempt 3 is a
+    full expansion that lands in range -> SCRIPT_DRAFT on the third call.
+    """
     import sys as _sys
     import generate_script as gs
 
     out = tmp_path / "metadata.json"
 
-    resp_1 = _json.dumps(_V2_ABOVE_MAX_WORDS)
-    resp_2 = _json.dumps(_V2_SINGLE_SCENE_CTA)
-    resp_3 = _json.dumps(_V2_VALID_4_SCENE)
+    # resp_1: full script of 60 words (5 scenes x 12) -> over max 52.
+    resp_1 = _json.dumps({
+        "title": "Test",
+        "scenes": [_v2_scene(i, voiceover=" ".join(f"w{i}_{j}" for j in range(1, 13))) for i in range(1, 6)],
+    })
+    # resp_2: voiceover-only repair payload of 40 words (cap-valid, below min 47).
+    resp_2 = _json.dumps({
+        "scenes": [{"sceneNumber": i, "voiceover": " ".join(f"c{i}_{j}" for j in range(1, 9))}
+                   for i in range(1, 6)]
+    })  # 8 words/scene -> 40, within caps [11,11,10,10,10] but below min
+    # resp_3: full script of 48 words (expansion after a below-min candidate).
+    resp_3 = _json.dumps({
+        "title": "Test",
+        "scenes": [
+            _v2_scene(i, voiceover=" ".join(f"e{i}_{j}" for j in range(1, n + 1)))
+            for i, n in enumerate([10, 10, 10, 9, 9], start=1)
+        ],
+    })  # 48 words, within [47, 52] -> PASS
 
     call_count = [0]
     prompts_seen = []
@@ -112,9 +126,15 @@ def test_main_retry_loop_3_attempts_3rd_succeeds(monkeypatch, tmp_path):
     assert meta["durationContract"]["structureValid"] is True
     rh = meta["durationContract"]["retryHistory"]
     assert len(rh) == 3
+    assert rh[0]["strategy"] == "initial"
     assert rh[0]["reason"] == "above_maximum_words"
-    assert "INSUFFICIENT_SCENE_COUNT" in rh[1]["reason"]
+    # Attempt 1 compresses the voiceovers (structurally valid, over budget).
+    assert rh[1]["strategy"] == "compression"
+    assert rh[1]["reason"] == "below_minimum_words"
+    # Attempt 2 is a full expansion because the previous candidate was below min.
+    assert rh[2]["strategy"] == "duration"
     assert rh[2]["reason"] == "in_range"
+    assert rh[2]["acceptedAsBest"] is True
 
 
 def test_main_retry_loop_3_attempts_all_fail_review_required(monkeypatch, tmp_path):
