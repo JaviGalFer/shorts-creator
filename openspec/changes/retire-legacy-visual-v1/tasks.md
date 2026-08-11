@@ -401,7 +401,23 @@ Sesión: `retire-legacy-visual-v1-slice-6b-duration-retry-fix` (Build).
 - [x] Añadir cobertura canónica del prompt y merge
 - [x] Reaprobación final read-only de la corrección temporal — SLICE_6B_DURATION_CANONICAL_FOLLOWUP_REAPPROVED_FOR_COMMIT
 - [x] Commit de la corrección temporal — 9eb1f13
-- [ ] Siguiente E2E V2 canónico
+- [x] Tercer E2E V2 canónico — job `cmo-2026-08-04-195654`; BLOCKED (`REVIEW_REQUIRED`) en `script` por `DURATION_OUT_OF_RANGE` (56 > 52 palabras). Contrato visual y estructura válidos (`structureValid=true`, cero enums inválidos, `allowGeneratedImages=false`). Pendiente de follow-up de duración.
+
+### Slice 6B — Corrección de política temporal (targets como guidance + convergencia monotónica)
+
+Sesión: `retire-legacy-visual-v1-slice-6b-duration-policy-fix` (Build).
+
+- [x] Auditoría de política temporal del tercer E2E — SLICE_6B_DURATION_POLICY_AUDIT_RECOMMENDS_CHANGES
+- [x] Sustituir caps duros por targets dinámicos orientativos
+- [x] Implementar convergencia monotónica de candidatos
+- [x] Separar telemetría global y targets por escena
+- [x] Añadir cobertura T1–T10
+- [x] Review read-only de la corrección de política — SLICE_6B_DURATION_POLICY_FIX_REVIEW_CHANGES_REQUIRED
+- [x] Corregir placeholder {min_w}/{max_w} del compression prompt
+- [x] Añadir cobertura de regresión de placeholders
+- [x] Reaprobación read-only focalizada de la corrección de política — SLICE_6B_DURATION_POLICY_FINAL_REAPPROVED_FOR_COMMIT
+- [x] Commit de la corrección de política — d377932
+- [ ] Cuarto E2E V2 canónico
 
 Estado del follow-up temporal:
 
@@ -452,7 +468,32 @@ Estado del follow-up temporal:
   base del merge canonicalizada, y seis escenas en el prompt.
 - Suite completa vigente tras F8: **`1158 passed, 0 failed`** (baseline anterior
   `1155`; +3 tests). Cero skips, cero xfail, cero warnings.
-- Pendiente: reaprobación final read-only, commit de la corrección y siguiente
-  E2E V2 canónico.
-- No se ejecutó un tercer E2E; ningún PASS; sin commit; sin cierre. El change
-  `retire-legacy-visual-v1` continúa abierto.
+- La reaprobación final read-only de la corrección temporal
+  (`SLICE_6B_DURATION_CANONICAL_FOLLOWUP_REAPPROVED_FOR_COMMIT`) y el commit de
+  la corrección (`9eb1f13`) ya están cerrados. Cero E2E pendiente de la
+  corrección; el siguiente paso es un E2E V2 canónico.
+- Tercer E2E V2 canónico (job `cmo-2026-08-04-195654`): BLOCKED
+  (`REVIEW_REQUIRED`) en `script` por `DURATION_OUT_OF_RANGE` (56 > 52 palabras).
+  El contrato visual y la estructura ya son válidos (`structureValid=true`, cero
+  enums inválidos, `allowGeneratedImages=false`, schemaVersion 2). La compresión
+  temporal no logró un payload budget-valid, por lo que se conservó el candidato
+  inicial de 56 palabras como best attempt. Slice 6B y el change
+  `retire-legacy-visual-v1` continúan abiertos.
+- Auditoría de política temporal del tercer E2E:
+  `SLICE_6B_DURATION_POLICY_AUDIT_RECOMMENDS_CHANGES`. La política anterior
+  (caps estáticos por escena + mínimo duro de siete palabras + rechazo completo
+  antes del ranking) clasificaba como rechazo un falso negativo global: el
+  tercer E2E necesitaba reducir 4 palabras (56 → 52) pero los caps por escena
+  exigían una reducción de 8, y los retries por debajo de siete palabras se
+  rechazaban aunque el total global fuese válido.
+- Corrección de política implementada (Build, esta sesión): los targets por
+  escena pasan a ser guidance dinámica (`_compute_scene_word_targets` +
+  `_evaluate_scene_word_targets`); el hard gate por escena es únicamente shape
+  (voiceover string no vacío, secuencia exacta); el presupuesto global es el
+  único contracto duro de duración; la convergencia de candidatos es monotónica
+  (56 → 54 → 52 sin aumentar `MAX_SCRIPT_ATTEMPTS`); telemetría global y targets
+  por escena separadas. Baseline funcional nueva: **`1165 passed, 0 failed`**.
+- Pendiente de review read-only de la corrección de política y de un cuarto E2E
+  V2 canónico. Cero PASS todavía. `MAX_SCRIPT_ATTEMPTS == 3`,
+  `minimumWords=47` / `preferredWords=52` / `maximumWords=52` intactos. Slice 6B
+  y el change `retire-legacy-visual-v1` continúan abiertos.
