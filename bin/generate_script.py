@@ -34,7 +34,6 @@ ESTIMATED_SCENE_PAUSE_MS = 350
 # With 5 transitions (6 scenes): 5 * 350ms = 1.75s pause overhead.
 # With 9 transitions (10 scenes): 9 * 350ms = 3.15s pause overhead.
 MAX_SCENES = 6
-MIN_WORDS_PER_SCENE = 7
 
 
 def _build_asset_preferences_section() -> str:
@@ -724,27 +723,70 @@ def _count_v2_structural_issue_messages(issues: list[dict]) -> list[str]:
 # ── Temporal (duration) retry helpers ────────────────────────────────
 
 
-def _allocate_scene_word_caps(maximum_words: int, scene_count: int) -> list[int]:
-    """Deterministically distribute a global max word budget across scenes.
+def _compute_scene_word_targets(
+    current_counts: list[int],
+    maximum_words: int,
+) -> list[int]:
+    """Deterministically compute per-scene word targets as guidance.
 
-    Contract:
-    * scene_count > 0;
-    * length equals scene_count;
-    * every cap is a positive integer;
-    * sum exactly equals maximum_words;
-    * max - min <= 1;
-    * deterministic distribution.
+    This is a water-filling reduction: when the total exceeds maximum_words,
+    the excess is removed one word at a time from the scene with the largest
+    current target (ties broken by the lowest index). Scenes are never
+    incremented and never drop below one word. If the total already fits,
+    an identical copy is returned.
 
-    Example: maximum_words=52, scene_count=5 -> [11, 11, 10, 10, 10].
+    Targets are guidance for the compression prompt, not a hard gate.
     """
-    if scene_count <= 0:
-        raise ValueError("scene_count must be > 0")
-    if maximum_words < scene_count:
-        raise ValueError("maximum_words must be >= scene_count")
-    base = maximum_words // scene_count
-    remainder = maximum_words % scene_count
-    caps = [base + 1] * remainder + [base] * (scene_count - remainder)
-    return caps
+    if not isinstance(current_counts, list) or not current_counts:
+        raise ValueError("current_counts must be a non-empty list")
+    if any(isinstance(c, bool) or not isinstance(c, int) for c in current_counts):
+        raise ValueError("current_counts must contain only integers")
+    if any(c < 1 for c in current_counts):
+        raise ValueError("current_counts must contain only positive integers")
+    if isinstance(maximum_words, bool) or not isinstance(maximum_words, int):
+        raise ValueError("maximum_words must be an integer")
+    if maximum_words < len(current_counts):
+        raise ValueError("maximum_words must be >= len(current_counts)")
+
+    if sum(current_counts) <= maximum_words:
+        return list(current_counts)
+
+    targets = list(current_counts)
+    excess = sum(current_counts) - maximum_words
+    for _ in range(excess):
+        max_val = max(targets)
+        idx = next(i for i, v in enumerate(targets) if v == max_val)
+        targets[idx] -= 1
+    return targets
+
+
+def _evaluate_scene_word_targets(
+    actual_counts: list[int],
+    targets: list[int],
+) -> tuple[bool, list[dict]]:
+    """Compare actual per-scene counts against recommended targets.
+
+    Returns (met, deviations). met is True when every count is <= its target.
+    deviations is purely informational telemetry; it never blocks a repair or
+    a PASS. Deviations describe each scene that exceeds its recommended target.
+    """
+    if not isinstance(actual_counts, list) or not isinstance(targets, list):
+        raise ValueError("actual_counts and targets must be lists")
+    if len(actual_counts) != len(targets):
+        raise ValueError("actual_counts and targets must have equal length")
+
+    met = True
+    deviations: list[dict] = []
+    for i, (actual, target) in enumerate(zip(actual_counts, targets)):
+        if actual > target:
+            met = False
+            deviations.append({
+                "sceneNumber": i + 1,
+                "actualWords": actual,
+                "recommendedTargetWords": target,
+                "delta": actual - target,
+            })
+    return met, deviations
 
 
 def _scene_word_counts(script_data: dict) -> list[int]:
@@ -782,7 +824,7 @@ def _build_voiceover_compression_prompt(
     canonical_script: dict,
     budget: dict,
     actual_word_count: int,
-    scene_word_caps: list[int],
+    scene_word_targets: list[int],
     *,
     allow_generated_images: bool,
 ) -> str:
@@ -791,12 +833,16 @@ def _build_voiceover_compression_prompt(
     Used when the previous attempt is structurally valid but exceeds the
     maximum word budget. The model compresses the existing voiceovers only —
     it never regenerates the full script or the visual plan.
+
+    scene_word_targets are recommended per-scene guidance, not hard caps; the
+    only hard duration constraint is the global word budget.
     """
     min_w = budget.get("minimumWords", 0)
     pref_w = budget.get("preferredWords", 0)
     max_w = budget.get("maximumWords", 0)
     scenes = canonical_script.get("scenes", [])
-    expected = list(range(1, len(scene_word_caps) + 1))
+    expected = list(range(1, len(scene_word_targets) + 1))
+    required_reduction = max(actual_word_count - max_w, 0)
 
     lines = [
         "## Compresión de voz en off — intento anterior excede la duración",
@@ -812,25 +858,41 @@ def _build_voiceover_compression_prompt(
         "",
         "```json",
         json.dumps({
+            "currentWordCount": actual_word_count,
+            "requiredReductionWords": required_reduction,
+            "minimumWords": min_w,
+            "preferredWords": pref_w,
+            "maximumWords": max_w,
             "scenes": [
                 {
                     "sceneNumber": scenes[i]["sceneNumber"],
                     "currentVoiceover": scenes[i].get("voiceover", ""),
-                    "maximumWords": scene_word_caps[i],
+                    "currentWords": len((scenes[i].get("voiceover") or "").split()),
+                    "recommendedTargetWords": scene_word_targets[i],
                 }
                 for i in range(len(scenes))
             ]
         }, ensure_ascii=False, indent=2),
         "```",
         "",
-        "## Reglas de compresión",
+        "## Restricciones obligatorias",
         "",
-        "- Comprime cada voiceover para que NO supere su `maximumWords` de esa escena.",
-        f"- Presupuesto global: mínimo {min_w}, preferido ~{pref_w}, máximo {max_w} palabras en total.",
-        f"- El total reparado DEBE quedar dentro de [{min_w}, {max_w}] palabras.",
-        "- No superes NINGÚN cap individual por escena.",
-        "- Conserva el número de escenas y cada `sceneNumber` exactamente.",
-        "- No cambies el plan visual ni ningún otro campo del guion.",
+        "- Devuelve solo JSON válido, sin markdown ni explicaciones.",
+        "- El objeto debe contener únicamente `scenes`.",
+        "- Cada escena debe contener únicamente `sceneNumber` y `voiceover`.",
+        "- Conserva la secuencia completa y exacta de `sceneNumber`.",
+        "- Cada voiceover debe ser un string no vacío.",
+        f"- El total final DEBE quedar entre {min_w} y {max_w} palabras en total.",
+        "- Conserva el significado principal de cada escena.",
+        "- No modifiques ningún campo visual ni estructural.",
+        "",
+        "## Objetivos recomendados (guidance)",
+        "",
+        "- Los `recommendedTargetWords` por escena son orientativos, no límites duros.",
+        "- Prioriza reducir más las escenas más largas.",
+        "- Mantén el equilibrio narrativo entre escenas.",
+        "- Aproximate a cada target recomendado cuando sea posible.",
+        "- No es obligatorio coincidir exactamente con todos los targets si el total global queda dentro del rango.",
         "",
         "## Cómo se cuenta una palabra",
         "",
@@ -851,8 +913,7 @@ def _build_voiceover_compression_prompt(
         "",
         "## Autocomprobación final",
         "",
-        "- Revisa que cada voiceover esté dentro de su cap de `maximumWords`.",
-        "- Revisa que la suma total esté dentro de [{min_w}, {max_w}].",
+        f"- Revisa que el total final esté entre {min_w} y {max_w}.",
         f"- Revisa que los `sceneNumber` sean {expected}.",
         "- Las restricciones visuales no son editables durante esta reparación.",
     ]
@@ -870,133 +931,84 @@ def _apply_voiceover_repair(
     repair_payload: dict,
     *,
     expected_scene_numbers: list[int],
-    scene_word_caps: list[int],
-) -> tuple[dict | None, list[dict], list[dict]]:
+) -> tuple[dict | None, list[dict]]:
     """Merge a voiceover-only repair payload into a deep copy of base_script.
 
     Accepts only:
         {"scenes": [{"sceneNumber": 1, "voiceover": "..."}]}
 
-    Returns (merged_script | None, shape_errors, budget_errors).
+    Returns (merged_script | None, shape_errors).
 
-    * shape_errors cover structural validity (object shape, scene list, item
-      fields, sceneNumber type/sequence, voiceover string/non-empty).
-    * budget_errors cover per-scene word budgets:
-        MIN_WORDS_PER_SCENE <= wordCount <= sceneWordCap
-
-    The merge is applied ONLY when both shape and budget are valid; otherwise
-    base_script is never mutated and no partial merge happens. scene_word_caps
-    is indexed by sceneNumber (cap for scene i+1 is scene_word_caps[i]).
+    Validation is limited to shape/sequence and non-empty string voiceovers.
+    It never evaluates word budgets, targets, ranking or acceptance — those are
+    decided by the caller. The merge is applied ONLY when the shape is valid;
+    otherwise base_script is never mutated and no partial merge happens.
     """
     shape_errors: list[dict] = []
-    budget_errors: list[dict] = []
 
     expected = list(expected_scene_numbers)
 
-    # ── Cap contract validation ─────────────────────────────────────────
-    if (
-        not isinstance(scene_word_caps, list)
-        or len(scene_word_caps) != len(expected)
-        or any(
-            not isinstance(c, int) or isinstance(c, bool) or c < MIN_WORDS_PER_SCENE
-            for c in scene_word_caps
-        )
-    ):
-        budget_errors.append({
-            "sceneNumber": None,
-            "code": "REPAIR_INVALID_SCENE_CAPS",
-            "path": "scenes",
-            "message": (
-                f"scene_word_caps must be a list of {len(expected)} integers, "
-                f"each >= {MIN_WORDS_PER_SCENE}, got {scene_word_caps!r}"
-            ),
-        })
-        return None, [], budget_errors
-
     if not isinstance(repair_payload, dict):
-        shape_errors.append({"code": "REPAIR_NOT_OBJECT", "path": ".",
+        shape_errors.append({"code": "REPAIR_NOT_JSON", "path": ".",
                              "message": "repair payload must be a JSON object"})
-        return None, shape_errors, []
+        return None, shape_errors
 
     top_keys = set(repair_payload.keys())
     if top_keys != {"scenes"}:
         extra = sorted(top_keys - {"scenes"})
-        shape_errors.append({"code": "REPAIR_UNEXPECTED_TOP_FIELD", "path": ".",
+        shape_errors.append({"code": "REPAIR_UNKNOWN_ROOT_FIELD", "path": ".",
                              "message": f"unexpected top-level fields: {extra}"})
-        return None, shape_errors, []
+        return None, shape_errors
 
     payload_scenes = repair_payload.get("scenes")
     if not isinstance(payload_scenes, list):
         shape_errors.append({"code": "REPAIR_SCENES_NOT_LIST", "path": "scenes",
                              "message": "scenes must be a list"})
-        return None, shape_errors, []
+        return None, shape_errors
 
     seen: set[int] = set()
     for i, item in enumerate(payload_scenes):
         if not isinstance(item, dict):
-            shape_errors.append({"sceneNumber": None, "code": "REPAIR_ITEM_NOT_OBJECT",
+            shape_errors.append({"sceneNumber": None, "code": "REPAIR_SCENE_NOT_OBJECT",
                                  "path": f"scenes[{i}]", "message": "scene item must be an object"})
             continue
         item_keys = set(item.keys())
         if item_keys != {"sceneNumber", "voiceover"}:
             extra = sorted(item_keys - {"sceneNumber", "voiceover"})
             shape_errors.append({"sceneNumber": item.get("sceneNumber"),
-                                 "code": "REPAIR_UNEXPECTED_FIELD",
+                                 "code": "REPAIR_UNKNOWN_SCENE_FIELD",
                                  "path": f"scenes[{i}]",
                                  "message": f"unexpected fields: {extra}"})
         sn = item.get("sceneNumber")
         if not isinstance(sn, int) or isinstance(sn, bool):
-            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_BAD_SCENE_NUMBER",
+            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_SCENE_NUMBER_INVALID",
                                  "path": f"scenes[{i}].sceneNumber",
                                  "message": "sceneNumber must be an int"})
             continue
         if sn in seen:
-            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_DUPLICATE_SCENE",
+            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_SCENE_SEQUENCE_MISMATCH",
                                  "path": f"scenes[{i}].sceneNumber",
                                  "message": f"duplicate sceneNumber {sn}"})
         seen.add(sn)
         vo = item.get("voiceover")
         if not isinstance(vo, str):
-            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_VOICEOVER_NOT_STRING",
+            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_VOICEOVER_INVALID",
                                  "path": f"scenes[{i}].voiceover",
                                  "message": "voiceover must be a string"})
         elif not vo.strip():
-            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_VOICEOVER_EMPTY",
+            shape_errors.append({"sceneNumber": sn, "code": "REPAIR_VOICEOVER_INVALID",
                                  "path": f"scenes[{i}].voiceover",
                                  "message": "voiceover cannot be empty"})
 
     if shape_errors:
-        return None, shape_errors, []
+        return None, shape_errors
 
     got_numbers = [item["sceneNumber"] for item in payload_scenes]
     if got_numbers != expected:
-        shape_errors.append({"sceneNumber": None, "code": "REPAIR_SCENE_SEQUENCE",
+        shape_errors.append({"sceneNumber": None, "code": "REPAIR_SCENE_SEQUENCE_MISMATCH",
                              "path": "scenes",
                              "message": f"expected sceneNumber {expected}, got {got_numbers}"})
-        return None, shape_errors, []
-
-    # ── Per-scene word budget enforcement ───────────────────────────────
-    for i, item in enumerate(payload_scenes):
-        sn = item["sceneNumber"]
-        cap = scene_word_caps[i]
-        wc = len((item.get("voiceover") or "").split())
-        if wc < MIN_WORDS_PER_SCENE:
-            budget_errors.append({
-                "sceneNumber": sn,
-                "code": "REPAIR_SCENE_WORD_MINIMUM_NOT_MET",
-                "path": f"scenes[{i}].voiceover",
-                "message": f"scene {sn}: voiceover has {wc} words, below the minimum {MIN_WORDS_PER_SCENE}",
-            })
-        elif wc > cap:
-            budget_errors.append({
-                "sceneNumber": sn,
-                "code": "REPAIR_SCENE_WORD_CAP_EXCEEDED",
-                "path": f"scenes[{i}].voiceover",
-                "message": f"scene {sn}: voiceover has {wc} words, exceeding cap {cap}",
-            })
-
-    if budget_errors:
-        return None, [], budget_errors
+        return None, shape_errors
 
     merged = copy.deepcopy(base_script)
     by_number = {item["sceneNumber"]: item["voiceover"] for item in payload_scenes}
@@ -1004,7 +1016,7 @@ def _apply_voiceover_repair(
         sn = scene.get("sceneNumber")
         if sn in by_number:
             scene["voiceover"] = by_number[sn]
-    return merged, [], []
+    return merged, []
 
 
 # ── main ─────────────────────────────────────────────────────────────
@@ -1107,7 +1119,11 @@ def main() -> int:
 
     while retries < MAX_SCRIPT_ATTEMPTS:
         prompt_strategy = "initial"
-        scene_caps: list[int] | None = None
+        scene_word_targets: list[int] | None = None
+        scene_word_targets_entry: list[int] | None = None
+        target_reduction_words: int | None = None
+        active_candidate_word_count: int | None = None
+        active_candidate_rank: tuple[int, int] | None = None
 
         if retries > 0:
             # V2 structural validation
@@ -1151,9 +1167,14 @@ def main() -> int:
                 # Case B — valid structure but excessive duration: compress the
                 # existing voiceovers from the current canonical candidate only.
                 prompt_strategy = "compression"
-                scene_caps = _allocate_scene_word_caps(retry_budget["maximumWords"], scene_count)
+                active_candidate_word_count = word_count
+                active_candidate_rank = _candidate_rank(word_count, retry_budget)
+                scene_word_targets = _compute_scene_word_targets(
+                    _scene_word_counts(candidate_script), retry_budget["maximumWords"])
+                scene_word_targets_entry = scene_word_targets
+                target_reduction_words = active_candidate_word_count - retry_budget["maximumWords"]
                 current_prompt = _build_voiceover_compression_prompt(
-                    candidate_script, retry_budget, word_count, scene_caps,
+                    candidate_script, retry_budget, word_count, scene_word_targets,
                     allow_generated_images=allow_generated_images,
                 )
             else:
@@ -1182,10 +1203,15 @@ def main() -> int:
             print(f"ERROR calling LLM: {e}")
             return 1
 
-        repair_payload_valid = True
-        repair_shape_valid = True
-        repair_budget_valid = True
         repair_errors: list[dict] = []
+        repair_shape_valid: bool | None = True
+        repair_payload_eligible: bool | None = True
+        repair_global_budget_valid: bool | None = True
+        repair_scene_targets_met: bool | None = True
+        repair_scene_target_deviations: list[dict] = []
+        repair_proposed_word_count: int | None = None
+        repair_proposed_scene_word_counts: list[int] | None = None
+        repair_proposed_candidate_rank: list[int] | None = None
         candidate_updated = True
         candidate_reused = False
         word_count_source = "generated_candidate"
@@ -1195,32 +1221,76 @@ def main() -> int:
             except json.JSONDecodeError:
                 parsed = None
             if not isinstance(parsed, dict):
-                repair_payload_valid = False
                 repair_shape_valid = False
+                repair_payload_eligible = False
+                repair_global_budget_valid = False
+                repair_scene_targets_met = False
                 candidate_updated = False
                 candidate_reused = True
                 word_count_source = "previous_candidate"
                 repair_errors = [{"code": "REPAIR_NOT_JSON",
                                   "path": ".", "message": "compression response was not a JSON object"}]
             else:
-                expected_nums = list(range(1, len(scene_caps) + 1))
-                repaired, shape_errors, budget_errors = _apply_voiceover_repair(
+                expected_nums = list(range(1, len(scene_word_targets) + 1))
+                repaired, shape_errors = _apply_voiceover_repair(
                     candidate_script, parsed, expected_scene_numbers=expected_nums,
-                    scene_word_caps=scene_caps,
                 )
                 repair_shape_valid = not shape_errors
-                repair_budget_valid = not budget_errors
-                repair_payload_valid = repair_shape_valid and repair_budget_valid
-                repair_errors = shape_errors + budget_errors
-                if repaired is not None:
-                    script_data = repaired
-                    candidate_updated = True
-                    candidate_reused = False
-                    word_count_source = "repaired_candidate"
-                else:
+                repair_errors = shape_errors
+                if repaired is None:
+                    repair_payload_eligible = False
+                    repair_global_budget_valid = False
+                    repair_scene_targets_met = False
                     candidate_updated = False
                     candidate_reused = True
                     word_count_source = "previous_candidate"
+                else:
+                    repair_payload_eligible = True
+                    proposed_canonical, proposed_v2_errs, _ = _validate_and_canonicalize_script_v2(
+                        repaired, allow_generated_images=allow_generated_images,
+                    )
+                    if proposed_canonical is None:
+                        # canonicalization failed: reject the payload, keep active
+                        repair_errors = proposed_v2_errs
+                        repair_payload_eligible = False
+                        repair_global_budget_valid = False
+                        repair_scene_targets_met = False
+                        candidate_updated = False
+                        candidate_reused = True
+                        word_count_source = "previous_candidate"
+                    else:
+                        proposed_word_count = _count_voiceover_words(proposed_canonical)
+                        proposed_scene_counts = _scene_word_counts(proposed_canonical)
+                        proposed_candidate_rank = _candidate_rank(proposed_word_count, retry_budget)
+                        proposed_global_valid = (
+                            retry_budget["minimumWords"] <= proposed_word_count <= retry_budget["maximumWords"]
+                        )
+                        proposed_targets_met, proposed_deviations = _evaluate_scene_word_targets(
+                            proposed_scene_counts, scene_word_targets,
+                        )
+                        repair_proposed_word_count = proposed_word_count
+                        repair_proposed_scene_word_counts = proposed_scene_counts
+                        repair_proposed_candidate_rank = [proposed_candidate_rank[0], proposed_candidate_rank[1]]
+                        repair_global_budget_valid = proposed_global_valid
+                        repair_scene_targets_met = proposed_targets_met
+                        repair_scene_target_deviations = proposed_deviations
+                        if proposed_global_valid:
+                            # PASS global: accept immediately; scene targets are guidance.
+                            script_data = proposed_canonical
+                            candidate_updated = True
+                            candidate_reused = False
+                            word_count_source = "repaired_candidate"
+                        elif active_candidate_rank is not None and proposed_candidate_rank < active_candidate_rank:
+                            # Improves the active candidate (monotonic convergence).
+                            script_data = proposed_canonical
+                            candidate_updated = True
+                            candidate_reused = False
+                            word_count_source = "repaired_candidate"
+                        else:
+                            # Tie or regression: keep the previous active candidate.
+                            candidate_updated = False
+                            candidate_reused = True
+                            word_count_source = "previous_candidate"
         else:
             try:
                 script_data = json.loads(content)
@@ -1301,23 +1371,53 @@ def main() -> int:
             "structureValid": v2_valid,
             "durationStatus": duration_status,
             "sceneWordCounts": scene_word_counts,
-            "sceneWordCaps": scene_caps,
             "distanceToAllowedRange": distance,
             "candidateUpdated": candidate_updated,
             "candidateReused": candidate_reused,
             "candidateRank": [candidate_rank[0], candidate_rank[1]],
             "wordCountSource": word_count_source,
-            "repairShapeValid": repair_shape_valid,
-            "repairBudgetValid": repair_budget_valid,
-            "repairPayloadValid": repair_payload_valid,
             "becameBestCandidate": False,
             "acceptedAsBest": False,
         }
+        if prompt_strategy == "compression":
+            retry_entry.update({
+                "sceneWordTargets": scene_word_targets_entry,
+                "targetReductionWords": target_reduction_words,
+                "repairShapeValid": repair_shape_valid,
+                "repairPayloadEligible": repair_payload_eligible,
+                "repairGlobalBudgetValid": repair_global_budget_valid,
+                "repairSceneTargetsMet": repair_scene_targets_met,
+                "repairSceneTargetDeviations": repair_scene_target_deviations,
+                "repairProposedWordCount": repair_proposed_word_count,
+                "repairProposedSceneWordCounts": repair_proposed_scene_word_counts,
+                "repairProposedCandidateRank": repair_proposed_candidate_rank,
+                "repairPayloadValid": repair_payload_eligible,
+                "repairBudgetValid": repair_global_budget_valid,
+                "sceneWordCaps": scene_word_targets_entry,
+                "sceneWordCapsEnforced": False,
+                "sceneWordCapsDeprecated": True,
+            })
+            if not repair_payload_eligible:
+                retry_entry["repairErrors"] = repair_errors
+        else:
+            retry_entry.update({
+                "sceneWordTargets": None,
+                "targetReductionWords": None,
+                "repairShapeValid": None,
+                "repairPayloadEligible": None,
+                "repairGlobalBudgetValid": None,
+                "repairSceneTargetsMet": None,
+                "repairSceneTargetDeviations": None,
+                "repairProposedWordCount": None,
+                "repairProposedSceneWordCounts": None,
+                "repairProposedCandidateRank": None,
+                "repairPayloadValid": None,
+                "repairBudgetValid": None,
+                "sceneWordCaps": None,
+            })
         if not v2_valid:
             retry_entry["structuralIssues"] = _count_v2_structural_issue_codes(v2_errs)
             retry_entry["structuralIssueDetails"] = _count_v2_structural_issue_messages(v2_errs)
-        if not repair_payload_valid:
-            retry_entry["repairErrors"] = repair_errors
         retry_history.append(retry_entry)
 
         # ── Best structurally-valid candidate (canonical) ──────────
@@ -1359,11 +1459,21 @@ def main() -> int:
     if retries >= MAX_SCRIPT_ATTEMPTS and best_candidate is not None:
         last_entry = retry_history[-1] if retry_history else None
         if last_entry is not None and best_candidate_rank is not None:
-            is_last_new_valid_candidate = (
-                last_entry.get("candidateUpdated")
-                and last_entry.get("structureValid")
-            )
-            last_rank = last_entry.get("candidateRank")
+            # A compression payload that was eligible (shape-valid and evaluated)
+            # but failed to update the active candidate is a regression candidate;
+            # a shape-invalid payload never became a candidate and is not flagged.
+            if last_entry.get("strategy") == "compression":
+                # A compression payload that was eligible (shape-valid and
+                # evaluated) but failed to update the active candidate is a
+                # regression; compare its proposed rank against the best.
+                is_last_new_valid_candidate = last_entry.get("repairPayloadEligible") is True
+                proposed_rank = last_entry.get("repairProposedCandidateRank")
+                last_rank = tuple(proposed_rank) if proposed_rank else None
+            else:
+                is_last_new_valid_candidate = bool(
+                    last_entry.get("candidateUpdated") and last_entry.get("structureValid")
+                )
+                last_rank = last_entry.get("candidateRank")
             if is_last_new_valid_candidate and last_rank is not None:
                 last_rank_t = tuple(last_rank)
                 if (
