@@ -516,7 +516,7 @@ Estado del follow-up temporal:
 - [x] Reforzar C2 contra doble target
 - [x] Reaprobación read-only focalizada del length-control hardening — SLICE_6B_LENGTH_CONTROL_TARGET_FIX_REAPPROVED_FOR_COMMIT
 - [x] Commit del length-control hardening — bafb2d5
-- [ ] Quinto E2E V2 canónico
+- [x] Quinto E2E V2 canónico — job `cmo-2026-08-14-153529` — **script PASS** (length-control hardening validado en E2E real: `55 → 52` palabras, `47 <= 52 <= 52`, `durationContract.status=PASS`, `structureValid=true`); assets completos (`ASSETS_READY`, 10/10); **pipeline bloqueado posteriormente en `audio`** por `AUDIO_DURATION_MISSING` (duración de los 5 mp3 no medida durante el run; `duration_estimated=true`). Script PASS por primera vez en la serie de cinco E2E. Pendiente de diagnóstico del bloqueo de audio y auditoría read-only final.
 
 - Diagnóstico: la política de candidatos funcionó (`69 → 63 → 62`); el problema
   restante es el control de generación/compliance del LLM. Los cuatro E2E reales
@@ -540,4 +540,14 @@ Estado del follow-up temporal:
   (`fix(script): harden V2 word-budget control`). Reaprobación read-only final:
   `SLICE_6B_LENGTH_CONTROL_TARGET_FIX_REAPPROVED_FOR_COMMIT`; cero findings
   HIGH/MEDIUM; F1 resuelto; F2 LOW aceptado.
-- Pendiente: quinto E2E V2 canónico. Cero PASS todavía.
+- Quinto E2E V2 canónico (job `cmo-2026-08-14-153529`): **script PASS** por
+  primera vez en la serie. Length-control hardening validado en E2E real:
+  initial `55` (menor overshoot de la serie, +3 sobre 52) → compression `52`
+  (in-range). `durationContract.status=PASS`, `structureValid=true`, contrato
+  visual V2 válido. Assets completos (`ASSETS_READY`, 10/10, cero fallidos).
+  Pipeline bloqueado posteriormente en `audio` por `AUDIO_DURATION_MISSING`
+  (duración de los 5 mp3 no medida durante el run; `duration_estimated=true`;
+  la verificación manual del fallback Docker devolvió duración válida, sugiriendo
+  un fallo transitorio de medida, no un problema del archivo).
+- Pendiente: diagnosticar el bloqueo de audio y una auditoría read-only final.
+  Cero E2E PASS completo todavía.
