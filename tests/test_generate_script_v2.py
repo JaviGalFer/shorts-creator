@@ -1549,7 +1549,8 @@ class TestDurationRetryConvergence:
         assert "{max_w}" not in prompt
         assert "{expected}" not in prompt
         assert "Objetivos recomendados" in prompt
-        assert "orientativos, no límites duros" in prompt
+        assert "Los targets por escena son recomendaciones" in prompt
+        assert "El límite global sí es obligatorio" in prompt
         assert "no es obligatorio" in prompt.lower()
         assert '{"scenes": [{"sceneNumber": 1, "voiceover": "..."}]}' in prompt
         assert "No devuelvas `visualPlan`, `subtitle`, `title`, `hook`, `summary`" in prompt
@@ -2228,10 +2229,11 @@ class TestDurationReviewFixes:
         received = []
         real_build = gs._build_voiceover_compression_prompt
 
-        def spy(canonical_script, budget, actual_word_count, scene_word_targets, *, allow_generated_images):
+        def spy(canonical_script, budget, actual_word_count, scene_word_targets, *, allow_generated_images, compression_attempt=1):
             received.append(canonical_script)
             return real_build(canonical_script, budget, actual_word_count, scene_word_targets,
-                              allow_generated_images=allow_generated_images)
+                              allow_generated_images=allow_generated_images,
+                              compression_attempt=compression_attempt)
 
         monkeypatch.setattr(gs, "_build_voiceover_compression_prompt", spy)
         exit_code, n_calls, _ = self._run_main(responses, monkeypatch, tmp_path)
@@ -2520,3 +2522,270 @@ class TestDurationPolicyFix:
         assert comp["repairErrors"], "hard shape errors must be reported"
         assert comp["candidateUpdated"] is False
         assert comp["candidateReused"] is True
+
+
+# ── Slice 6B length-control hardening (compression control audit) ─────────────
+
+
+class TestOperationalWordTarget:
+    """C1 — pure coverage for the operational (interior) word target."""
+
+    def _target(self, min_w, pref_w, max_w):
+        return gs._compute_operational_word_target(
+            {"minimumWords": min_w, "preferredWords": pref_w, "maximumWords": max_w})
+
+    def test_c1_canonical_cases(self):
+        cases = [
+            (47, 52, 52, 50),
+            (47, 50, 52, 50),
+            (47, 49, 52, 49),
+            (52, 52, 52, 52),
+        ]
+        for min_w, pref_w, max_w, expected in cases:
+            got = self._target(min_w, pref_w, max_w)
+            assert got == expected
+            assert min_w <= got <= max_w
+
+    def test_c1_invalid_budget_defensive(self):
+        # degenerate budgets never crash and stay bounded
+        assert self._target(52, 52, 47) == 0
+        assert gs._compute_operational_word_target(
+            {"minimumWords": 47, "preferredWords": 52, "maximumWords": 0}) == 0
+
+
+class TestInitialPromptHardening:
+    """C2 — the initial generation prompt hardens the global word contract."""
+
+    def _budget(self):
+        return {"minimumWords": 47, "preferredWords": 52, "maximumWords": 52, "sceneCount": 5}
+
+    def test_c2_initial_prompt_contract(self):
+        p = gs._build_duration_prompt_instruction_v2(self._budget(), "balanced")
+        assert "47" in p
+        assert "52" in p
+        assert "50" in p
+        assert "LÍMITE ABSOLUTO" in p
+        assert "no superes" in p
+        assert "Objetivo operativo" in p
+        assert "El límite global prevalece sobre cualquier orientación de palabras por escena" in p
+        assert "autocuenta" in p
+        assert "voiceover" in p
+        # hard maximum = 52 vs operational target = 50 are distinct concepts
+        assert "no superes 52 palabras de voiceover en total" in p
+        assert "apunta a 50 palabras de voiceover en total" in p
+        assert "Rango válido final: 47-52 palabras habladas en total" in p
+        # per-scene guidance is preserved but the global maximum outranks it
+        assert "7 palabras por escena" in p
+        # F1: initial generation must NOT expose preferredWords as a second actionable target.
+        # preferredWords appears only as neutral profile info; the sole actionable target is
+        # the operational one (50), never ≈52.
+        assert "aproximadamente 52 palabras objetivo" not in p
+        assert "con aproximadamente" not in p
+        # preferredWords del perfil may carry 52 as profile metadata...
+        assert "preferredWords del perfil: 52" in p
+        # ...while the operational target is uniquely 50, never 52.
+        assert "Objetivo operativo: apunta a 50 palabras de voiceover en total." in p
+        assert "Objetivo operativo: apunta a 52 palabras de voiceover" not in p
+
+
+class TestCompressionSystemPromptHardening:
+    """C3 — the compression system prompt enforces global-budget primacy."""
+
+    def test_c3_global_budget_concepts(self):
+        sp = gs.VOICEOVER_COMPRESSION_SYSTEM_PROMPT
+        assert "presupuesto global de palabras" in sp
+        assert "maximumWords" in sp
+        assert "nunca devuelvas un total superior a maximumWords" in sp
+        assert "cuenta las palabras de voiceover" in sp
+        assert "sigue recortando" in sp
+        assert "Los objetivos por escena son recomendaciones" in sp
+        assert "el presupuesto global es prioritario" in sp
+
+    def test_c3_still_limited_to_voiceover_shape(self):
+        sp = gs.VOICEOVER_COMPRESSION_SYSTEM_PROMPT
+        # shape is still only sceneNumber + voiceover, no full-script requirement
+        assert '"sceneNumber": 1' in sp
+        assert '"voiceover": "..."' in sp
+        assert "No devuelvas title" in sp
+        assert "visualPlan" in sp  # present only as a negative prohibition
+
+
+class TestTemperatureRouting:
+    """C4 + C8 — hermetic temperature routing via the real call_llm payload."""
+
+    def _payload_temperature(self, monkeypatch, system_prompt):
+        captured = {}
+
+        def fake_urlopen(req, timeout=120):
+            captured["data"] = _json.loads(req.data.decode())
+            class R:
+                def read(self):
+                    return _json.dumps({"choices": [{"message": {"content": "{}"}}]}).encode()
+                def __enter__(self):
+                    return self
+                def __exit__(self, *a):
+                    return False
+            return R()
+
+        monkeypatch.setattr(gs.urllib.request, "urlopen", fake_urlopen)
+        gs.call_llm("prompt", "key", "model", "openai", system_prompt=system_prompt)
+        return captured["data"]["temperature"]
+
+    def test_c4_system_prompt_v2_is_08(self, monkeypatch):
+        assert self._payload_temperature(monkeypatch, gs.SYSTEM_PROMPT_V2) == 0.8
+
+    def test_c4_compression_system_prompt_is_02(self, monkeypatch):
+        assert self._payload_temperature(monkeypatch, gs.VOICEOVER_COMPRESSION_SYSTEM_PROMPT) == 0.2
+
+    def test_c4_none_defaults_to_08(self, monkeypatch):
+        assert self._payload_temperature(monkeypatch, None) == 0.8
+
+    def test_c8_initial_generation_temperature_still_08(self, monkeypatch):
+        # The initial-generation hardening must not have changed initial creativity.
+        assert self._payload_temperature(monkeypatch, gs.SYSTEM_PROMPT_V2) == 0.8
+
+
+class TestCompressionPromptAttempts:
+    """C5 / C6 / C7 — imperative first and second compression prompts."""
+
+    def _budget(self):
+        return {"minimumWords": 47, "preferredWords": 52, "maximumWords": 52, "sceneCount": 5}
+
+    def _script(self):
+        return _v2_script(scenes=[_v2_scene(i) for i in range(1, 6)])
+
+    def test_c5_first_compression_69(self):
+        p = gs._build_voiceover_compression_prompt(
+            self._script(), self._budget(), actual_word_count=69,
+            scene_word_targets=[14, 13, 9, 7, 13],
+            allow_generated_images=False, compression_attempt=1)
+        assert '"operationalWordTarget": 50' in p
+        assert '"minimumRequiredReductionWords": 17' in p
+        assert '"desiredReductionWords": 19' in p
+        assert "eliminar AL MENOS 17" in p
+        assert "no puede superar 52" in p
+        assert "53 palabras o más incumple" in p
+        assert "Objetivo operativo recomendado: 50" in p
+        assert "Candidato actual: 69 palabras" in p
+        # attempt 1 must NOT mention a previous failed compression
+        assert "intento de compresión anterior" not in p
+        assert "SEGUNDO INTENTO" not in p
+
+    def test_c6_second_compression_63(self):
+        p = gs._build_voiceover_compression_prompt(
+            self._script(), self._budget(), actual_word_count=63,
+            scene_word_targets=[12, 13, 9, 14, 14],
+            allow_generated_images=False, compression_attempt=2)
+        assert '"minimumRequiredReductionWords": 11' in p
+        assert '"operationalWordTarget": 50' in p
+        assert '"desiredReductionWords": 13' in p
+        assert "intento anterior" in p
+        assert "incumplió" in p
+        assert "11 palabras por encima" in p
+        assert "no devuelvas otra reducción parcial" in p.lower()
+        assert "SEGUNDO INTENTO DE COMPRESIÓN" in p
+
+    def test_c7_no_placeholders_in_compression_prompts(self):
+        for attempt in (1, 2):
+            for actual in (69, 63):
+                p = gs._build_voiceover_compression_prompt(
+                    self._script(), self._budget(), actual_word_count=actual,
+                    scene_word_targets=[12, 12, 9, 7, 12],
+                    allow_generated_images=False, compression_attempt=attempt)
+                for ph in ("{min_w}", "{max_w}", "{expected}",
+                           "{operational_target}", "{minimum_required_reduction}",
+                           "{desired_reduction}"):
+                    assert ph not in p
+
+    def test_c7_no_placeholders_in_initial_prompt(self):
+        p = gs._build_duration_prompt_instruction_v2(self._budget(), "balanced")
+        for ph in ("{min_w}", "{max_w}", "{expected}"):
+            assert ph not in p
+
+
+class TestLengthControlHardeningIntegration:
+    """C9 / C10 — convergence and anti-regression through the real loop."""
+
+    def _run(self, responses, monkeypatch, tmp_path):
+        calls = [0]
+        prompts = []
+
+        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
+            calls[0] += 1
+            prompts.append((system_prompt, prompt))
+            return responses[calls[0] - 1]
+
+        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
+        monkeypatch.setattr(gs, "call_llm", mock_call)
+        out = tmp_path / "metadata.json"
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Arcoíris",
+                                           "--duration", "30", "--output", str(out)])
+        exit_code = gs.main()
+        meta = _json.loads(out.read_text())
+        return exit_code, calls[0], prompts, meta
+
+    def _full_counts(self, counts):
+        return _v2_script(scenes=[
+            _v2_scene(i, voiceover=" ".join(f"f{i}_{j}" for j in range(1, counts[i - 1] + 1)))
+            for i in range(1, len(counts) + 1)
+        ])
+
+    def _repair_counts(self, counts):
+        return {"scenes": [
+            {"sceneNumber": i, "voiceover": " ".join(f"r{i}_{j}" for j in range(1, counts[i - 1] + 1))}
+            for i in range(1, len(counts) + 1)
+        ]}
+
+    def test_c9_convergence_69_63_52(self, monkeypatch, tmp_path):
+        responses = [
+            _json.dumps(self._full_counts([14, 14, 14, 14, 13])),   # 69
+            _json.dumps(self._repair_counts([13, 13, 9, 14, 14])),  # 63 improves
+            _json.dumps(self._repair_counts([10, 10, 11, 10, 11])), # 52 PASS
+        ]
+        exit_code, n, prompts, meta = self._run(responses, monkeypatch, tmp_path)
+        assert exit_code == 0
+        assert n == 3
+        dc = meta["durationContract"]
+        assert dc["status"] == "PASS"
+        assert dc["wordCount"] == 52
+        rh = dc["retryHistory"]
+        assert [e["wordCount"] for e in rh] == [69, 63, 52]
+        assert rh[1]["candidateUpdated"] is True
+        assert rh[2]["candidateUpdated"] is True
+        comp = [p for sp, p in prompts if sp == gs.VOICEOVER_COMPRESSION_SYSTEM_PROMPT]
+        assert len(comp) == 2
+        # second compression prompt built from the canonical 63 candidate (r1_)
+        assert "r1_" in comp[1]
+        assert "SEGUNDO INTENTO DE COMPRESIÓN" in comp[1]
+        assert "SEGUNDO INTENTO DE COMPRESIÓN" not in comp[0]
+
+    def test_c10_anti_regression_69_70_52(self, monkeypatch, tmp_path):
+        responses = [
+            _json.dumps(self._full_counts([14, 14, 14, 14, 13])),   # 69
+            _json.dumps(self._repair_counts([14, 14, 14, 14, 14])), # 70 regression
+            _json.dumps(self._repair_counts([10, 10, 11, 10, 11])), # 52 PASS
+        ]
+        exit_code, _, _, meta = self._run(responses, monkeypatch, tmp_path)
+        assert exit_code == 0
+        dc = meta["durationContract"]
+        assert dc["status"] == "PASS"
+        assert dc["wordCount"] == 52
+        rh = dc["retryHistory"]
+        assert [e["wordCount"] for e in rh] == [69, 69, 52]
+        assert rh[1]["candidateUpdated"] is False
+        assert rh[1]["candidateReused"] is True
+
+    def test_c11_contract_invariants(self, monkeypatch, tmp_path):
+        assert gs.MAX_SCRIPT_ATTEMPTS == 3
+        # global PASS with an unmet per-scene target still passes (repair is
+        # shape-only; the global budget is the only hard duration contract).
+        responses = [
+            _json.dumps(self._full_counts([14, 14, 14, 14, 13])),  # 69
+            _json.dumps(self._repair_counts([14, 11, 9, 7, 11])),  # 52 global PASS, scene1 unmet
+        ]
+        exit_code, _, _, meta = self._run(responses, monkeypatch, tmp_path)
+        assert exit_code == 0
+        dc = meta["durationContract"]
+        assert dc["status"] == "PASS"
+        assert dc["retryHistory"][1]["repairGlobalBudgetValid"] is True
+        assert dc["retryHistory"][1]["repairSceneTargetsMet"] is False

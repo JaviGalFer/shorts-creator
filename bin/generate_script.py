@@ -235,7 +235,24 @@ La respuesta debe tener exclusivamente esta forma:
 }
 
 No devuelvas title, hook, summary, subtitle, targetDurationSec, visualPlan
-ni ningún otro campo."""
+ni ningún otro campo.
+
+Tu prioridad absoluta es cumplir el presupuesto global de palabras indicado en el mensaje del usuario.
+
+Cuando el mensaje indique minimumWords y maximumWords:
+- el total combinado de todos los voiceover debe quedar dentro de ese rango;
+- nunca devuelvas un total superior a maximumWords;
+- no añadas nuevas ideas durante una compresión;
+- elimina primero redundancias, intensificadores, introducciones prescindibles y repeticiones;
+- conserva el significado principal de cada escena;
+- cuenta las palabras de voiceover separándolas por espacios antes de responder;
+- si el borrador supera maximumWords, vuelve a recortarlo y sigue recortando antes de devolver el JSON.
+
+Los objetivos por escena son recomendaciones de distribución; el presupuesto global es prioritario."""
+
+
+DEFAULT_LLM_TEMPERATURE = 0.8
+COMPRESSION_LLM_TEMPERATURE = 0.2
 
 
 def load_env():
@@ -250,13 +267,20 @@ def load_env():
     return env
 
 
+def _llm_temperature_for_system_prompt(system_prompt: str) -> float:
+    if system_prompt == VOICEOVER_COMPRESSION_SYSTEM_PROMPT:
+        return COMPRESSION_LLM_TEMPERATURE
+    return DEFAULT_LLM_TEMPERATURE
+
+
 def call_llm(prompt: str, api_key: str, model: str, provider: str = "openai", system_prompt: str | None = None) -> str:
     sp = system_prompt if system_prompt is not None else SYSTEM_PROMPT_V2
+    temperature = _llm_temperature_for_system_prompt(sp)
     if provider == "openai":
         data = json.dumps({
             "model": model,
             "response_format": {"type": "json_object"},
-            "temperature": 0.8,
+            "temperature": temperature,
             "messages": [
                 {"role": "system", "content": sp},
                 {"role": "user", "content": prompt},
@@ -303,6 +327,26 @@ def _estimate_narration_duration_sec(word_count: int, scene_count: int) -> tuple
     return total_sec, spoken_sec, pause_sec
 
 
+def _compute_operational_word_target(budget: dict) -> int:
+    """Compute an interior operational word target (generation guidance).
+
+    The operational target is guidance, not a contract. It never replaces
+    preferredWords nor maximumWords and always stays within
+    [minimumWords, maximumWords]. When preferredWords sits against the max, it
+    provides margin below the ceiling so the model is nudged away from the hard
+    edge.
+    """
+    min_w = budget.get("minimumWords", 0)
+    pref_w = budget.get("preferredWords", 0)
+    max_w = budget.get("maximumWords", 0)
+    if max_w <= 0 or max_w < min_w:
+        return min_w if min_w <= max_w else 0
+    midpoint = math.ceil((min_w + max_w) / 2)
+    operational = min(max(pref_w, min_w), midpoint, max_w)
+    operational = max(min_w, operational)
+    return operational
+
+
 def _build_duration_prompt_instruction_v2(budget: dict, strictness: str) -> str:
     """Build v2 duration prompt — neutral, no historical requirements."""
     target_sec = None
@@ -323,6 +367,7 @@ def _build_duration_prompt_instruction_v2(budget: dict, strictness: str) -> str:
     min_w = budget.get("minimumWords", 0)
     pref_w = budget.get("preferredWords", 0)
     max_w = budget.get("maximumWords", 0)
+    operational = _compute_operational_word_target(budget)
     pause_ms = budget.get("estimatedScenePauseMs", 350)
     per_scene_low = max(1, min_w // budget.get("sceneCount", 5)) if budget.get("sceneCount", 5) else 7
     per_scene_high = max(per_scene_low + 2, 7)
@@ -334,14 +379,22 @@ def _build_duration_prompt_instruction_v2(budget: dict, strictness: str) -> str:
     else:
         lines.append(f"- Ventana de duración: {min_sec}-{max_sec} segundos")
     lines.append(
-        f"- El total de palabras habladas debe estar entre {min_w} y {max_w}, "
-        f"con aproximadamente {pref_w} palabras objetivo "
-        f"(pausas entre escenas de ~{pause_ms}ms cada una)"
+        f"- El total de palabras habladas debe estar entre {min_w} y {max_w} "
+        f"(preferredWords del perfil: {pref_w}; pausas entre escenas de ~{pause_ms}ms cada una)"
     )
     lines.append(f"- Escenas: entre 4 y 6. Prefiere 5 escenas.")
     lines.append(f"- Mínimo 7 palabras por escena. Aproximadamente {per_scene_low}-{per_scene_high} palabras por escena.")
     lines.append(f"- El CTA debe incluirse dentro de la voz en off de la última escena, no como escena separada.")
     lines.append(f"- NO uses frases de relleno, CTA repetido, oraciones duplicadas ni pausas dramáticas falsas.")
+    lines.append(
+        f"\n## Presupuesto global de palabras (contrato)\n"
+        f"- Rango válido final: {min_w}-{max_w} palabras habladas en total.\n"
+        f"- LÍMITE ABSOLUTO: no superes {max_w} palabras de voiceover en total.\n"
+        f"- Objetivo operativo: apunta a {operational} palabras de voiceover en total.\n"
+        f"- El límite global prevalece sobre cualquier orientación de palabras por escena.\n"
+        f"- Cuenta únicamente las palabras de los campos voiceover, separadas por espacios. "
+        f"Antes de responder, autocuenta el total. Si supera {max_w}, recorta el texto antes de devolver el JSON."
+    )
     return "\n".join(lines)
 
 
@@ -827,6 +880,7 @@ def _build_voiceover_compression_prompt(
     scene_word_targets: list[int],
     *,
     allow_generated_images: bool,
+    compression_attempt: int = 1,
 ) -> str:
     """Build the specialized voiceover-only compression prompt.
 
@@ -836,16 +890,57 @@ def _build_voiceover_compression_prompt(
 
     scene_word_targets are recommended per-scene guidance, not hard caps; the
     only hard duration constraint is the global word budget.
+
+    compression_attempt distinguishes the first compression (1) from subsequent
+    scaled attempts (>=2).
     """
     min_w = budget.get("minimumWords", 0)
     pref_w = budget.get("preferredWords", 0)
     max_w = budget.get("maximumWords", 0)
+    operational_target = _compute_operational_word_target(budget)
+    minimum_required_reduction = max(0, actual_word_count - max_w)
+    desired_reduction = max(0, actual_word_count - operational_target)
     scenes = canonical_script.get("scenes", [])
     expected = list(range(1, len(scene_word_targets) + 1))
-    required_reduction = max(actual_word_count - max_w, 0)
+    required_reduction = minimum_required_reduction
 
     lines = [
-        "## Compresión de voz en off — intento anterior excede la duración",
+        "## CONTRATO DE COMPRESIÓN — PRIORIDAD MÁXIMA",
+        "",
+        f"Candidato actual: {actual_word_count} palabras.",
+        "",
+        f"LÍMITE ABSOLUTO: el resultado no puede superar {max_w} palabras.",
+        "",
+        f"Debes eliminar AL MENOS {minimum_required_reduction} palabras respecto al candidato actual.",
+        f"Una respuesta con {max_w + 1} palabras o más incumple el contrato y será rechazada.",
+        "",
+        f"Objetivo operativo recomendado: {operational_target} palabras.",
+        f"Intenta eliminar aproximadamente {desired_reduction} palabras y aterrizar cerca de {operational_target},",
+        f"sin bajar de {min_w}.",
+        "",
+        "Cuenta únicamente los voiceover separados por espacios.",
+        "Antes de responder, vuelve a contar el resultado completo.",
+        f"Si supera {max_w}, sigue recortando.",
+    ]
+
+    if compression_attempt >= 2:
+        remaining = max(0, actual_word_count - max_w)
+        lines += [
+            "",
+            "## SEGUNDO INTENTO DE COMPRESIÓN",
+            "",
+            "El intento anterior de compresión todavía incumplió el presupuesto global.",
+            "",
+            f"El candidato actual sigue teniendo {actual_word_count} palabras y permanece {remaining} "
+            f"palabras por encima del límite absoluto de {max_w}.",
+            "",
+            f"Este intento debe eliminar AL MENOS esas {remaining} palabras restantes.",
+            f"No devuelvas otra reducción parcial que siga por encima de {max_w}.",
+        ]
+
+    lines += [
+        "",
+        "## Compresión de voz en off",
         "",
         f"El guion anterior es estructuralmente V2 válido, pero tiene "
         f"{actual_word_count} palabras habladas, por encima del máximo global de {max_w}.",
@@ -860,6 +955,9 @@ def _build_voiceover_compression_prompt(
         json.dumps({
             "currentWordCount": actual_word_count,
             "requiredReductionWords": required_reduction,
+            "minimumRequiredReductionWords": minimum_required_reduction,
+            "desiredReductionWords": desired_reduction,
+            "operationalWordTarget": operational_target,
             "minimumWords": min_w,
             "preferredWords": pref_w,
             "maximumWords": max_w,
@@ -888,11 +986,12 @@ def _build_voiceover_compression_prompt(
         "",
         "## Objetivos recomendados (guidance)",
         "",
-        "- Los `recommendedTargetWords` por escena son orientativos, no límites duros.",
+        "- Los targets por escena son recomendaciones.",
+        "- No es obligatorio cumplirlos exactamente.",
+        "- El límite global sí es obligatorio.",
         "- Prioriza reducir más las escenas más largas.",
         "- Mantén el equilibrio narrativo entre escenas.",
         "- Aproximate a cada target recomendado cuando sea posible.",
-        "- No es obligatorio coincidir exactamente con todos los targets si el total global queda dentro del rango.",
         "",
         "## Cómo se cuenta una palabra",
         "",
@@ -1176,6 +1275,7 @@ def main() -> int:
                 current_prompt = _build_voiceover_compression_prompt(
                     candidate_script, retry_budget, word_count, scene_word_targets,
                     allow_generated_images=allow_generated_images,
+                    compression_attempt=retries,
                 )
             else:
                 # Case C — valid structure, not excessive: keep existing strategy.
