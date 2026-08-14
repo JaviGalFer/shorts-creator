@@ -30,6 +30,13 @@ Para crear, revisar o cerrar un cambio OpenSpec.
 - Tasks son atómicas y verificables.
 - No marcar completado sin validación.
 
+## Lifecycle Git
+- Iniciar un change desde `main` estable.
+- Trabajar en rama dedicada `change/<slug>`.
+- Validar (tests, review) antes del cierre.
+- Merge a `main` solo al cerrar el change.
+- No asumir que puede crear/mergear ramas: la tarea debe autorizarlo explícitamente.
+
 ## Límites
 - No usar para cambios triviales (typos, refactors menores).
 - ADRs son para decisiones duraderas, no para cada cambio.

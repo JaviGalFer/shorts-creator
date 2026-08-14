@@ -5,9 +5,10 @@ Reglas de trabajo para agentes que operan sobre este repositorio.
 ## Contexto inicial
 
 - AGENTS.md se aplica automáticamente como regla de proyecto.
-- `docs/project/current-state.md` es la única fuente de contexto operativo caliente.
-- Leer un OpenSpec concreto solo cuando current-state.md indique explícitamente un cambio activo y la tarea esté relacionada.
+- `docs/project/agent-context.md` es el contexto operativo caliente. Detalle en `docs/project/current-state.md`.
 - No cargar `docs/sessions/`, `openspec/changes/` ni skills por defecto al iniciar.
+- Abrir documentación detallada (current-state, OpenSpec, sessions, arquitectura) solo cuando la tarea lo requiera.
+- Leer un OpenSpec concreto solo cuando agent-context.md indique explícitamente un cambio activo y la tarea esté relacionada, o cuando la propia tarea lo requiera explícitamente.
 - El proyecto es un generador automatizado y configurable de vídeos cortos. El pipeline vigente es V2-only, orquestado por `bin/run_job.py` (`script → assets → audio → prepare → render → validate`). n8n es infraestructura legacy o alternativa, no el orquestador canónico.
 
 ## Exploración
@@ -36,6 +37,14 @@ Reglas de trabajo para agentes que operan sobre este repositorio.
 - Skills solo bajo demanda. No cargar skills al iniciar.
 - Agentes especializados solo se invocan cuando su dominio es directamente relevante.
 - No lanzar subagentes para tareas pequeñas.
+
+## Workflow Git
+
+- `main` = estable; la implementación nunca se hace directamente en `main`.
+- Cada trabajo/change usa una rama dedicada; formato preferido `change/<slug>` para changes.
+- Review y Build verifican que la rama es la correcta antes de modificar.
+- Merge a `main` solo tras validación/cierre.
+- No crear, cambiar ni mergear ramas salvo autorización explícita de la tarea.
 
 ### Model routing and token economy
 
@@ -71,8 +80,8 @@ token-economy decisions are required.
 
 ## Enlaces
 
-- Contexto operativo: `docs/project/current-state.md`
+- Contexto operativo: `docs/project/agent-context.md`
 - Contexto legacy: `HANDOVER.md`
 - Arquitectura: `docs/project/architecture.md`
 - Integraciones: `docs/project/integrations.md`
-- Cambio activo si aplica: indicado en `current-state.md`
+- Cambio activo si aplica: indicado en `agent-context.md`

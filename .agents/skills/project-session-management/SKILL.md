@@ -19,9 +19,10 @@ Bajo demanda, para iniciar o cerrar una sesión de trabajo.
 - Resumen de próximos pasos.
 
 ## Procedimiento
-1. Al iniciar: cargar AGENTS.md, revisar sessions/ previas y cambio OpenSpec activo.
-2. Durante la sesión: mantener enfoque en el objetivo.
-3. Al cerrar: crear/actualizar bitácora con estado final, archivos modificados y próximos pasos.
+1. Al iniciar: usar AGENTS.md y `docs/project/agent-context.md` ya auto-inyectados como contexto base. No releerlos salvo necesidad concreta.
+2. Abrir una sesión previa en `docs/sessions/` o un OpenSpec solo cuando la tarea lo requiera.
+3. Durante la sesión: mantener enfoque en el objetivo.
+4. Al cerrar: crear/actualizar bitácora con estado final, archivos modificados y próximos pasos.
 
 ## Validaciones
 - La bitácora sigue el formato definido en `docs/sessions/README.md`.
