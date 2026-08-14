@@ -1,0 +1,63 @@
+{
+  "benchmarkId": "opencode-free-models-r2",
+  "planned": true,
+  "status": "setup-only-not-executed",
+  "purpose": "Revalidate free-model routing before modularization. See docs/research/opencode-free-models-benchmark-r2.md",
+  "repository": "JaviGalFer/shorts-creator",
+  "setupCommit": "65c2400c19ff3f9a14da12b7d8309f111242cbb3",
+  "comparedModelsVariant": "default",
+  "comparedModels": [
+    "opencode/big-pickle",
+    "opencode/deepseek-v4-flash-free",
+    "opencode/nemotron-3.5-lightning-free",
+    "opencode/laguna-s-2.1-free"
+  ],
+  "modelOrder": [
+    "big-pickle",
+    "deepseek-v4-flash-free",
+    "nemotron-3.5-lightning-free",
+    "laguna-s-2.1-free"
+  ],
+  "tasks": {
+    "r2a-replay-readonly": {
+      "type": "read-only audit (primary)",
+      "agentTemplate": "agents/benchmark-readonly.agent.md",
+      "agentMode": "primary",
+      "promptFile": "prompts/r2a-prompt.txt",
+      "fixtureBuilder": "fixtures/build-r2a-fixture.sh",
+      "fixtureSnapshotCommit": "6e9bed53631e289b71d824337a236eb1c8b04517",
+      "allowedFiles": ["bin/run_job.py", "bin/generate_script.py"],
+      "maxSteps": 4,
+      "variant": "default",
+      "mcp": "OFF",
+      "comparableToR1": true,
+      "scorer": "score_r2a.py"
+    },
+    "r2b-hermetic-build": {
+      "type": "hermetic build",
+      "agentTemplate": "agents/benchmark-builder.agent.md",
+      "agentMode": "primary",
+      "promptFile": "prompts/r2b-prompt.txt",
+      "fixtureBuilder": "fixtures/build-r2b-fixture.sh",
+      "fixturePreFixCommit": "d62c76a",
+      "realFixCommit": "bafb2d5",
+      "targetFunction": "src/generate_script.py::_compute_operational_word_target",
+      "maxSteps": 6,
+      "variant": "default",
+      "mcp": "OFF",
+      "network": "none",
+      "sandboxWritable": true,
+      "baselineFailingTests": 2,
+      "scorer": "score_r2b.py"
+    }
+  },
+  "plannedRuns": 8,
+  "execution": "opencode run --model <id> --agent <agent> --variant default --dir <sandbox> --format json --title benchmark-r2-<task>",
+  "runnerFile": "run.sh",
+  "scorers": ["score_r2a.py", "score_r2b.py", "events.py"],
+  "eventParser": "events.py",
+  "captureFallback": "opencode export <sessionID> only when scoring evidence is incomplete (text/step_finish missing); otherwise capture-fallback=none. Export is a diagnostic artifact, not consumed by scorers.",
+  "captureEvidence": "capture_evidence.py",
+  "resultsFile": null,
+  "conclusionsStatus": "none"
+}

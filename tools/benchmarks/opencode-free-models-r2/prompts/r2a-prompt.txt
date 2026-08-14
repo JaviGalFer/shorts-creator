@@ -1,0 +1,98 @@
+Trabaja en:
+
+#WORKDIR#
+
+## Benchmark
+
+- Nombre: R2-A V2-only runtime audit (replay read-only).
+- Sesión: nueva e independiente.
+- Modelo y variante: fijados externamente por el comando de ejecución.
+- Agente y modo: benchmark-readonly, análisis read-only (primary).
+- Máximo: 4 iteraciones agénticas.
+- No invoques subagentes.
+- No cargues skills.
+- No modifiques archivos.
+- No ejecutes Bash ni tests.
+- No consultes Internet.
+
+## Objetivo
+
+Analiza exclusivamente cómo se seleccionan actualmente VisualPlan V1 y V2
+durante la generación del guion y la etapa de assets.
+
+## Archivos permitidos
+
+- bin/run_job.py
+- bin/generate_script.py
+
+No abras ningún otro archivo.
+
+Usa grep y lecturas dirigidas. No leas ambos archivos completos salvo que resulte
+estrictamente imprescindible.
+
+## Preguntas
+
+1. ¿Cuál es el visual schema predeterminado al generar un job directamente?
+2. ¿run_job.py solicita explícitamente VisualPlan V2 al generar el guion?
+3. ¿Qué script de assets figura como ruta predeterminada en el runner?
+4. ¿Qué condición provoca que el runner use fetch_images_v2.py?
+5. ¿Un metadata que contiene exclusivamente VisualPlan V1 es rechazado por el
+   runner antes de assets?
+6. ¿Qué código de error utiliza el runner para esquemas visuales mezclados?
+7. Identifica al menos tres símbolos exclusivos del camino V1 en
+   generate_script.py.
+8. Identifica al menos tres símbolos exclusivos del camino V2.
+9. Localiza texto activo que todavía presente el producto como histórico.
+10. Propón el cambio mínimo de runtime para garantizar que todos los jobs nuevos
+    sean V2-only. No propongas todavía borrar ni renombrar archivos.
+
+## Formato obligatorio
+
+Responde únicamente con JSON válido y con esta estructura exacta:
+
+{
+  "defaultVisualSchemaVersion": {
+    "value": 0,
+    "evidence": "ruta:símbolo"
+  },
+  "runnerExplicitlyRequestsV2": {
+    "value": false,
+    "evidence": "ruta:símbolo"
+  },
+  "defaultAssetStageScript": {
+    "value": "",
+    "evidence": "ruta:símbolo"
+  },
+  "v2AssetSwitchCondition": {
+    "value": "",
+    "evidence": "ruta:símbolo"
+  },
+  "allV1MetadataRejected": {
+    "value": false,
+    "evidence": "ruta:símbolo"
+  },
+  "mixedSchemaErrorCode": {
+    "value": "",
+    "evidence": "ruta:símbolo"
+  },
+  "v1OnlySymbols": [
+    "ruta:símbolo"
+  ],
+  "v2OnlySymbols": [
+    "ruta:símbolo"
+  ],
+  "historicalProductWording": [
+    {
+      "text": "",
+      "evidence": "ruta:símbolo"
+    }
+  ],
+  "minimumSafeV2OnlyRuntimePlan": [
+    ""
+  ],
+  "verifiedUncertainties": [],
+  "filesRead": [],
+  "scopeViolations": []
+}
+
+No incluyas markdown, comentarios ni texto fuera del JSON.
