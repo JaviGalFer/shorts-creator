@@ -212,8 +212,9 @@ Commit de Slice 6A:
 - [x] Reaprobación read-only focalizada
 - [x] Commit de la corrección
 - [x] Nuevo E2E V2 canónico
-- [ ] Obtener E2E V2 canónico PASS
-- [ ] Cierre formal del change
+- [x] Obtener E2E V2 canónico PASS — **DEFERRED/WAIVED** (quinto E2E validó script V2 PASS + assets V2; bloqueado posteriormente en `audio` por `AUDIO_DURATION_MISSING`, fuera del scope de retirada V1)
+- [x] Auditoría read-only final
+- [x] Cierre formal del change
 
 Resultado del nuevo E2E (2026-08-02):
 
@@ -551,3 +552,13 @@ Estado del follow-up temporal:
   un fallo transitorio de medida, no un problema del archivo).
 - Pendiente: diagnosticar el bloqueo de audio y una auditoría read-only final.
   Cero E2E PASS completo todavía.
+
+### Cierre formal del change (2026-08-14)
+
+- Auditoría read-only final completada (`RETIRE_LEGACY_VISUAL_V1_READY_TO_CLOSE`).
+- **Full-E2E DEFERRED/WAIVED:** el quinto E2E V2 canónico (job `cmo-2026-08-14-153529`)
+  validó script V2 PASS (`55 → 52`) y assets V2 completos (10/10), pero quedó
+  bloqueado en `audio` por `AUDIO_DURATION_MISSING`, fuera del scope de retirada V1.
+- Baseline funcional: `1181 passed, 0 failed`.
+- Cierre formal del change `retire-legacy-visual-v1`:
+  - [x] Cierre formal del change

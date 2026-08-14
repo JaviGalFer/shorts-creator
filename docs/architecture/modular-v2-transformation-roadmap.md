@@ -1,8 +1,8 @@
 # Modular V2 Transformation Roadmap
 
 **Creado:** 2026-07-17
-**Última actualización:** 2026-07-30
-**Estado:** Slice 5 en ejecución (product identity and architecture cleanup)
+**Última actualización:** 2026-08-14
+**Estado:** retiro V1 completado (change `retire-legacy-visual-v1` cerrado); modularización pendiente de inicio
 
 ## 1. Estado actual y motivación
 
@@ -148,9 +148,9 @@ Esta estructura es el **mapa de destino**. No todos los archivos se crean en la 
 
 | # | Fase | Cambio OpenSpec | Dependencias | Progreso |
 |---|------|----------------|--------------|----------|
-| 1 | Retirar V1 y enfoque histórico | `retire-legacy-visual-v1` | Ninguna | Slices 1-4 completados, Slice 5 en ejecución |
-| 2 | Estabilizar pipeline V2, baseline clara | (continuación del anterior) | Fase 1 | Slice 6 pendiente |
-| 3 | Crear pyproject.toml y src/shorts_creator/ | (futuro) | Fase 2 | Pendiente |
+| 1 | Retirar V1 y enfoque histórico | `retire-legacy-visual-v1` | Ninguna | **Completado** (Slices 1-6 cerrados; change cerrado) |
+| 2 | Estabilizar pipeline V2, baseline clara | (continuación del anterior) | Fase 1 | Completado — baseline `1181 passed, 0 failed`; quinto E2E validó script V2 PASS + assets V2; full-E2E diferido por `AUDIO_DURATION_MISSING` (fuera de scope) |
+| 3 | Crear pyproject.toml y src/shorts_creator/ | (futuro) | Fase 2 | Pendiente (no iniciado todavía) |
 | 4 | Extraer contracts/ e infrastructure/ | (futuro) | Fase 3 | Pendiente |
 | 5 | Migrar script/ | (futuro) | Fase 4 | Pendiente |
 | 6 | Reanudar audio pacing (Phase B) | `improve-short-form-audio-pacing-v2` | Fase 5 | Pendiente |

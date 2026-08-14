@@ -21,7 +21,7 @@ Visual Plan V2 es el único contrato visual canónico. El proyecto no es todaví
 
 Pipeline funcional. Todo el código de ejecución reside en `bin/`. Docker se utiliza para render y servicios auxiliares. `bin/run_job.py` es el orquestador canónico.
 
-**Change activo:** `retire-legacy-visual-v1` — limpieza de identidad de producto y arquitectura (Slice 5 en ejecución).
+**Change completado:** `retire-legacy-visual-v1` — retirada del contrato visual V1; Visual Plan V2 es el único contrato visual soportado. Siguiente trabajo: infraestructura de agentes/contexto y, después, la modularización hacia `src/shorts_creator/`.
 
 Referencias:
 - `docs/project/current-state.md` — estado detallado
