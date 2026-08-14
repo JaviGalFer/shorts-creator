@@ -417,7 +417,7 @@ Sesión: `retire-legacy-visual-v1-slice-6b-duration-policy-fix` (Build).
 - [x] Añadir cobertura de regresión de placeholders
 - [x] Reaprobación read-only focalizada de la corrección de política — SLICE_6B_DURATION_POLICY_FINAL_REAPPROVED_FOR_COMMIT
 - [x] Commit de la corrección de política — d377932
-- [ ] Cuarto E2E V2 canónico
+- [x] Cuarto E2E V2 canónico — job `cmo-2026-08-11-185926` — BLOCKED (`REVIEW_REQUIRED`) en `script` por `DURATION_OUT_OF_RANGE` (62 > 52 palabras). Política temporal validada en comportamiento (convergencia 69→63→62, targets orientativos, sin hard caps, anti-regresión), pero el modelo no comprimió hasta 47–52. Pendiente de follow-up de duración.
 
 Estado del follow-up temporal:
 
@@ -497,3 +497,47 @@ Estado del follow-up temporal:
   V2 canónico. Cero PASS todavía. `MAX_SCRIPT_ATTEMPTS == 3`,
   `minimumWords=47` / `preferredWords=52` / `maximumWords=52` intactos. Slice 6B
   y el change `retire-legacy-visual-v1` continúan abiertos.
+- Cuarto E2E V2 canónico ejecutado (job `cmo-2026-08-11-185926`): BLOCKED
+  (`REVIEW_REQUIRED`) en `script` por `DURATION_OUT_OF_RANGE` (62 > 52 palabras);
+  retry sequence `69 → 63 → 62`; política temporal validada en comportamiento
+  pero el modelo no comprimió hasta 47–52.
+
+### Slice 6B — Hardening de control de longitud (Build, ejecutado 2026-08-11)
+
+- [x] Auditoría read-only del cuarto E2E — SLICE_6B_COMPRESSION_CONTROL_AUDIT_RECOMMENDS_CHANGES
+- [x] Hardening del presupuesto global en generación inicial
+- [x] Target operativo interior para control de longitud
+- [x] Hardening del compression system/user prompt
+- [x] Temperatura específica de compression
+- [x] Escalado del segundo compression attempt
+- [x] Cobertura C1–C11
+- [x] Review read-only del length-control hardening — SLICE_6B_LENGTH_CONTROL_HARDENING_REVIEW_CHANGES_REQUIRED
+- [x] Corregir F1: eliminar target inicial competitivo preferredWords≈52
+- [x] Reforzar C2 contra doble target
+- [x] Reaprobación read-only focalizada del length-control hardening — SLICE_6B_LENGTH_CONTROL_TARGET_FIX_REAPPROVED_FOR_COMMIT
+- [x] Commit del length-control hardening — bafb2d5
+- [ ] Quinto E2E V2 canónico
+
+- Diagnóstico: la política de candidatos funcionó (`69 → 63 → 62`); el problema
+  restante es el control de generación/compliance del LLM. Los cuatro E2E reales
+  produjeron candidatos iniciales por encima del máximo (`74, 60, 56, 69`).
+- Hardening implementado: target operativo interior (`_compute_operational_word_target`,
+  para 30s = 50, siempre dentro de `[minimumWords, maximumWords]`); presupuesto
+  global en la generación inicial (LÍMITE ABSOLUTO, objetivo operativo,
+  jerarquía global > per-scene, autocuenta); compression system prompt con
+  primacía del presupuesto global; compression prompt imperativo (reducción mínima
+  obligatoria + reducción deseada al target operativo + escalado del segundo
+  intento); temperatura específica de compression (0.2) frente al resto (0.8).
+- F1 MEDIUM del review: la generación inicial presentaba `preferredWords≈52` como
+  objetivo junto al operational target `50`. Corregido en el follow-up: `52` queda
+  solo como dato del perfil (`preferredWords del perfil: 52`) y como hard maximum,
+  y `50` es el único target accionable. C2 reforzado contra el doble target.
+- Contratos preservados: `MAX_SCRIPT_ATTEMPTS == 3`; `47/52/52`; `balanced`;
+  targets por escena como guidance; presupuesto global como único hard gate;
+  repair shape-only; candidato canónico; ranking/best/anti-regresión intactos.
+- Baseline funcional nueva: **`1181 passed, 0 failed`**.
+- Length-control hardening cerrado y versionado mediante Commit A `bafb2d5`
+  (`fix(script): harden V2 word-budget control`). Reaprobación read-only final:
+  `SLICE_6B_LENGTH_CONTROL_TARGET_FIX_REAPPROVED_FOR_COMMIT`; cero findings
+  HIGH/MEDIUM; F1 resuelto; F2 LOW aceptado.
+- Pendiente: quinto E2E V2 canónico. Cero PASS todavía.
