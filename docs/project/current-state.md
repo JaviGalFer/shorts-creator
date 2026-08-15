@@ -12,6 +12,8 @@ Pipeline funcional de vídeos cortos verticales con duración configurable. Scri
 
 **Siguiente prioridad:** modularización (`src/shorts_creator/`, `pyproject.toml`). No iniciada todavía.
 
+**Routing de modelos:** benchmark R2 cerrado (2026-08-14) — `nemotron-3.5-lightning-free` validado para review y Build; `big-pickle` para exploration/planning; fallback Build `deepseek-v4-flash-free`; `laguna-s-2.1-free` sin uso rutinario. Routing actualizado en `model-routing-and-token-economy/SKILL.md`. Detalle: `docs/research/opencode-free-models-benchmark-r2.md`.
+
 ## Arquitectura runtime
 
 - Pipeline **V2-only** orquestado por `bin/run_job.py`: `script → assets → audio → prepare → render → validate`.

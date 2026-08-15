@@ -1,8 +1,10 @@
-# OpenCode Free Models Benchmark R2 — Metodología
+# OpenCode Free Models Benchmark R2 — Informe de cierre
 
-> Estado: **SETUP — no ejecutado.** Este documento define metodología y tablas
-> vacías; no contiene conclusiones. Los resultados se registrarán tras la
-> ejecución de los 8 runs planeados.
+> Estado: **CERRADO — ejecutado 2026-08-14T19:24:42Z.** Este documento contiene
+> la metodología y la **adjudicación manual** de los 8 runs, además de las
+> limitaciones conocidas de los scorers. El routing provisional se actualizó en
+> `.agents/skills/model-routing-and-token-economy/SKILL.md`.
+> Evidencia bruta (no versionada): `~/opencode-benchmarks/shorts-free-r2-20260814T192442Z/`.
 
 ## 1. Propósito
 
@@ -128,21 +130,37 @@ Formato del stream: `type:"text"`→`part.text` (último no vacío con JSON),
 Captura reutiliza el tooling R1 (`/usr/bin/time`, `opencode stats`, `opencode
 session list`). No se invoca ningún modelo durante este setup.
 
-## 6. Tabla de resultados — R2-A (replay read-only)
+## 6. Resultados — R2-A (replay read-only)
 
-| Modelo | Variante | Exit | Tiempo (s) | Tool calls | Input tk | Output tk | Cache tk | JSON válido | Score | Scope viol. | Notas |
-|--------|----------|------|------------|------------|----------|-----------|----------|-------------|-------|-------------|-------|
-| (pendiente) | default | — | — | — | — | — | — | — | — | — | — |
+Ejecutado 2026-08-14T19:24:42Z, variante `default`, 4 pasos máx, snapshot `6e9bed5`.
 
-*(vacía — pendiente de ejecución)*
+| Modelo | Variante | Exit | Tiempo (s) | Tool calls | Input tk | Output tk | Cache tk | JSON final | Core 6/6 | Verdicto | Notas |
+|--------|----------|------|------------|------------|----------|-----------|----------|------------|----------|----------|-------|
+| big-pickle | default | 0 | 40 | 8 | 8,839 | 2,424 | 12,544 | ✔ (texto) | 6/6 | **OK parcial** | Económico; audit parcialmente incompleto (2 grep fuera de allowlist por raíz de búsqueda) |
+| deepseek-v4-flash-free | default | 0 | 51 | 3 | 36,790 | 4,931 | 25,600 | ✔ | 6/6 | **OK** | Audit completo; evidencia 9/9; sin scope violations |
+| nemotron-3.5-lightning-free | default | 0 | 34 | 7 | — | — | — | ✔ (markdown) | 6/6 | **OK** | JSON final presente; **falso negativo del parser** (respuesta correcta en markdown) |
+| laguna-s-2.1-free | default | 0 | 336 | 8 | — | — | — | ✘ | 6/6 (análisis) | **OK parcial** | Análisis correcto pero **sin respuesta JSON final** |
 
-## 7. Tabla de resultados — R2-B (build hermético)
+> Core 6/6 = los 6 campos objetivos (`defaultVisualSchemaVersion`, `runnerExplicitlyRequestsV2`, `defaultAssetStageScript`, `v2AssetSwitchCondition`, `allV1MetadataRejected`, `mixedSchemaErrorCode`) coinciden con el ground-truth R1. La adjudicación es **manual**; el parser reporta 5/6 en big-pickle/deepseek por un defecto de tipo (bool vs string en `v2AssetSwitchCondition`), no por error de contenido.
 
-| Modelo | Variante | Exit | Tiempo (s) | Tool calls | Tests pass/fail | Archivos modif. | Tokens i/o/cache | Score | Scope viol. | Notas |
-|--------|----------|------|------------|------------|-----------------|-----------------|------------------|-------|-------------|-------|
-| (pendiente) | default | — | — | — | — | — | — | — | — | — |
+## 7. Resultados — R2-B (build hermético)
 
-*(vacía — pendiente de ejecución)*
+Adjudicación sobre los sandboxes reales **ignorando artefactos `.opencode/`**
+(`node_modules` generados por el runner). Código verificado ejecutando los
+tests de cada sandbox.
+
+| Modelo | Variante | Exit | Tiempo (s) | Tool calls | Only generate_script | pytest ejecutado | Tests | Verdicto |
+|--------|----------|------|------------|------------|----------------------|------------------|-------|----------|
+| big-pickle | default | 0 | 58 | 8 | ✔ | ✘ | 2/2 (verificado) | **INCOMPLETE** |
+| deepseek-v4-flash-free | default | 0 | 45 | 9 | ✘ (sin cambios) | ✘ | 0/2 | **FAIL** |
+| nemotron-3.5-lightning-free | default | 0 | 39 | 7 | ✔ | ✔ | 2/2 passed | **PASS** |
+| laguna-s-2.1-free | default | 0 | 400 | 8 | ✔ | ✘ | 2/2 (verificado) | **INCOMPLETE** |
+
+- **INCOMPLETE** = código correcto (pasa 2/2 al verificarlo manualmente) pero el
+  modelo **no ejecutó pytest** durante el run → no evidencia de ejecución.
+- **FAIL** = ningún cambio productivo; tests fallan.
+- **PASS** = solo `src/generate_script.py` modificado + pytest ejecutado + 2/2 passed.
+- El scorer automático marcó todos como `exit 1` porque no ignoró `.opencode/node_modules`; la adjudicación manual aquí es la autoritativa.
 
 ## 7bis. Criterios de PASS
 
@@ -173,14 +191,39 @@ Se ignoran únicamente caches generadas por pytest/Python (`__pycache__`,
 - R2-B es una dimensión nueva (Build) que R1 no probó; primera en medirla en
   este proyecto.
 
-## 9. Blocker / limitaciones
+## 9. Limitaciones conocidas de R2 (defectos del scorer, no corregidos)
 
-- npm/rutina no aplicable: los runs se lanzan a mano con `run.sh`.
-- La variante `default` puede no existir para algún modelo; de ser así se
-  documentará y se usará la variante compatible del modelo, sin sustituir.
-- `opencode agent list` no soporta `--format json`; el preflight usa la salida
-  de texto y busca `^<agente> (primary)`.
-- Si un run termina sin evidencia de scoring (`text`/`step_finish`), la captura
-  guarda un artefacto `export.json` de diagnóstico y marca `CAPTURE_ERROR` (no
-  es FAIL del modelo ni relanza el modelo).
-- El documento no concluye nada aún.
+- **Parser `v2AssetSwitchCondition` (R2-A):** exige `bool`, pero los modelos
+  responden con la condición descriptiva (string) → falso `5/6` en big-pickle y
+  deepseek. Contenido correcto. **No corregido.**
+- **Parser R2-A no detecta JSON en markdown:** nemotron emitió la respuesta final
+  correcta en markdown con bloques; el parser reporta "no final JSON answer"
+  (`exit 2`). Falso negativo. **No corregido.**
+- **Scorer R2-B no ignora `.opencode/`:** el runner materializa
+  `.opencode/node_modules` en el sandbox; el scorer los cuenta como archivos
+  modificados → `exit 1` para todos. La adjudicación manual los descarta.
+  **No corregido.**
+- La variante `default` estuvo disponible en los 4 modelos.
+- `opencode agent list` no soporta `--format json`; el preflight usa texto
+  `^<agente> (primary)`.
+- La evidencia incompleta de captura se registra como `CAPTURE_ERROR` en
+  `score-exit-code.txt` (no es FAIL del modelo ni relanza el modelo).
+
+## 10. Adjudicación y routing resultante
+
+La adjudicación manual (ver §6–§7) alimenta el routing provisional. Cambios
+resultantes en `.agents/skills/model-routing-and-token-economy/SKILL.md`:
+
+- **exploration / planning barato:** `opencode/big-pickle` (económico, core 6/6;
+  requiere post-procesado por formato no-JSON).
+- **focused review:** `opencode/nemotron-3.5-lightning-free` (audit completo,
+  JSON presente).
+- **bounded Build:** `opencode/nemotron-3.5-lightning-free` (PASS R2-B con
+  pytest ejecutado).
+- **Build fallback:** `opencode/deepseek-v4-flash-free` (audit completo).
+- **laguna-s-2.1-free:** sin uso rutinario (análisis correcto pero sin respuesta
+  JSON final; token usage alto: 128K input en R2-B).
+- Se **preservan** las políticas R1 no evaluadas por R2 (e.g. fallback de
+  exploración, do-not-use de mimo/north-mini).
+
+Ver el SKILL para la tabla de routing completa.

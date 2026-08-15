@@ -1,7 +1,9 @@
 {
   "benchmarkId": "opencode-free-models-r2",
   "planned": true,
-  "status": "setup-only-not-executed",
+  "executed": true,
+  "executedAtUtc": "2026-08-14T19:24:42Z",
+  "status": "closed",
   "purpose": "Revalidate free-model routing before modularization. See docs/research/opencode-free-models-benchmark-r2.md",
   "repository": "JaviGalFer/shorts-creator",
   "setupCommit": "65c2400c19ff3f9a14da12b7d8309f111242cbb3",
@@ -58,6 +60,9 @@
   "eventParser": "events.py",
   "captureFallback": "opencode export <sessionID> only when scoring evidence is incomplete (text/step_finish missing); otherwise capture-fallback=none. Export is a diagnostic artifact, not consumed by scorers.",
   "captureEvidence": "capture_evidence.py",
+  "rawDirectory": "~/opencode-benchmarks/shorts-free-r2-20260814T192442Z",
   "resultsFile": null,
-  "conclusionsStatus": "none"
+  "conclusionsStatus": "closed",
+  "adjudication": "manual (2026-08-14). See docs/research/opencode-free-models-benchmark-r2.md sections 6-10. Scorer limitations: parser R2-A bool/string mismatch; R2-A no JSON-in-markdown detection; R2-B does not ignore .opencode/ artifacts.",
+  "closeReport": "docs/research/opencode-free-models-benchmark-r2.md"
 }
