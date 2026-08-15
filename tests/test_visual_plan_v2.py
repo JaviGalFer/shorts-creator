@@ -20,6 +20,21 @@ from visual_plan_v2 import (
     SCHEMA_VERSION,
     REQUIRED_FIELDS,
 )
+from shorts_creator.contracts import visual as canonical_visual
+
+
+class TestCanonicalContractImports:
+    def test_canonical_module_exposes_legacy_api(self):
+        assert canonical_visual.SCHEMA_VERSION == SCHEMA_VERSION
+        assert canonical_visual.REQUIRED_FIELDS is REQUIRED_FIELDS
+        assert canonical_visual.canonicalize_visual_plan_v2 is canonicalize_visual_plan_v2
+        assert canonical_visual.validate_visual_plan_v2 is validate_visual_plan_v2
+
+    def test_legacy_facade_reexports_canonical_constants(self):
+        assert canonical_visual.ALLOWED_VISUAL_INTENTS is ALLOWED_VISUAL_INTENTS
+        assert canonical_visual.ALLOWED_ASSET_PREFERENCES is ALLOWED_ASSET_PREFERENCES
+        assert canonical_visual.ALLOWED_TRANSITIONS is ALLOWED_TRANSITIONS
+        assert canonical_visual.ALLOWED_PROVIDERS is ALLOWED_PROVIDERS
 
 
 # ── Fixture helpers ─────────────────────────────────────────────────────────
