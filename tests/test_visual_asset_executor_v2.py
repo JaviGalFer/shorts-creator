@@ -11,7 +11,7 @@ from unittest.mock import patch
 PROJECT = Path("/home/javi/projects/shorts-creator")
 sys.path.insert(0, str(PROJECT / "bin"))
 
-from visual_asset_executor_v2 import (
+from shorts_creator.assets.executor import (
     execute_visual_sourcing_plan_v2,
     _evaluate_provider_availability,
     _dispatch_inputs,
@@ -936,10 +936,10 @@ class TestLiveModeWikimedia:
     def test_live_wikimedia_resolves(self, tmp_path):
         plan = self._mock_sourcing_plan([self._mock_segment_wikimedia()])
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             return_value=self._mock_candidate(),
         ), patch(
-            "visual_provider_wikimedia_v2.download_wikimedia_asset_v2",
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
             return_value=self._mock_download_ok(),
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -973,10 +973,10 @@ class TestLiveModeWikimedia:
     def test_live_wikimedia_asset_path_under_job_dir(self, tmp_path):
         plan = self._mock_sourcing_plan([self._mock_segment_wikimedia()])
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             return_value=self._mock_candidate(),
         ), patch(
-            "visual_provider_wikimedia_v2.download_wikimedia_asset_v2",
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
             return_value=self._mock_download_ok(),
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -990,7 +990,7 @@ class TestLiveModeWikimedia:
     def test_live_wikimedia_no_results(self, tmp_path):
         plan = self._mock_sourcing_plan([self._mock_segment_wikimedia()])
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             return_value=None,
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1022,10 +1022,10 @@ class TestLiveModeWikimedia:
             return None
 
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             side_effect=mock_resolve,
         ), patch(
-            "visual_provider_wikimedia_v2.download_wikimedia_asset_v2",
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
             return_value=self._mock_download_fail(),
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1046,7 +1046,7 @@ class TestLiveModeWikimedia:
     def test_live_wikimedia_provider_error(self, tmp_path):
         plan = self._mock_sourcing_plan([self._mock_segment_wikimedia()])
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             side_effect=RuntimeError("connection timeout"),
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1141,10 +1141,10 @@ class TestLiveModeWikimedia:
     def test_no_legacy_fields_in_live_output(self, tmp_path):
         plan = self._mock_sourcing_plan([self._mock_segment_wikimedia()])
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             return_value=self._mock_candidate(),
         ), patch(
-            "visual_provider_wikimedia_v2.download_wikimedia_asset_v2",
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
             return_value=self._mock_download_ok(),
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1282,10 +1282,10 @@ class TestNamespaceInExecutor:
     def test_without_namespace_default_path(self, tmp_path):
         plan = self._mock_sourcing_plan([self._mock_segment()])
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             return_value=self._mock_candidate(),
         ), patch(
-            "visual_provider_wikimedia_v2.download_wikimedia_asset_v2",
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
             return_value=self._mock_download_ok(),
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1298,10 +1298,10 @@ class TestNamespaceInExecutor:
     def test_namespace_scene_001(self, tmp_path):
         plan = self._mock_sourcing_plan([self._mock_segment()])
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             return_value=self._mock_candidate(),
         ), patch(
-            "visual_provider_wikimedia_v2.download_wikimedia_asset_v2",
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
             return_value=self._mock_download_ok(),
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1315,10 +1315,10 @@ class TestNamespaceInExecutor:
     def test_namespace_scene_002(self, tmp_path):
         plan = self._mock_sourcing_plan([self._mock_segment()])
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             return_value=self._mock_candidate(),
         ), patch(
-            "visual_provider_wikimedia_v2.download_wikimedia_asset_v2",
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
             return_value=self._mock_download_ok(),
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1335,10 +1335,10 @@ class TestNamespaceInExecutor:
 
         plan1 = self._mock_sourcing_plan([self._mock_segment()])
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             return_value=candidate,
         ), patch(
-            "visual_provider_wikimedia_v2.download_wikimedia_asset_v2",
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
             return_value=self._mock_download_ok(),
         ):
             result1 = execute_visual_sourcing_plan_v2(
@@ -1352,10 +1352,10 @@ class TestNamespaceInExecutor:
             "segmentIndex": 1,
         }])
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             return_value=candidate,
         ), patch(
-            "visual_provider_wikimedia_v2.download_wikimedia_asset_v2",
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
             return_value=self._mock_download_ok(),
         ):
             result2 = execute_visual_sourcing_plan_v2(
@@ -1409,10 +1409,10 @@ class TestNamespaceInExecutor:
             candidate = {**self._mock_candidate(), "mimeType": mime}
             plan = self._mock_sourcing_plan([self._mock_segment()])
             with patch(
-                "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+                "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
                 return_value=candidate,
             ), patch(
-                "visual_provider_wikimedia_v2.download_wikimedia_asset_v2",
+                "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
                 return_value=self._mock_download_ok(),
             ):
                 result = execute_visual_sourcing_plan_v2(
@@ -1493,7 +1493,7 @@ class TestRateLimitedInExecutor:
         }
 
     def test_rate_limited_propagates_provider_error(self, tmp_path):
-        from visual_provider_wikimedia_v2 import WikimediaRateLimitedError
+        from shorts_creator.assets.providers.wikimedia import WikimediaRateLimitedError
 
         plan = {
             "schemaVersion": 1,
@@ -1501,7 +1501,7 @@ class TestRateLimitedInExecutor:
             "summary": {"totalSegments": 1, "routable": 0, "routableWithWarnings": 1, "unroutable": 0},
         }
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             side_effect=WikimediaRateLimitedError("429 exhausted"),
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1522,7 +1522,7 @@ class TestRateLimitedInExecutor:
             "summary": {"totalSegments": 1, "routable": 0, "routableWithWarnings": 1, "unroutable": 0},
         }
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             return_value=None,
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1614,10 +1614,10 @@ class TestExclusionInExecutor:
             return self._mock_candidate()
 
         with patch(
-            "visual_provider_wikimedia_v2.resolve_wikimedia_candidate_v2",
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
             side_effect=mock_resolve,
         ), patch(
-            "visual_provider_wikimedia_v2.download_wikimedia_asset_v2",
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
             return_value=self._mock_download_ok(),
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1739,7 +1739,7 @@ class TestMultiProviderFailover:
             return {"status": "PROVIDER_ERROR", "reason": "should not be called"}
 
         with patch(
-            "visual_asset_executor_v2._resolve_wikimedia",
+            "shorts_creator.assets.executor._resolve_wikimedia",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "RESOLVED", "provider": "wikimedia_commons",
@@ -1750,7 +1750,7 @@ class TestMultiProviderFailover:
                 "searchQueryUsed": "test", "generationPromptUsed": None,
             },
         ), patch(
-            "visual_asset_executor_v2._resolve_pixabay", wraps=mock_pixabay,
+            "shorts_creator.assets.executor._resolve_pixabay", wraps=mock_pixabay,
         ):
             result = execute_visual_sourcing_plan_v2(
                 plan, self._live_wikimedia_config(),
@@ -1765,14 +1765,14 @@ class TestMultiProviderFailover:
     def test_wikimedia_rate_limited_pixabay_resolved(self, tmp_path):
         plan = self._sourcing_plan(self._segment_diagram_wikimedia_pixabay())
         with patch(
-            "visual_asset_executor_v2._resolve_wikimedia",
+            "shorts_creator.assets.executor._resolve_wikimedia",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "PROVIDER_ERROR", "provider": "wikimedia_commons",
                 "searchQueriesTried": ["test"], "reason": "RATE_LIMITED",
             },
         ), patch(
-            "visual_asset_executor_v2._resolve_pixabay",
+            "shorts_creator.assets.executor._resolve_pixabay",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "RESOLVED", "provider": "pixabay",
@@ -1803,14 +1803,14 @@ class TestMultiProviderFailover:
     def test_wikimedia_no_results_pixabay_resolved(self, tmp_path):
         plan = self._sourcing_plan(self._segment_diagram_wikimedia_pixabay())
         with patch(
-            "visual_asset_executor_v2._resolve_wikimedia",
+            "shorts_creator.assets.executor._resolve_wikimedia",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "NO_RESULTS", "provider": "wikimedia_commons",
                 "searchQueriesTried": ["test"], "reason": "no candidates",
             },
         ), patch(
-            "visual_asset_executor_v2._resolve_pixabay",
+            "shorts_creator.assets.executor._resolve_pixabay",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "RESOLVED", "provider": "pixabay",
@@ -1832,14 +1832,14 @@ class TestMultiProviderFailover:
     def test_wikimedia_download_failed_pixabay_resolved(self, tmp_path):
         plan = self._sourcing_plan(self._segment_diagram_wikimedia_pixabay())
         with patch(
-            "visual_asset_executor_v2._resolve_wikimedia",
+            "shorts_creator.assets.executor._resolve_wikimedia",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "DOWNLOAD_FAILED", "provider": "wikimedia_commons",
                 "searchQueriesTried": ["test"], "reason": "download errors",
             },
         ), patch(
-            "visual_asset_executor_v2._resolve_pixabay",
+            "shorts_creator.assets.executor._resolve_pixabay",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "RESOLVED", "provider": "pixabay",
@@ -1861,14 +1861,14 @@ class TestMultiProviderFailover:
     def test_both_no_results_unresolved(self, tmp_path):
         plan = self._sourcing_plan(self._segment_diagram_wikimedia_pixabay())
         with patch(
-            "visual_asset_executor_v2._resolve_wikimedia",
+            "shorts_creator.assets.executor._resolve_wikimedia",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "NO_RESULTS", "provider": "wikimedia_commons",
                 "searchQueriesTried": ["test"], "reason": "no candidates",
             },
         ), patch(
-            "visual_asset_executor_v2._resolve_pixabay",
+            "shorts_creator.assets.executor._resolve_pixabay",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "NO_RESULTS", "provider": "pixabay",
@@ -1890,7 +1890,7 @@ class TestMultiProviderFailover:
     def test_pixabay_without_api_key_skipped(self, tmp_path):
         plan = self._sourcing_plan(self._segment_diagram_wikimedia_pixabay())
         with patch(
-            "visual_asset_executor_v2._resolve_wikimedia",
+            "shorts_creator.assets.executor._resolve_wikimedia",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "RESOLVED", "provider": "wikimedia_commons",
@@ -1922,14 +1922,14 @@ class TestMultiProviderFailover:
     def test_provider_attempts_in_order(self, tmp_path):
         plan = self._sourcing_plan(self._segment_diagram_wikimedia_pixabay())
         with patch(
-            "visual_asset_executor_v2._resolve_wikimedia",
+            "shorts_creator.assets.executor._resolve_wikimedia",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "PROVIDER_ERROR", "provider": "wikimedia_commons",
                 "searchQueriesTried": ["test"], "reason": "RATE_LIMITED",
             },
         ), patch(
-            "visual_asset_executor_v2._resolve_pixabay",
+            "shorts_creator.assets.executor._resolve_pixabay",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "RESOLVED", "provider": "pixabay",
@@ -1952,14 +1952,14 @@ class TestMultiProviderFailover:
     def test_no_credentials_in_output(self, tmp_path):
         plan = self._sourcing_plan(self._segment_diagram_wikimedia_pixabay())
         with patch(
-            "visual_asset_executor_v2._resolve_wikimedia",
+            "shorts_creator.assets.executor._resolve_wikimedia",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "PROVIDER_ERROR", "provider": "wikimedia_commons",
                 "searchQueriesTried": ["test"], "reason": "RATE_LIMITED",
             },
         ), patch(
-            "visual_asset_executor_v2._resolve_pixabay",
+            "shorts_creator.assets.executor._resolve_pixabay",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "RESOLVED", "provider": "pixabay",
@@ -2014,7 +2014,7 @@ class TestMultiProviderFailover:
             "unsupportedReasons": [],
         })
         with patch(
-            "visual_asset_executor_v2._resolve_wikimedia",
+            "shorts_creator.assets.executor._resolve_wikimedia",
             return_value={
                 "segmentIndex": 1, "assetPreference": "diagram",
                 "status": "RESOLVED", "provider": "wikimedia_commons",

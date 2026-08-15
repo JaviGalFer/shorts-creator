@@ -700,7 +700,7 @@ def _resolve_wikimedia(
     _MAX_DOWNLOAD_ATTEMPTS = 20
 
     try:
-        from visual_provider_wikimedia_v2 import (
+        from shorts_creator.assets.providers.wikimedia import (
             resolve_wikimedia_candidate_v2,
             download_wikimedia_asset_v2,
             WikimediaRateLimitedError,
@@ -847,7 +847,7 @@ def _resolve_pixabay(
     query_texts = _extract_query_texts(queries)
 
     try:
-        from visual_provider_pixabay_v2 import (
+        from shorts_creator.assets.providers.pixabay import (
             resolve_pixabay_candidates_v2,
             download_pixabay_asset_v2,
         )

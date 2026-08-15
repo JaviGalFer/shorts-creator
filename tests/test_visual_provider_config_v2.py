@@ -9,7 +9,7 @@ from pathlib import Path
 PROJECT = Path("/home/javi/projects/shorts-creator")
 sys.path.insert(0, str(PROJECT / "bin"))
 
-from visual_provider_config_v2 import load_provider_config_v2
+from shorts_creator.assets.provider_config import load_provider_config_v2
 
 
 SECRET_LIKE_KEYS = frozenset({"api_key", "apiKey", "token", "secret"})

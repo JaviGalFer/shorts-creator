@@ -14,7 +14,8 @@ PROJECT = Path("/home/javi/projects/shorts-creator")
 sys.path.insert(0, str(PROJECT / "bin"))
 
 import fetch_images_v2
-from visual_plan_v2 import SCHEMA_VERSION as V2_SCHEMA_VERSION
+from shorts_creator.assets import fetcher as asset_fetcher
+from shorts_creator.contracts.visual import SCHEMA_VERSION as V2_SCHEMA_VERSION
 
 V1_LEGACY_FIELDS = frozenset({
     "editorialRole", "strategy", "primaryAssetType",
@@ -226,13 +227,13 @@ class TestLoadMetadata:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -284,13 +285,13 @@ class TestSceneDetection:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -338,13 +339,13 @@ class TestSceneDetection:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -385,7 +386,7 @@ class TestSyntheticUnresolved:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_fail
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_fail
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -424,7 +425,7 @@ class TestSyntheticUnresolved:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_fail
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_fail
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -440,10 +441,10 @@ class TestSyntheticUnresolved:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_fail
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_fail
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -459,13 +460,13 @@ class TestSyntheticUnresolved:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: (_ for _ in ()).throw(RuntimeError("simulated executor crash")),
         )
 
@@ -482,13 +483,13 @@ class TestSyntheticUnresolved:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(resolved=[], unresolved=[], dry_run=kw.get("dry_run", False)),
         )
 
@@ -523,13 +524,13 @@ class TestPerSceneExecution:
                 )
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_executor
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_executor
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -557,13 +558,13 @@ class TestBridgeAndAssets:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset(asset_preference="photograph")],
                 dry_run=kw.get("dry_run", False),
@@ -591,13 +592,13 @@ class TestStatusBehavior:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -635,10 +636,10 @@ class TestStatusBehavior:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
 
         def mock_exec(**kw):
@@ -657,7 +658,7 @@ class TestStatusBehavior:
             )
 
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -671,7 +672,7 @@ class TestStatusBehavior:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_fail
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_fail
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -695,13 +696,13 @@ class TestDryRun:
             )
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         fetch_images_v2.main([str(metadata_path), "--dry-run"])
@@ -722,13 +723,13 @@ class TestDryRun:
             )
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         fetch_images_v2.main([str(metadata_path)])
@@ -751,13 +752,13 @@ class TestUserAgent:
             )
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         fetch_images_v2.main([str(metadata_path), "--user-agent", "my-bot/3.0"])
@@ -771,13 +772,13 @@ class TestAtomicWrite:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -795,13 +796,13 @@ class TestAtomicWrite:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -823,7 +824,7 @@ class TestAtomicWrite:
 
         failed = False
         try:
-            with patch("fetch_images_v2.os.replace", failing_replace):
+            with patch("shorts_creator.assets.fetcher.os.replace", failing_replace):
                 exit_code = fmain([str(metadata_path)])
         except OSError:
             failed = True
@@ -838,13 +839,13 @@ class TestAtomicWrite:
         metadata_path.write_text(original_content, encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -876,13 +877,13 @@ class TestStdoutSummary:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -909,13 +910,13 @@ class TestExitCodes:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -930,7 +931,7 @@ class TestExitCodes:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_fail
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_fail
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -956,13 +957,13 @@ class TestSourceIsolation:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -1001,13 +1002,13 @@ class TestNoLegacyFields:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -1027,13 +1028,13 @@ class TestNoLiveHttp:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2",
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
             lambda **kw: _wrap_executor_result(
                 resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
             ),
@@ -1095,13 +1096,13 @@ class TestSceneNumberNamespace:
             )
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -1152,10 +1153,10 @@ class TestSceneNumberNamespace:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
 
         executor_called = [False]
@@ -1165,7 +1166,7 @@ class TestSceneNumberNamespace:
             return _wrap_executor_result(resolved=[], dry_run=kw.get("dry_run", False))
 
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -1202,10 +1203,10 @@ class TestSceneNumberNamespace:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
 
         executor_called = [False]
@@ -1215,7 +1216,7 @@ class TestSceneNumberNamespace:
             return _wrap_executor_result(resolved=[], dry_run=kw.get("dry_run", False))
 
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -1249,10 +1250,10 @@ class TestSceneNumberNamespace:
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
 
         executor_called = [False]
@@ -1262,7 +1263,7 @@ class TestSceneNumberNamespace:
             return _wrap_executor_result(resolved=[], dry_run=kw.get("dry_run", False))
 
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -1281,13 +1282,13 @@ class TestSceneNumberNamespace:
             return _wrap_executor_result(resolved=[], dry_run=kw.get("dry_run", False))
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         fetch_images_v2.main([str(metadata_path), "--dry-run"])
@@ -1326,13 +1327,13 @@ class TestSceneNumberNamespace:
             )
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -1392,13 +1393,13 @@ class TestSceneNumberNamespace:
             return _wrap_executor_result(resolved=[], dry_run=kw.get("dry_run", False))
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -1465,13 +1466,13 @@ class TestAccumulatedExclusions:
             )
 
         monkeypatch.setattr(
-            "visual_plan_v2.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
         )
         monkeypatch.setattr(
-            "visual_asset_router_v2.build_visual_sourcing_plan_v2", _mock_router_ok
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", _mock_router_ok
         )
         monkeypatch.setattr(
-            "visual_asset_executor_v2.execute_visual_sourcing_plan_v2", mock_exec
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2", mock_exec
         )
 
         exit_code = fetch_images_v2.main([str(metadata_path)])
@@ -1491,30 +1492,29 @@ class TestResolvePixabayApiKey:
 
     def test_key_in_environ_used(self, monkeypatch):
         monkeypatch.setenv("PIXABAY_API_KEY", "test-key-123")
-        from fetch_images_v2 import _resolve_pixabay_api_key
+        from shorts_creator.assets.fetcher import _resolve_pixabay_api_key
         result = _resolve_pixabay_api_key()
         assert result == "test-key-123"
 
     def test_environ_has_precedence_over_env_file(self, monkeypatch, tmp_path):
         monkeypatch.setenv("PIXABAY_API_KEY", "environ-key")
-        from fetch_images_v2 import _resolve_pixabay_api_key
+        from shorts_creator.assets.fetcher import _resolve_pixabay_api_key
         result = _resolve_pixabay_api_key()
         assert result == "environ-key"
 
     def test_empty_env_key_returns_none(self, monkeypatch):
         monkeypatch.setenv("PIXABAY_API_KEY", "")
-        from fetch_images_v2 import _resolve_pixabay_api_key
-        import fetch_images_v2
-        monkeypatch.setattr(fetch_images_v2.os, "environ", {"PIXABAY_API_KEY": ""})
-        monkeypatch.setattr(fetch_images_v2.Path, "__init__", lambda self, *a: None)
-        monkeypatch.setattr(fetch_images_v2.Path, "resolve", lambda self: self)
-        monkeypatch.setattr(fetch_images_v2.Path, "exists", lambda self: False)
+        from shorts_creator.assets.fetcher import _resolve_pixabay_api_key
+        monkeypatch.setattr(asset_fetcher.os, "environ", {"PIXABAY_API_KEY": ""})
+        monkeypatch.setattr(asset_fetcher.Path, "__init__", lambda self, *a: None)
+        monkeypatch.setattr(asset_fetcher.Path, "resolve", lambda self: self)
+        monkeypatch.setattr(asset_fetcher.Path, "exists", lambda self: False)
         result = _resolve_pixabay_api_key()
         assert result is None
 
     def test_resolve_does_not_print_key_stdout(self, monkeypatch, capsys):
         monkeypatch.setenv("PIXABAY_API_KEY", "secret-key-value")
-        from fetch_images_v2 import _resolve_pixabay_api_key
+        from shorts_creator.assets.fetcher import _resolve_pixabay_api_key
         _resolve_pixabay_api_key()
         out = capsys.readouterr()
         assert "secret-key-value" not in out.out + out.err

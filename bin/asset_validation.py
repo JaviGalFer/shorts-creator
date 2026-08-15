@@ -6,6 +6,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+from _package_bootstrap import ensure_src_on_path
+
+ensure_src_on_path()
+
 MIN_ASSET_WIDTH = 720
 MIN_ASSET_HEIGHT = 720
 MIN_SCORE = 30
@@ -67,7 +71,7 @@ def validate_asset_file(asset_path: str, project_root: Path, video_dir: Path | N
         with Image.open(p) as img:
             w, h = img.size
             if is_v2:
-                from visual_asset_renderability_v2 import is_v2_asset_dimension_renderable
+                from shorts_creator.assets.renderability import is_v2_asset_dimension_renderable
                 if not is_v2_asset_dimension_renderable(w, h):
                     failures.append({
                         "rule": "dimensions_too_small",

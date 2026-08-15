@@ -16,7 +16,7 @@ import pytest
 PROJECT = Path("/home/javi/projects/shorts-creator")
 sys.path.insert(0, str(PROJECT / "bin"))
 
-from visual_provider_wikimedia_v2 import (
+from shorts_creator.assets.providers.wikimedia import (
     resolve_wikimedia_candidate_v2,
     download_wikimedia_asset_v2,
     _extract_query_text,
@@ -372,15 +372,15 @@ class TestCanonicalConstantsImported:
     """Verify Wikimedia provider uses canonical constants from renderability module."""
 
     def test_default_width_matches_canonical(self):
-        from visual_asset_renderability_v2 import MIN_V2_ASSET_WIDTH
-        from visual_provider_wikimedia_v2 import resolve_wikimedia_candidate_v2 as resolve_fn
+        from shorts_creator.assets.renderability import MIN_V2_ASSET_WIDTH
+        from shorts_creator.assets.providers.wikimedia import resolve_wikimedia_candidate_v2 as resolve_fn
         import inspect
         sig = inspect.signature(resolve_fn)
         assert sig.parameters["min_width"].default == MIN_V2_ASSET_WIDTH
 
     def test_default_height_matches_canonical(self):
-        from visual_asset_renderability_v2 import MIN_V2_ASSET_HEIGHT
-        from visual_provider_wikimedia_v2 import resolve_wikimedia_candidate_v2 as resolve_fn
+        from shorts_creator.assets.renderability import MIN_V2_ASSET_HEIGHT
+        from shorts_creator.assets.providers.wikimedia import resolve_wikimedia_candidate_v2 as resolve_fn
         import inspect
         sig = inspect.signature(resolve_fn)
         assert sig.parameters["min_height"].default == MIN_V2_ASSET_HEIGHT
@@ -995,7 +995,7 @@ class TestQueryCache:
 
 class TestRateLimitedDiagnosis:
     def test_429_exhausted_raises_rate_limited_error(self):
-        from visual_provider_wikimedia_v2 import WikimediaRateLimitedError
+        from shorts_creator.assets.providers.wikimedia import WikimediaRateLimitedError
 
         def _always_429(req, timeout=None):
             raise urllib.error.HTTPError(
@@ -1008,7 +1008,7 @@ class TestRateLimitedDiagnosis:
                     resolve_wikimedia_candidate_v2(["test query"])
 
     def test_429_with_retry_after_header(self):
-        from visual_provider_wikimedia_v2 import WikimediaRateLimitedError
+        from shorts_creator.assets.providers.wikimedia import WikimediaRateLimitedError
 
         error_count = [0]
 
@@ -1031,7 +1031,7 @@ class TestRateLimitedDiagnosis:
         assert args[0] == 2.0
 
     def test_429_retry_once_without_header_defaults_1s(self):
-        from visual_provider_wikimedia_v2 import WikimediaRateLimitedError
+        from shorts_creator.assets.providers.wikimedia import WikimediaRateLimitedError
 
         error_count = [0]
 

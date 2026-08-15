@@ -9,7 +9,7 @@ from pathlib import Path
 PROJECT = Path("/home/javi/projects/shorts-creator")
 sys.path.insert(0, str(PROJECT / "bin"))
 
-from visual_asset_bridge_v2 import (
+from shorts_creator.assets.bridge import (
     apply_visual_assets_v2_to_metadata,
     V2_LEGACY_FIELDS,
 )
@@ -367,7 +367,7 @@ def test_no_legacy_v1_fields_emitted():
     }
     result = apply_visual_assets_v2_to_metadata(metadata, executor_result)
 
-    from visual_asset_bridge_v2 import _ensure_no_v1_fields
+    from shorts_creator.assets.bridge import _ensure_no_v1_fields
     violations = _ensure_no_v1_fields(result["assets"])
     assert violations == [], f"v1 fields found in assets: {violations}"
 
@@ -953,7 +953,7 @@ class TestCompatibilityWithoutSceneNumber:
 
     def test_unresolved_segment_preserves_provider_attempts(self):
         """Bridge reads providerAttempts (new field) and persists _attemptedProviders."""
-        from visual_asset_bridge_v2 import apply_visual_assets_v2_to_metadata
+        from shorts_creator.assets.bridge import apply_visual_assets_v2_to_metadata
         metadata = _base_metadata()
         exec_result = {
             "resolvedAssets": [],
@@ -992,7 +992,7 @@ class TestCompatibilityWithoutSceneNumber:
 
     def test_unresolved_segment_no_provider_attempts_empty_list(self):
         """When providerAttempts is missing, _attemptedProviders is empty list."""
-        from visual_asset_bridge_v2 import apply_visual_assets_v2_to_metadata
+        from shorts_creator.assets.bridge import apply_visual_assets_v2_to_metadata
         metadata = _base_metadata()
         exec_result = {
             "resolvedAssets": [],

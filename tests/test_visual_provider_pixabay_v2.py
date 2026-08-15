@@ -16,7 +16,7 @@ import pytest
 PROJECT = Path("/home/javi/projects/shorts-creator")
 sys.path.insert(0, str(PROJECT / "bin"))
 
-from visual_provider_pixabay_v2 import (
+from shorts_creator.assets.providers.pixabay import (
     resolve_pixabay_candidates_v2,
     download_pixabay_asset_v2,
     _read_cache,
@@ -319,7 +319,7 @@ class TestResolveApiKey:
 class TestResolveQueryEncoding:
     def test_query_url_encoded_special_chars(self):
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             return_value=({"hits": [_mock_hit(1)], "totalHits": 1}, 200),
         ):
             candidates = resolve_pixabay_candidates_v2(
@@ -337,7 +337,7 @@ class TestResolveQueryEncoding:
             return ({"hits": [_mock_hit(1)], "totalHits": 1}, 200)
         import urllib.parse
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             wraps=_mock,
         ):
             pass
@@ -354,7 +354,7 @@ class TestResolveImageTypeMapping:
             parsed = up.parse_qs(up.urlparse(url).query)
             requests_params.append(parsed)
             return ({"hits": [_mock_hit(1)], "totalHits": 1}, 200)
-        with patch("visual_provider_pixabay_v2._http_get_json", wraps=mock):
+        with patch("shorts_creator.assets.providers.pixabay._http_get_json", wraps=mock):
             resolve_pixabay_candidates_v2(
                 ["test"], api_key="KEY", asset_preference="photograph",
             )
@@ -370,7 +370,7 @@ class TestResolveImageTypeMapping:
             parsed = up.parse_qs(up.urlparse(url).query)
             requests_params.append(parsed)
             return ({"hits": [_mock_hit(1)], "totalHits": 1}, 200)
-        with patch("visual_provider_pixabay_v2._http_get_json", wraps=mock):
+        with patch("shorts_creator.assets.providers.pixabay._http_get_json", wraps=mock):
             resolve_pixabay_candidates_v2(
                 ["test"], api_key="KEY", asset_preference="stock",
             )
@@ -385,7 +385,7 @@ class TestResolveImageTypeMapping:
             parsed = up.parse_qs(up.urlparse(url).query)
             requests_params.append(parsed)
             return ({"hits": [_mock_hit(1)], "totalHits": 1}, 200)
-        with patch("visual_provider_pixabay_v2._http_get_json", wraps=mock):
+        with patch("shorts_creator.assets.providers.pixabay._http_get_json", wraps=mock):
             resolve_pixabay_candidates_v2(
                 ["test"], api_key="KEY", asset_preference="illustration",
             )
@@ -399,7 +399,7 @@ class TestResolveImageTypeMapping:
             parsed = up.parse_qs(up.urlparse(url).query)
             requests_params.append(parsed)
             return ({"hits": [_mock_hit(1)], "totalHits": 1}, 200)
-        with patch("visual_provider_pixabay_v2._http_get_json", wraps=mock):
+        with patch("shorts_creator.assets.providers.pixabay._http_get_json", wraps=mock):
             resolve_pixabay_candidates_v2(
                 ["test"], api_key="KEY", asset_preference="diagram",
             )
@@ -418,7 +418,7 @@ class TestResolveParams:
             p = up.parse_qs(up.urlparse(url).query)
             params.append(p)
             return ({"hits": [_mock_hit(1)], "totalHits": 1}, 200)
-        with patch("visual_provider_pixabay_v2._http_get_json", wraps=mock):
+        with patch("shorts_creator.assets.providers.pixabay._http_get_json", wraps=mock):
             resolve_pixabay_candidates_v2(
                 ["test"], api_key="KEY", asset_preference="photograph",
                 min_width=800,
@@ -434,7 +434,7 @@ class TestResolveParams:
             p = up.parse_qs(up.urlparse(url).query)
             params.append(p)
             return ({"hits": [_mock_hit(1)], "totalHits": 1}, 200)
-        with patch("visual_provider_pixabay_v2._http_get_json", wraps=mock):
+        with patch("shorts_creator.assets.providers.pixabay._http_get_json", wraps=mock):
             resolve_pixabay_candidates_v2(
                 ["test"], api_key="KEY", asset_preference="photograph",
                 min_height=800,
@@ -450,7 +450,7 @@ class TestResolveParams:
             p = up.parse_qs(up.urlparse(url).query)
             params.append(p)
             return ({"hits": [_mock_hit(1)], "totalHits": 1}, 200)
-        with patch("visual_provider_pixabay_v2._http_get_json", wraps=mock):
+        with patch("shorts_creator.assets.providers.pixabay._http_get_json", wraps=mock):
             resolve_pixabay_candidates_v2(
                 ["test"], api_key="KEY", asset_preference="photograph",
             )
@@ -465,7 +465,7 @@ class TestResolveParams:
 class TestResolveResultShape:
     def test_resolved_result_has_expected_fields(self):
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             return_value=({"hits": [_mock_hit(1)], "totalHits": 1}, 200),
         ):
             candidates = resolve_pixabay_candidates_v2(
@@ -483,7 +483,7 @@ class TestResolveResultShape:
     def test_source_url_comes_from_page_url(self):
         hit = _mock_hit(pageURL="https://pixabay.com/photos/my-photo-42/")
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             return_value=({"hits": [hit], "totalHits": 1}, 200),
         ):
             candidates = resolve_pixabay_candidates_v2(
@@ -494,7 +494,7 @@ class TestResolveResultShape:
     def test_author_comes_from_user_field(self):
         hit = _mock_hit(user="johndoe")
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             return_value=({"hits": [hit], "totalHits": 1}, 200),
         ):
             candidates = resolve_pixabay_candidates_v2(
@@ -509,7 +509,7 @@ class TestResolveResultShape:
 class TestResolveErrors:
     def test_401_returns_empty_list(self):
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             return_value=(None, 401),
         ):
             candidates = resolve_pixabay_candidates_v2(
@@ -519,7 +519,7 @@ class TestResolveErrors:
 
     def test_403_returns_empty_list(self):
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             return_value=(None, 403),
         ):
             candidates = resolve_pixabay_candidates_v2(
@@ -529,7 +529,7 @@ class TestResolveErrors:
 
     def test_429_returns_empty_list(self):
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             return_value=(None, 429),
         ):
             candidates = resolve_pixabay_candidates_v2(
@@ -539,7 +539,7 @@ class TestResolveErrors:
 
     def test_timeout_returns_empty_list(self):
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             return_value=(None, None),
         ):
             candidates = resolve_pixabay_candidates_v2(
@@ -549,7 +549,7 @@ class TestResolveErrors:
 
     def test_zero_results_returns_empty_list(self):
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             return_value=({"hits": [], "totalHits": 0}, 200),
         ):
             candidates = resolve_pixabay_candidates_v2(
@@ -566,7 +566,7 @@ class TestResolveExcluded:
         hits = [_mock_hit(1, pageURL="https://pixabay.com/photos/skip-me/"),
                 _mock_hit(2, pageURL="https://pixabay.com/photos/use-me/")]
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             return_value=({"hits": hits, "totalHits": 2}, 200),
         ):
             candidates = resolve_pixabay_candidates_v2(
@@ -580,7 +580,7 @@ class TestResolveExcluded:
         hits = [_mock_hit(1, largeImageURL="https://pixabay.com/get/skip.jpg"),
                 _mock_hit(2, largeImageURL="https://pixabay.com/get/use.jpg")]
         with patch(
-            "visual_provider_pixabay_v2._http_get_json",
+            "shorts_creator.assets.providers.pixabay._http_get_json",
             return_value=({"hits": hits, "totalHits": 2}, 200),
         ):
             candidates = resolve_pixabay_candidates_v2(
@@ -612,7 +612,7 @@ class TestResolveCache:
             call_count[0] += 1
             return ({"hits": [], "totalHits": 0}, 200)
 
-        with patch("visual_provider_pixabay_v2._http_get_json", wraps=mock):
+        with patch("shorts_creator.assets.providers.pixabay._http_get_json", wraps=mock):
             candidates = resolve_pixabay_candidates_v2(
                 ["test"], api_key="KEY", asset_preference="photograph",
                 cache_dir=cache_dir, cache_ttl_sec=86400,
@@ -635,7 +635,7 @@ class TestResolveCache:
             call_count[0] += 1
             return ({"hits": new_hits, "totalHits": 1}, 200)
 
-        with patch("visual_provider_pixabay_v2._http_get_json", wraps=mock):
+        with patch("shorts_creator.assets.providers.pixabay._http_get_json", wraps=mock):
             candidates = resolve_pixabay_candidates_v2(
                 ["test"], api_key="KEY", asset_preference="photograph",
                 cache_dir=cache_dir, cache_ttl_sec=0,
@@ -655,7 +655,7 @@ class TestResolveCache:
             call_count[0] += 1
             return ({"hits": [_mock_hit(1)], "totalHits": 1}, 200)
 
-        with patch("visual_provider_pixabay_v2._http_get_json", wraps=mock):
+        with patch("shorts_creator.assets.providers.pixabay._http_get_json", wraps=mock):
             candidates = resolve_pixabay_candidates_v2(
                 ["test"], api_key="KEY", asset_preference="photograph",
                 cache_dir=cache_dir, cache_ttl_sec=86400,
@@ -696,7 +696,7 @@ class TestDownload:
             op.write_bytes(real_jpeg)
             return True, "image/jpeg", len(real_jpeg)
 
-        with patch("visual_provider_pixabay_v2._http_download", wraps=_mock_download):
+        with patch("shorts_creator.assets.providers.pixabay._http_download", wraps=_mock_download):
             result = download_pixabay_asset_v2(candidate, output)
         assert result["ok"] is True, f"error: {result.get('error')}"
         assert output.exists()
@@ -714,7 +714,7 @@ class TestDownload:
         }
         output = tmp_path / "test.jpg"
         with patch(
-            "visual_provider_pixabay_v2._http_download",
+            "shorts_creator.assets.providers.pixabay._http_download",
             return_value=(True, "application/pdf", 5000),
         ):
             result = download_pixabay_asset_v2(candidate, output)
@@ -731,7 +731,7 @@ class TestDownload:
         }
         output = tmp_path / "test.jpg"
         with patch(
-            "visual_provider_pixabay_v2._http_download",
+            "shorts_creator.assets.providers.pixabay._http_download",
             return_value=(True, "image/jpeg", 5000),
         ):
             result = download_pixabay_asset_v2(candidate, output)
@@ -748,7 +748,7 @@ class TestDownload:
         }
         output = tmp_path / "test.jpg"
         with patch(
-            "visual_provider_pixabay_v2._http_download",
+            "shorts_creator.assets.providers.pixabay._http_download",
             return_value=(True, "image/jpeg", 10),
         ):
             result = download_pixabay_asset_v2(candidate, output, min_size_bytes=100)
@@ -797,7 +797,7 @@ class TestNoHotlinking:
             op.write_bytes(real_jpeg)
             return True, "image/jpeg", len(real_jpeg)
 
-        with patch("visual_provider_pixabay_v2._http_download", wraps=_mock_download):
+        with patch("shorts_creator.assets.providers.pixabay._http_download", wraps=_mock_download):
             result = download_pixabay_asset_v2(candidate, output)
         assert result["ok"] is True
         assert "pixabay" not in result["path"]

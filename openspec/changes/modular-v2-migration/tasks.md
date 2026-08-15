@@ -38,7 +38,7 @@
 2. [x] Metadata infrastructure — shared store extracted and adopted by equivalent consumers.
 3. [x] Script domain — generation ownership moved to `script/`; `bin/` is a CLI adapter.
 4. [x] Audio.
-5. [ ] Assets.
+5. [x] Assets.
 6. [ ] Rendering + validation.
 7. [ ] Pipeline + `bin/` adapter reduction.
 8. [ ] Stabilization and final review.
@@ -52,3 +52,11 @@ Additional infrastructure is extracted only when required by a migrating domain,
 - [x] Migrate internal helper imports and monkeypatches to the canonical audio modules.
 - [x] Verify audio consumers (`209 passed`), CLI smokes, and full suite (`1199 passed`).
 - [x] Preserve the existing `AUDIO_DURATION_MISSING`, `duration_estimated`, probing fallback, status, and exit-code behavior unchanged.
+
+## Assets domain
+- [x] Move fetch runtime, router, executor, bridge, renderability, provider config, Wikimedia, and Pixabay implementations under `assets/`.
+- [x] Replace `bin/fetch_images_v2.py` with an argparse adapter calling `fetch_assets(...)`.
+- [x] Remove all seven non-entrypoint Visual Assets V2 implementations from `bin/` without legacy facades.
+- [x] Migrate internal imports, monkeypatches, source-isolation checks, and the `asset_validation` renderability consumer to canonical modules.
+- [x] Preserve deliberate atomic metadata writes (`.tmp` + `os.replace`) inside Assets rather than replacing them with the non-atomic shared store.
+- [x] Verify asset consumers (`517 passed`), CLI smokes, and full suite (`1203 passed`).
