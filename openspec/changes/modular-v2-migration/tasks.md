@@ -37,10 +37,18 @@
 1. [x] Contracts foundation — VisualPlan V2 and duration contracts canonical under `contracts/`.
 2. [x] Metadata infrastructure — shared store extracted and adopted by equivalent consumers.
 3. [x] Script domain — generation ownership moved to `script/`; `bin/` is a CLI adapter.
-4. [ ] Audio.
+4. [x] Audio.
 5. [ ] Assets.
 6. [ ] Rendering + validation.
 7. [ ] Pipeline + `bin/` adapter reduction.
 8. [ ] Stabilization and final review.
 
 Additional infrastructure is extracted only when required by a migrating domain, not as an independent campaign. Job/state/result contracts remain deferred until concrete consumers establish their boundaries.
+
+## Audio domain
+- [x] Move per-scene and continuous generation, timing, duration probing, metadata updates, and audio-stage status decisions to `audio/generator.py`.
+- [x] Replace `bin/generate_audio.py` with an argparse/async adapter using explicit domain parameters.
+- [x] Move the required TTS provider implementation into `audio/tts_provider.py`; retain only a compatibility facade for its benchmark consumer.
+- [x] Migrate internal helper imports and monkeypatches to the canonical audio modules.
+- [x] Verify audio consumers (`209 passed`), CLI smokes, and full suite (`1199 passed`).
+- [x] Preserve the existing `AUDIO_DURATION_MISSING`, `duration_estimated`, probing fallback, status, and exit-code behavior unchanged.

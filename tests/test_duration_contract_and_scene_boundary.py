@@ -111,7 +111,7 @@ def test_magallanes_cross_scene_leakage_now_fails():
 
 def test_canonical_tokens_built_from_narration_units():
     """_build_canonical_tokens must produce ordered tokens with scene and unit index."""
-    from generate_audio import _build_canonical_tokens
+    from shorts_creator.audio.generator import _build_canonical_tokens
     narration_units = [
         {"sceneNumber": 1, "sentenceIndex": 0, "text": "La erupción del Vesubio."},
         {"sceneNumber": 1, "sentenceIndex": 1, "text": "Comenzó en el año 79."},
@@ -136,7 +136,7 @@ def test_canonical_tokens_built_from_narration_units():
 
 def test_match_words_to_canonical_assigns_scene():
     """Edge WordBoundary words must get correct scene from canonical matching."""
-    from generate_audio import _build_canonical_tokens, _match_words_to_canonical
+    from shorts_creator.audio.generator import _build_canonical_tokens, _match_words_to_canonical
     narration_units = [
         {"sceneNumber": 1, "sentenceIndex": 0, "text": "La erupción."},
         {"sceneNumber": 2, "sentenceIndex": 0, "text": "El volcán."},
@@ -161,7 +161,7 @@ def test_match_words_to_canonical_assigns_scene():
 
 def test_match_words_to_canonical_no_cross_scene_leakage():
     """Canonical matching must prevent 'El' from scene 2 leaking into scene 1."""
-    from generate_audio import _build_canonical_tokens, _match_words_to_canonical, group_words_into_cues
+    from shorts_creator.audio.generator import _build_canonical_tokens, _match_words_to_canonical, group_words_into_cues
     # Simulate Wright scenario: scene 1 ends with "voló", scene 2 starts with "El"
     narration_units = [
         {"sceneNumber": 1, "sentenceIndex": 0, "text": "El Flyer I voló."},
@@ -196,7 +196,7 @@ def test_match_words_to_canonical_no_cross_scene_leakage():
 
 def test_span_aware_matching_berlin_wall():
     """Span-aware matching must prevent scene 2 from owning scenes 3-5 content."""
-    from generate_audio import _build_canonical_tokens, _match_words_to_canonical, group_words_into_cues
+    from shorts_creator.audio.generator import _build_canonical_tokens, _match_words_to_canonical, group_words_into_cues
     # Berlin Wall v2: 5 scenes (scenes 1 omitted, testing 2-5 cross-scene)
     narration_units = [
         {"sceneNumber": 2, "sentenceIndex": 0, "text": "El 13 de agosto de 1961, comenzó la construcción del Muro."},
@@ -747,7 +747,7 @@ def test_null_asset_path_none_caught_by_preflight():
 
 def test_edge_tts_word_boundary_preferred():
     """When timingProvider='auto' and edge_tts is used, timing source must be WordBoundary."""
-    from tts_provider import EdgeTTSProvider
+    from shorts_creator.audio.tts_provider import EdgeTTSProvider
     provider = EdgeTTSProvider()
     meta = provider.metadata
     # EdgeTTS supports sentence timing natively; WordBoundary is set via boundary= param
