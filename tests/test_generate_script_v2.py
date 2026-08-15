@@ -22,7 +22,11 @@ from visual_plan_v2 import (
     ALLOWED_TRANSITIONS,
 )
 
-import generate_script as gs
+import generate_script as cli
+from shorts_creator.script import generator as gs
+
+# Existing end-to-end cases exercise argument parsing while patching the domain.
+gs.main = cli.main
 
 # ── SYSTEM_PROMPT_V2 ─────────────────────────────────────────────────────────
 # SYSTEM_PROMPT_V2 is built at module import from ALLOWED_ASSET_PREFERENCES

@@ -235,7 +235,7 @@ def test_word_budget_classify_in_range():
 
 def test_word_budget_generate_script_uses_budget():
     """Verify generate_script's _build_duration_prompt_instruction_v2 uses budget."""
-    from generate_script import _build_duration_prompt_instruction_v2 as _build_duration_prompt_instruction
+    from shorts_creator.script.generator import _build_duration_prompt_instruction_v2 as _build_duration_prompt_instruction
     budget = calculate_word_budget(target_sec=35, min_sec=32, max_sec=38, scene_count=5)
     instruction = _build_duration_prompt_instruction(budget, "balanced")
     assert "57" in instruction
@@ -246,7 +246,7 @@ def test_word_budget_generate_script_uses_budget():
 
 def test_word_budget_retry_instruction_contains_correction():
     """Retry instruction must include actual word count, missing words, budgets."""
-    from generate_script import _build_retry_instruction_v2 as _build_retry_instruction
+    from shorts_creator.script.generator import _build_retry_instruction_v2 as _build_retry_instruction
     budget = calculate_word_budget(target_sec=35, min_sec=32, max_sec=38, scene_count=5)
     instruction = _build_retry_instruction(budget, actual_word_count=54, actual_scene_count=5, estimated_dur=30.9, structural_issues=[], allow_generated_images=False)
     assert "54" in instruction
@@ -262,20 +262,20 @@ def test_word_budget_retry_instruction_contains_correction():
 
 def test_system_prompt_no_fixed_duration():
     """SYSTEM_PROMPT must not contain fixed '25-30' duration range."""
-    from generate_script import SYSTEM_PROMPT_V2 as SYSTEM_PROMPT
+    from shorts_creator.script.generator import SYSTEM_PROMPT_V2 as SYSTEM_PROMPT
     assert "25-30" not in SYSTEM_PROMPT, "SYSTEM_PROMPT must not hardcode duration range"
     assert "<30s" not in SYSTEM_PROMPT, "SYSTEM_PROMPT must not reference under-30 limit"
 
 
 def test_system_prompt_no_fixed_word_count():
     """SYSTEM_PROMPT must not contain fixed '45-55' word range."""
-    from generate_script import SYSTEM_PROMPT_V2 as SYSTEM_PROMPT
+    from shorts_creator.script.generator import SYSTEM_PROMPT_V2 as SYSTEM_PROMPT
     assert "45-55" not in SYSTEM_PROMPT, "SYSTEM_PROMPT must not hardcode word count"
 
 
 def test_standard_profile_prompt_has_dynamic_budget():
     """standard_32_38 dry-run prompt must include 32-38 range and 57-67 word budget."""
-    from generate_script import _build_duration_prompt_instruction_v2 as _build_duration_prompt_instruction
+    from shorts_creator.script.generator import _build_duration_prompt_instruction_v2 as _build_duration_prompt_instruction
     budget = calculate_word_budget(target_sec=35, min_sec=32, max_sec=38, scene_count=5)
     inst = _build_duration_prompt_instruction(budget, "balanced")
     assert "32" in inst and "38" in inst, "standard_32_38 prompt must contain min/max duration"
@@ -285,7 +285,7 @@ def test_standard_profile_prompt_has_dynamic_budget():
 
 def test_extended_profile_prompt_has_dynamic_budget():
     """extended_50_60 dry-run prompt must include 50-60 range and its own word budget."""
-    from generate_script import _build_duration_prompt_instruction_v2 as _build_duration_prompt_instruction
+    from shorts_creator.script.generator import _build_duration_prompt_instruction_v2 as _build_duration_prompt_instruction
     budget = calculate_word_budget(target_sec=55, min_sec=50, max_sec=60, scene_count=6)
     inst = _build_duration_prompt_instruction(budget, "balanced")
     assert "50" in inst and "60" in inst, "extended_50_60 prompt must contain min/max duration"
@@ -296,7 +296,7 @@ def test_extended_profile_prompt_has_dynamic_budget():
 
 def test_short_profile_prompt_has_correct_range():
     """short_25_30 prompt must still include its own 25-30 range and word budget."""
-    from generate_script import _build_duration_prompt_instruction_v2 as _build_duration_prompt_instruction
+    from shorts_creator.script.generator import _build_duration_prompt_instruction_v2 as _build_duration_prompt_instruction
     budget = calculate_word_budget(target_sec=28, min_sec=25, max_sec=30, scene_count=5)
     inst = _build_duration_prompt_instruction(budget, "balanced")
     assert "25" in inst and "30" in inst, "short_25_30 prompt must contain min/max duration"
@@ -306,7 +306,7 @@ def test_short_profile_prompt_has_correct_range():
 
 def test_prompt_has_no_fixed_under_30_reference():
     """Dynamic prompt must not fall back to hardcoded under-30 constraints."""
-    from generate_script import _build_duration_prompt_instruction_v2 as _build_duration_prompt_instruction
+    from shorts_creator.script.generator import _build_duration_prompt_instruction_v2 as _build_duration_prompt_instruction
     budget = calculate_word_budget(target_sec=35, min_sec=32, max_sec=38, scene_count=5)
     inst = _build_duration_prompt_instruction(budget, "balanced")
     assert "<30s" not in inst

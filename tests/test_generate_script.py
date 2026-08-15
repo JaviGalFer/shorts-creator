@@ -7,6 +7,8 @@ if str(_BIN) not in sys.path:
 
 
 import json as _json
+import generate_script as cli
+from shorts_creator.script import generator as gs
 
 
 def _v2_vp(**overrides):
@@ -59,7 +61,7 @@ _V2_SINGLE_SCENE_CTA = {
 
 def test_max_script_attempts_is_three():
     """MAX_SCRIPT_ATTEMPTS permits initial generation + up to 2 retries."""
-    from generate_script import MAX_SCRIPT_ATTEMPTS
+    from shorts_creator.script.generator import MAX_SCRIPT_ATTEMPTS
     assert MAX_SCRIPT_ATTEMPTS == 3, (
         f"Expected MAX_SCRIPT_ATTEMPTS=3 (initial + 2 retries), got {MAX_SCRIPT_ATTEMPTS}"
     )
@@ -74,8 +76,6 @@ def test_main_retry_loop_3_attempts_3rd_succeeds(monkeypatch, tmp_path):
     full expansion that lands in range -> SCRIPT_DRAFT on the third call.
     """
     import sys as _sys
-    import generate_script as gs
-
     out = tmp_path / "metadata.json"
 
     # resp_1: full script of 60 words (5 scenes x 12) -> over max 52.
@@ -115,7 +115,7 @@ def test_main_retry_loop_3_attempts_3rd_succeeds(monkeypatch, tmp_path):
     monkeypatch.setattr(_sys, "argv", ["generate_script.py", "--topic", "Test", "--duration", "30",
                                         "--output", str(out)])
 
-    exit_code = gs.main()
+    exit_code = cli.main()
     assert exit_code == 0
 
     assert call_count[0] == 3, f"Expected 3 LLM calls, got {call_count[0]}"
@@ -140,8 +140,6 @@ def test_main_retry_loop_3_attempts_3rd_succeeds(monkeypatch, tmp_path):
 def test_main_retry_loop_3_attempts_all_fail_review_required(monkeypatch, tmp_path):
     """Integration: main() calls LLM 3 times, all fail V2 validation -> REVIEW_REQUIRED."""
     import sys as _sys
-    import generate_script as gs
-
     out = tmp_path / "metadata.json"
     resp = _json.dumps(_V2_SINGLE_SCENE_CTA)
 
@@ -155,7 +153,7 @@ def test_main_retry_loop_3_attempts_all_fail_review_required(monkeypatch, tmp_pa
     monkeypatch.setattr(_sys, "argv", ["generate_script.py", "--topic", "Test", "--duration", "30",
                                         "--output", str(out)])
 
-    exit_code = gs.main()
+    exit_code = cli.main()
     assert exit_code == 0
 
     assert call_count[0] == 3

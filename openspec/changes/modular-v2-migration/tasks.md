@@ -27,9 +27,20 @@
 - [x] Retain local JSON operations unrelated to metadata persistence.
 - [x] Run direct consumer tests and metadata-store tests (`170 passed`), CLI smokes, full suite (`1193 passed`), scope checks, and commit.
 
-## Remaining slices
-- [ ] Extract remaining pure contracts, then low-coupling infrastructure.
-- [ ] Migrate script and reassess paused audio pacing Phase B.
-- [ ] Migrate audio, assets, rendering, and validation in verified increments.
-- [ ] Extract pipeline orchestration and reduce `bin/` to adapters.
-- [ ] Complete final review and merge criteria before merging to `main`.
+## Script domain
+- [x] Move prompts, LLM integration, V2 validation, retry/compression, candidate ranking, metadata construction, and generation flow to `script/generator.py`.
+- [x] Replace `bin/generate_script.py` with a thin argparse adapter calling explicit domain parameters.
+- [x] Migrate internal-helper imports and monkeypatches to the canonical domain module.
+- [x] Verify architectural ownership, direct consumers (`318 passed`), CLI smokes, and full suite (`1196 passed`).
+
+## Migration milestones
+1. [x] Contracts foundation — VisualPlan V2 and duration contracts canonical under `contracts/`.
+2. [x] Metadata infrastructure — shared store extracted and adopted by equivalent consumers.
+3. [x] Script domain — generation ownership moved to `script/`; `bin/` is a CLI adapter.
+4. [ ] Audio.
+5. [ ] Assets.
+6. [ ] Rendering + validation.
+7. [ ] Pipeline + `bin/` adapter reduction.
+8. [ ] Stabilization and final review.
+
+Additional infrastructure is extracted only when required by a migrating domain, not as an independent campaign. Job/state/result contracts remain deferred until concrete consumers establish their boundaries.
