@@ -26,14 +26,20 @@ The routing policy is derived from:
 - `docs/research/opencode-free-models-benchmark-r1.md` — audited technical report
 - `tools/benchmarks/opencode-free-models-r1/results-summary.json` — structured metrics
 - `tools/benchmarks/opencode-free-models-r1/manifest.json` — benchmark scope and timestamp
+- `docs/research/opencode-free-models-benchmark-r2.md` — R2 close report (2026-08-14), manual adjudication
+- `tools/benchmarks/opencode-free-models-r2/manifest.json` — R2 scope and runner
 
-The benchmark was:
+R1 was:
 
 - a read-only audit of two files (`bin/run_job.py`, `bin/generate_script.py`);
 - limited to 4 agentic steps;
 - restricted to the `benchmark-readonly` agent (no edit, bash, task, or web tools);
 - not a test of code-change capability;
 - not to be repeated routinely.
+
+R2 added a hermetic Build task (`_compute_operational_word_target`) over 8 runs
+(4 models x 2 tasks), variant `default`. R2-B produced the first real evidence
+of code-change capability; scoring was manual due to known scorer limitations.
 
 ## 3. Task classification
 
@@ -55,7 +61,7 @@ The benchmark was:
 - Maximum steps: 3
 - Read-only: yes
 - Scope: explicit files or symbols only
-- Notes: strongest verified technical correctness in R1, but formatting compliance must not be assumed
+- Notes: strongest verified technical correctness in R1; R2-A core 6/6 y económico (8,839 input tk); formatting compliance must not be assumed (no JSON en markdown / incompleto)
 
 ### Planning
 
@@ -64,28 +70,29 @@ The benchmark was:
 - Maximum steps: 4
 - Read-only: yes
 - Output: compact implementation plan persisted in OpenSpec
-- Notes: planning suitability is inferred from the read-only audit, not independently validated
+- Notes: planning suitability is inferred from the read-only audit, not independently validated. Primary `opencode/big-pickle` (R2-A core 6/6).
 
 ### Review
 
-- Primary: `opencode/big-pickle`
+- Primary: `opencode/nemotron-3.5-lightning-free` (R2: focused review, JSON final presente)
 - Variant: default
 - Maximum steps: 3
 - Read-only: yes
 - Scope: diff, focused tests, and acceptance criteria only
+- Notes: R2-A audit completo; JSON final presente (parser false-negative en markdown, adjudicación manual)
 
-### Implementation
+### Implementation / Build
 
-- Status: `provisional-unvalidated-on-code-changes`
-- Initial candidate: `opencode/deepseek-v4-flash-free`
-- Variant: low
+- Status: `validated-on-hermetic-build (R2-B)`
+- Primary: `opencode/nemotron-3.5-lightning-free` (PASS R2-B: solo `src/generate_script.py` + pytest 2/2)
+- Variant: default
 - Maximum steps: 6
 - Subagents: denied
 - Scope: at most five functional files per slice
 - Correction cycles: maximum one
 - Required: focused tests before any complete suite
-
-DeepSeek is not a validated Builder. This assignment is provisional.
+- Fallback: `opencode/deepseek-v4-flash-free` (R2-B FAIL por no realizar cambios, pero audit completo en R2-A)
+- Notes: big-pickle y laguna produjeron código correcto pero no ejecutaron pytest (INCOMPLETE); nemotron es el único Build validado.
 
 ### Test triage
 
@@ -97,7 +104,7 @@ DeepSeek is not a validated Builder. This assignment is provisional.
 
 ### Fallback
 
-- Model: `opencode/deepseek-v4-flash-free`, variant low
+- Model: `opencode/deepseek-v4-flash-free`, variant default (R2-A audit completo, económico)
 - Fallback means an alternative for a failed exploration, planning, or review task. It does not imply automatic retry loops.
 
 ## 5. Models not selected
@@ -106,6 +113,7 @@ DeepSeek is not a validated Builder. This assignment is provisional.
 - `north-mini-code-free`: do not select because of poor token economy in this benchmark (82,887 input tokens for 2 files, zero cache utilisation).
 - `hy3-free`: do not select until a successful completion is observed (incomplete coverage in R1: read only 1 of 2 files).
 - `nemotron-3-ultra-free`: not selected by the audited report. Preserve as unassigned rather than declaring it universally unsuitable.
+- `laguna-s-2.1-free`: do not select for routine use. R2-A analysis correct but no final JSON answer; R2-B produced correct code but did not run pytest (INCOMPLETE) and used high token input (128K).
 
 ## 6. Execution limits
 
@@ -165,7 +173,7 @@ Reassess the routing only when:
 - a selected model fails three real tasks of its assigned category;
 - a new relevant free model becomes available;
 - modularization materially reduces context requirements;
-- real implementation evidence contradicts the current provisional routing.
+- real implementation evidence contradicts the current routing (R2-B validated nemotron-3.5-lightning-free as Build; a later Build failure would reassess).
 
 Do not rerun synthetic benchmarks routinely.
 

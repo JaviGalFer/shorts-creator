@@ -1,0 +1,61 @@
+Trabaja en:
+
+#WORKDIR#
+
+## Benchmark
+
+- Nombre: R2-B word-budget operational target (Build hermético).
+- Sesión: nueva e independiente.
+- Modelo y variante: fijados externamente por el comando de ejecución.
+- Agente y modo: benchmark-builder, Build sobre sandbox aislado.
+- Máximo: 6 iteraciones agénticas.
+- No invoques subagentes.
+- No cargues skills.
+- No consultes Internet.
+- No llames a proveedores LLM, APIs ni Docker.
+
+## Objetivo
+
+En `src/generate_script.py` existe la función `_compute_operational_word_target`
+que, dado un presupuesto de palabras `{"minimumWords": int, "preferredWords": int,
+"maximumWords": int}`, debe devolver un objetivo operativo interno de palabras
+habladas conforme al contrato descrito en su docstring: un valor de orientación
+(no un contrato) que nunca reemplaza a `preferredWords` ni `maximumWords`, y que
+siempre queda dentro de `[minimumWords, maximumWords]`. Cuando `preferredWords`
+roza el máximo, debe dar margen por debajo del techo.
+
+Implementa o corrige únicamente `_compute_operational_word_target` en
+`src/generate_script.py`. Después verifica con los tests deterministas. No toques
+los tests.
+
+## Alcance permitido
+
+- src/generate_script.py
+- tests/test_operational_word_target.py (lectura permitida)
+- tests/conftest.py (lectura permitida)
+
+No modifiques ningún otro archivo.
+
+## Verificación
+
+Ejecuta el siguiente comando y confirma que todos los tests pasan:
+
+    python -m pytest tests/test_operational_word_target.py -q
+
+No ejecutes la suite completa ni ningún test que requiera red/proveedores.
+
+## Formato obligatorio
+
+Responde únicamente con JSON válido y con esta estructura exacta:
+
+{
+  "implemented": true,
+  "testsPassed": 0,
+  "testsFailed": 0,
+  "filesModified": [],
+  "toolCalls": 0,
+  "changedLines": 0,
+  "notes": ""
+}
+
+No incluyas markdown, comentarios ni texto fuera del JSON.
