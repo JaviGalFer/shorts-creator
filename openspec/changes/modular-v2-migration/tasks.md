@@ -13,6 +13,14 @@
 - [x] Verify canonical and legacy imports share the same duration objects.
 - [x] Run duration tests (`38 passed`), CLI smokes, full suite (`1190 passed`), and scope checks; commit.
 
+## Slice 3 — Metadata infrastructure
+- [x] Move `run_job` JSON metadata persistence to `infrastructure/metadata_store.py`.
+- [x] Preserve `run_job` module aliases for legacy monkeypatch targets.
+- [x] Verify round-trip, JSON formatting, and canonical store use.
+- [x] Run affected runner tests (`114 passed`), CLI smoke, full suite (`1193 passed`), scope checks, and commit.
+- [x] Defer `contracts/job.py`, `contracts/states.py`, and `contracts/results.py` until script/pipeline consumers make their boundaries concrete; do not create speculative contracts.
+- [x] Document `clone_job.py` and `generate_script.py` JSON persistence as future candidates without migrating them in this slice.
+
 ## Remaining slices
 - [ ] Extract remaining pure contracts, then low-coupling infrastructure.
 - [ ] Migrate script and reassess paused audio pacing Phase B.

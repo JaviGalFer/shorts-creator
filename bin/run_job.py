@@ -19,7 +19,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _package_bootstrap import ensure_src_on_path
+
+ensure_src_on_path()
+
 from duration_profiles import add_duration_profile_args, resolve_requested_duration
+from shorts_creator.infrastructure.metadata_store import load_metadata, save_metadata
 
 ORCHESTRATION_VERSION = "1"
 
@@ -184,17 +189,6 @@ def parse_script_output(stdout: str) -> dict | None:
             except json.JSONDecodeError:
                 continue
     return None
-
-
-def load_metadata(path: str) -> dict:
-    with open(path, "r") as f:
-        return json.load(f)
-
-
-def save_metadata(path: str, data: dict) -> None:
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.write("\n")
 
 
 def append_orchestration(
