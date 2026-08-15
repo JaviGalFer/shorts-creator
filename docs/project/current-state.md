@@ -5,12 +5,14 @@
 ## Estado global
 
 Pipeline funcional de vídeos cortos verticales con duración configurable. Scripts en `bin/` operativos. n8n como orquestador legacy. Docker para render. V2 es el único contrato visual soportado.
-
 **Último change completado:** `retire-legacy-visual-v1` (2026-08-14) — retirada completa del contrato visual V1. Baseline funcional **`1181 passed, 0 failed`**.
 
-**Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script).
+**Change cerrado:** `modular-foundation` (2026-08-14) — fundación modular Python: `pyproject.toml`, paquete `src/shorts_creator/` con `contracts/` e `infrastructure/` scaffold, `tests/test_modular_foundation.py`. Baseline actualizada **`1186 passed, 0 failed** (5 tests de packaging + 1181 originales). Primera extracción real hacia `contracts/infrastructure` pendiente.
 
-**Siguiente prioridad:** modularización (`src/shorts_creator/`, `pyproject.toml`). No iniciada todavía.
+
+**Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script a `src/`).
+
+**Siguiente prioridad:** primera extracción real hacia `contracts/` e `infrastructure/` desde `src/shorts_creator/`. Cambio `modular-foundation` cerrado; baseline `1186 passed, 0 failed`.
 
 **Routing de modelos:** benchmark R2 cerrado (2026-08-14) — `nemotron-3.5-lightning-free` validado para review y Build; `big-pickle` para exploration/planning; fallback Build `deepseek-v4-flash-free`; `laguna-s-2.1-free` sin uso rutinario. Routing actualizado en `model-routing-and-token-economy/SKILL.md`. Detalle: `docs/research/opencode-free-models-benchmark-r2.md`.
 

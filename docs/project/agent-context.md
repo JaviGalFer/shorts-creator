@@ -23,12 +23,13 @@ Contexto operativo mínimo para agentes. No es changelog. Detalle en `docs/proje
 
 ## Trabajo actual / próximo
 
-- Change pausado: `improve-short-form-audio-pacing-v2` — Phase A completada; Phase B pendiente tras migrar dominio script.
-- Siguiente prioridad infraestructura: modularización (`src/shorts_creator/`, `pyproject.toml`) — no iniciada.
+- Change cerrado: `modular-foundation` — fundación modular Python completada; baseline `1186 passed, 0 failed`.
+- Siguiente prioridad: primera extracción real hacia `contracts/` e `infrastructure/` desde `src/shorts_creator/`.
+- Change pausado: `improve-short-form-audio-pacing-v2` — Phase A completada; Phase B pendiente.
 
 ## Blockers vigentes
 
-- Audio: `AUDIO_DURATION_MISSING` — medida de duración de escenas no devuelta durante el run (`duration_estimated=true`; fallback Docker válido manualmente → probable fallo transitorio). Pospuesto como trabajo independiente.
+- Audio: `AUDIO_DURATION_MISSING` — fuera de scope modular foundation; fallback Docker válido manualmente → prob.
 - `ffprobe` no presente en host (depende de fallback Docker).
 
 ## Punteros a documentación
