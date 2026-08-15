@@ -11,7 +11,7 @@ Contexto operativo mínimo para agentes. No es changelog. Detalle en `docs/proje
 
 ## Baseline funcional
 
-- Suite completa: **`1181 passed, 0 failed`**.
+- Suite completa: **`1186 passed, 0 failed`**.
 - `MAX_SCRIPT_ATTEMPTS == 3`. Contratos de duración 30s: `minimumWords=47 / preferredWords=52 / maximumWords=52 / operationalWordTarget=50`.
 
 ## Estado Git / workflow

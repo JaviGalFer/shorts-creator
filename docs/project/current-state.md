@@ -1,13 +1,13 @@
 # Estado actual del proyecto
 
-**Última actualización:** 2026-08-14
+**Última actualización:** 2026-08-15
 
 ## Estado global
 
 Pipeline funcional de vídeos cortos verticales con duración configurable. Scripts en `bin/` operativos. n8n como orquestador legacy. Docker para render. V2 es el único contrato visual soportado.
-**Último change completado:** `retire-legacy-visual-v1` (2026-08-14) — retirada completa del contrato visual V1. Baseline funcional **`1181 passed, 0 failed`**.
+**Último change completado:** `modular-foundation` (2026-08-14) — fundación modular Python: `pyproject.toml`, paquete `src/shorts_creator/` con `contracts/` e `infrastructure/` scaffold, `tests/test_modular_foundation.py`. Baseline actual **`1186 passed, 0 failed`**.
 
-**Change cerrado:** `modular-foundation` (2026-08-14) — fundación modular Python: `pyproject.toml`, paquete `src/shorts_creator/` con `contracts/` e `infrastructure/` scaffold, `tests/test_modular_foundation.py`. Baseline actualizada **`1186 passed, 0 failed** (5 tests de packaging + 1181 originales). Primera extracción real hacia `contracts/infrastructure` pendiente.
+**Change cerrado:** `modular-foundation` (2026-08-14) — fundación modular Python: `pyproject.toml`, paquete `src/shorts_creator/` con `contracts/` e `infrastructure/` scaffold, `tests/test_modular_foundation.py`. Baseline actualizada **`1186 passed, 0 failed** (5 tests de packaging + 1181 preexistentes). Primera extracción real hacia `contracts/infrastructure` pendiente.
 
 
 **Change pausado:** `improve-short-form-audio-pacing-v2` — Phase A completada, Phase B pendiente (se reanudará tras migrar dominio script a `src/`).
@@ -25,7 +25,7 @@ Pipeline funcional de vídeos cortos verticales con duración configurable. Scri
 
 ## Baseline funcional
 
-- Suite completa: **`1181 passed, 0 failed`**.
+- Suite completa: **`1186 passed, 0 failed`**.
 - `MAX_SCRIPT_ATTEMPTS == 3`.
 - Contrato de duración (30s): `minimumWords=47 / preferredWords=52 / maximumWords=52 / operationalWordTarget=50`; `spokenWordsPerMinute=110`; `strictness=balanced`.
 - Validator (`bin/visual_plan_v2.py`), runner (`bin/run_job.py`) y perfiles (`bin/duration_profiles.py`) intactos.
@@ -61,9 +61,8 @@ Phase A completada (medición real de duración de audio, política `activeAudio
 
 ## Próximos pasos
 
-1. Migrar a `pyproject.toml` y estructura `src/shorts_creator/`.
-2. Extraer `contracts/` e `infrastructure/`.
-3. Migrar dominio `script/`.
-4. Reanudar audio pacing Phase B.
-5. Migrar `audio/`, `assets/`, `rendering/`, `validation/`; reducir `bin/` a adaptadores.
-6. Investigar instalación de `ffprobe` en el host.
+1. Extraer código real hacia `contracts/` e `infrastructure/`.
+2. Migrar dominio `script/`.
+3. Reanudar audio pacing Phase B.
+4. Migrar `audio/`, `assets/`, `rendering/`, `validation/` y reducir `bin/` a adaptadores.
+5. Investigar `ffprobe` en host.
