@@ -3,6 +3,7 @@
 Run: python3 -m pytest tests/test_duration_profiles.py -v
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -18,6 +19,23 @@ from duration_profiles import (
     resolve_requested_duration,
     calculate_word_budget,
 )
+from shorts_creator.contracts import duration as canonical_duration
+
+
+def test_canonical_duration_contract_matches_legacy_facade():
+    assert canonical_duration.DURATION_PROFILES is DURATION_PROFILES
+    assert canonical_duration.DEFAULT_PROFILE is DEFAULT_PROFILE
+    assert canonical_duration.resolve_duration_config is resolve_duration_config
+    assert canonical_duration.resolve_requested_duration is resolve_requested_duration
+    assert canonical_duration.calculate_word_budget is calculate_word_budget
+
+
+def test_legacy_duration_facade_retains_cli_adapter():
+    parser = argparse.ArgumentParser()
+    from duration_profiles import add_duration_profile_args
+
+    add_duration_profile_args(parser)
+    assert parser.parse_args(["--duration", "42"]).duration == 42
 
 
 def test_default_resolves_to_short_25_30():
