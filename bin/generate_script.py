@@ -13,7 +13,12 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _package_bootstrap import ensure_src_on_path
+
+ensure_src_on_path()
+
 from duration_profiles import add_duration_profile_args, resolve_requested_duration, calculate_word_budget
+from shorts_creator.infrastructure.metadata_store import save_metadata
 from visual_plan_v2 import ALLOWED_ASSET_PREFERENCES, canonicalize_visual_plan_v2
 
 DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
@@ -1774,7 +1779,7 @@ def main() -> int:
         out_path = base / "data" / "videos" / job_id / "metadata.json"
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
+    save_metadata(str(out_path), metadata)
 
     total_beats = sum(len(s.get("narrativeBeats", [])) for s in script_data.get("scenes", []))
     total_with_motion = sum(

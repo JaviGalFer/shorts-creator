@@ -21,6 +21,12 @@
 - [x] Defer `contracts/job.py`, `contracts/states.py`, and `contracts/results.py` until script/pipeline consumers make their boundaries concrete; do not create speculative contracts.
 - [x] Document `clone_job.py` and `generate_script.py` JSON persistence as future candidates without migrating them in this slice.
 
+## Slice 4 — Metadata store adoption
+- [x] Adopt the shared metadata store in equivalent `clone_job.py` persistence.
+- [x] Adopt the shared metadata store in equivalent `generate_script.py` output persistence.
+- [x] Retain local JSON operations unrelated to metadata persistence.
+- [x] Run direct consumer tests and metadata-store tests (`170 passed`), CLI smokes, full suite (`1193 passed`), scope checks, and commit.
+
 ## Remaining slices
 - [ ] Extract remaining pure contracts, then low-coupling infrastructure.
 - [ ] Migrate script and reassess paused audio pacing Phase B.

@@ -14,6 +14,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from _package_bootstrap import ensure_src_on_path
+
+ensure_src_on_path()
+
+from shorts_creator.infrastructure.metadata_store import load_metadata, save_metadata
+
 
 DERIVED_KEYS = {
     "assets",
@@ -68,7 +74,7 @@ def clone_job(
         Path to the new metadata.json.
     """
     source_metadata_path = source_metadata_path.resolve()
-    source_data = json.loads(source_metadata_path.read_text())
+    source_data = load_metadata(str(source_metadata_path))
     project_root = source_metadata_path.parents[3]
 
     if job_id is None:
@@ -91,7 +97,7 @@ def clone_job(
         _apply_scene_patches(script, scene_patches)
 
     target_metadata = target_video_dir / "metadata.json"
-    target_metadata.write_text(json.dumps(cleaned, indent=2, ensure_ascii=False) + "\n")
+    save_metadata(str(target_metadata), cleaned)
     return target_metadata
 
 
@@ -120,7 +126,7 @@ def main() -> int:
             scene_patches.setdefault(sn, {})[key] = value
 
     new_metadata = clone_job(source_path, target_dir, args.job_id, scene_patches)
-    print(json.dumps({"jobId": json.loads(new_metadata.read_text())["jobId"],
+    print(json.dumps({"jobId": load_metadata(str(new_metadata))["jobId"],
                       "metadata": str(new_metadata)}))
     return 0
 
