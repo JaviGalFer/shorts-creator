@@ -135,6 +135,8 @@ python bin/run_job.py --topic "Tema" --duration 37 --duration-tolerance 2
 
 Los presets son atajos de configuración: `--duration N` usa una tolerancia simétrica automática y no queda limitado por ningún preset. La arquitectura admite nuevos presets sin cambiar el fitting.
 
+La planificación inicial también escala con la duración, con una referencia de aproximadamente seis segundos por escena: 30s prefiere 5 escenas y 60s prefiere 10. El fitting posterior conserva la estructura y ajusta solo los voiceovers.
+
 ## Configuración
 
 Las variables de entorno se configuran en `.env`. Ver `.env.example` para la lista completa.
