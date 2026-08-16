@@ -54,7 +54,7 @@ def _get_mp3_duration(audio_path: Path) -> "tuple[float, str] | tuple[None, None
         except Exception:
             pass
 
-    docker_env = {**os.environ, "DOCKER_API_VERSION": "1.43"}
+    docker_env = os.environ.copy()
     try:
         ws_path = audio_path.relative_to(PROJECT_ROOT)
     except ValueError:

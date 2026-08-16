@@ -100,8 +100,8 @@ class TestGetMp3Duration:
                 assert dur == pytest.approx(3.141)
                 assert source == "ffprobe_docker"
 
-    def test_docker_probe_pins_docker_api_version(self, tmp_path):
-        """Docker probe must set DOCKER_API_VERSION=1.43 for compatibility."""
+    def test_docker_probe_no_stale_api_version(self, tmp_path):
+        """Docker probe must NOT force stale DOCKER_API_VERSION=1.43."""
         mp3 = tmp_path / "test.mp3"
         mp3.write_text("fake")
         mock_docker = MagicMock()
@@ -124,8 +124,8 @@ class TestGetMp3Duration:
                 assert captured_env, "subprocess.run was called"
                 env_used = captured_env[0]
                 assert isinstance(env_used, dict)
-                assert env_used.get("DOCKER_API_VERSION") == "1.43", (
-                    "DOCKER_API_VERSION must be set to 1.43"
+                assert "DOCKER_API_VERSION" not in env_used, (
+                    "DOCKER_API_VERSION must not be forced"
                 )
 
     def test_docker_fallback_when_local_fails(self, tmp_path):

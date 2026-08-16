@@ -29,7 +29,7 @@ Contexto operativo mínimo para agentes. No es changelog. Detalle en `docs/proje
 
 ## Blockers vigentes
 
-- Audio: `AUDIO_DURATION_MISSING` — cambio actual en cours de résolution; fix en desarrollo en `change/fix-audio-duration-missing`; se espera resolver el cálculo de mount/path Docker.
+- Audio: `AUDIO_DURATION_MISSING` — resuelto; el pin obsoleto de DOCKER_API_VERSION=1.43 fue eliminado; ffprobe Docker ahora negocia la versión automáticamente.
 - `ffprobe` no presente en host (depende de fallback Docker).
 
 ## Punteros a documentación

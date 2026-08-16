@@ -59,7 +59,7 @@ def _run_local_ffprobe(args: list[str]) -> subprocess.CompletedProcess | None:
 
 def _run_docker_ffprobe(args: list[str], project_root: Path) -> subprocess.CompletedProcess | None:
     try:
-        env = {**os.environ, "DOCKER_API_VERSION": "1.43"}
+        env = {**os.environ}
         return subprocess.run(
             ["docker", "run", "--rm",
              "-v", f"{project_root}:/workspace",

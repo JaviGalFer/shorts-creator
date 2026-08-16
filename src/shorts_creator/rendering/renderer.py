@@ -34,7 +34,7 @@ def _docker_ffmpeg(args: list[str], project_root: Path, timeout: int = 120) -> s
         '-v', f'{project_root}:/workspace',
         'linuxserver/ffmpeg:latest',
     ] + args
-    env = {**os.environ, "DOCKER_API_VERSION": "1.43"}
+    env = {**os.environ}
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
 
 
@@ -1113,7 +1113,7 @@ def render_job(
         print(f"FFmpeg filter complex: {len(filter_parts)} filter parts")
 
         try:
-            env = {**os.environ, "DOCKER_API_VERSION": "1.43"}
+            env = {**os.environ}
             subprocess.run(ffmpeg_args, check=True, timeout=1800, env=env)
             ffmpeg_ok = True
             ffmpeg_exit_code = 0
