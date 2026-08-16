@@ -2010,7 +2010,7 @@ def generate_script(
         "spokenDurationSec": round(spoken_sec, 1),
         "pauseDurationSec": round(pause_sec, 1),
         "estimatedDurationSec": round(estimated_dur, 1),
-        "durationContractStatus": "PASS" if all_ok else "FAIL",
+        "durationContractStatus": "PASS" if duration_ok_after_retries else "FAIL",
         "retries": retries,
         "visualSchemaVersion": 2,
         "status": status,
