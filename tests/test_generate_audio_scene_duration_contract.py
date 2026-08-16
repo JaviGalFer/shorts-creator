@@ -100,8 +100,9 @@ class TestGetMp3Duration:
                 assert dur == pytest.approx(3.141)
                 assert source == "ffprobe_docker"
 
-    def test_docker_probe_no_stale_api_version(self, tmp_path):
+    def test_docker_probe_strips_stale_api_version(self, tmp_path, monkeypatch):
         """Docker probe must NOT force stale DOCKER_API_VERSION=1.43."""
+        monkeypatch.setenv("DOCKER_API_VERSION", "1.43")
         mp3 = tmp_path / "test.mp3"
         mp3.write_text("fake")
         mock_docker = MagicMock()
@@ -125,7 +126,7 @@ class TestGetMp3Duration:
                 env_used = captured_env[0]
                 assert isinstance(env_used, dict)
                 assert "DOCKER_API_VERSION" not in env_used, (
-                    "DOCKER_API_VERSION must not be forced"
+                    "DOCKER_API_VERSION must be stripped before Docker runs"
                 )
 
     def test_docker_fallback_when_local_fails(self, tmp_path):

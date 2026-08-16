@@ -55,6 +55,7 @@ def _get_mp3_duration(audio_path: Path) -> "tuple[float, str] | tuple[None, None
             pass
 
     docker_env = os.environ.copy()
+    docker_env.pop("DOCKER_API_VERSION", None)
     try:
         ws_path = audio_path.relative_to(PROJECT_ROOT)
     except ValueError:
@@ -1241,6 +1242,7 @@ async def main_continuous(metadata_path: Path, voice: str, join_style: str = "pe
     try:
         import subprocess as _sp
         _env = os.environ.copy()
+        _env.pop("DOCKER_API_VERSION", None)
         video_dir_name = metadata_path.parent.name
         r = _sp.run([
             "docker", "run", "--rm",

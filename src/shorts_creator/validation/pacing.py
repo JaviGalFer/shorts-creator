@@ -41,7 +41,8 @@ _SILENCE_DUR_ALT = re.compile(r"silence_duration:\s*([\d.]+)")
 
 
 def _docker_ffmpeg(args: list[str], project_root: Path, timeout: int = 120) -> subprocess.CompletedProcess:
-    docker_env = {**os.environ}
+    docker_env = os.environ.copy()
+    docker_env.pop("DOCKER_API_VERSION", None)
     cmd = [
         "docker", "run", "--rm",
         "-v", f"{project_root}:/workspace",
