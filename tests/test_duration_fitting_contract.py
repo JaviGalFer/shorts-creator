@@ -295,6 +295,29 @@ def test_repair_prompt_has_no_bootstrap_budget_contract():
         "la duración real medida decide" in prompt.lower()
 
 
+def test_repair_prompt_interpolates_operational_target():
+    prompt = _build_voiceover_repair_prompt(
+        _base_script(), direction="EXPAND", current_word_count=52,
+        target_total_words=75, scene_word_targets=[19, 19, 19, 18],
+    )
+    assert "objetivo global de 75 palabras" in prompt
+    assert "{target_total_words}" not in prompt
+
+
+def test_generic_repair_system_prompt_and_temperature():
+    from shorts_creator.script.generator import (
+        COMPRESSION_LLM_TEMPERATURE,
+        VOICEOVER_REPAIR_SYSTEM_PROMPT,
+        _llm_temperature_for_system_prompt,
+    )
+    assert "EXPAND" in VOICEOVER_REPAIR_SYSTEM_PROMPT
+    assert "COMPRESS" in VOICEOVER_REPAIR_SYSTEM_PROMPT
+    assert '"sceneNumber"' in VOICEOVER_REPAIR_SYSTEM_PROMPT
+    assert '"voiceover"' in VOICEOVER_REPAIR_SYSTEM_PROMPT
+    assert "visualPlan" in VOICEOVER_REPAIR_SYSTEM_PROMPT
+    assert _llm_temperature_for_system_prompt(VOICEOVER_REPAIR_SYSTEM_PROMPT) == COMPRESSION_LLM_TEMPERATURE
+
+
 def test_repair_prompt_rejects_unknown_direction():
     script = _base_script()
     with pytest.raises(ValueError):

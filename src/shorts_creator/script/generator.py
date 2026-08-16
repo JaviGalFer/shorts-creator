@@ -251,6 +251,24 @@ Cuando el mensaje indique minimumWords y maximumWords:
 Los objetivos por escena son recomendaciones de distribución; el presupuesto global es prioritario."""
 
 
+VOICEOVER_REPAIR_SYSTEM_PROMPT = """Eres un editor de voz en off para ajuste de duración post-TTS.
+
+Devuelve SOLO JSON válido, sin markdown ni explicaciones, con esta forma exacta:
+{
+  "scenes": [
+    {"sceneNumber": 1, "voiceover": "..."}
+  ]
+}
+
+No devuelvas title, hook, summary, subtitle, targetDurationSec, visualPlan ni
+ningún otro campo. Conserva todas las escenas, su orden y sus sceneNumber.
+No modifiques estructura, significado principal ni planes visuales.
+
+Para EXPAND puedes añadir detalle relevante. Para COMPRESS elimina redundancia
+conservando significado. Sigue el objetivo operativo como guidance: la duración
+TTS real medida posteriormente es la autoridad, no un conteo exacto de palabras."""
+
+
 DEFAULT_LLM_TEMPERATURE = 0.8
 COMPRESSION_LLM_TEMPERATURE = 0.2
 
@@ -268,7 +286,7 @@ def load_env():
 
 
 def _llm_temperature_for_system_prompt(system_prompt: str) -> float:
-    if system_prompt == VOICEOVER_COMPRESSION_SYSTEM_PROMPT:
+    if system_prompt in (VOICEOVER_COMPRESSION_SYSTEM_PROMPT, VOICEOVER_REPAIR_SYSTEM_PROMPT):
         return COMPRESSION_LLM_TEMPERATURE
     return DEFAULT_LLM_TEMPERATURE
 
@@ -1109,7 +1127,7 @@ def _build_voiceover_repair_prompt(
         "",
         "## Objetivos recomendados (guidance)",
         "",
-        "- Aproximate al objetivo global de {target_total_words} palabras, sin obsesionarte con el conteo exacto.",
+        f"- Aproximate al objetivo global de {target_total_words} palabras, sin obsesionarte con el conteo exacto.",
         "- Los targets por escena son recomendaciones (suman el objetivo global).",
         "- Reparte cambios de forma equilibrada entre escenas.",
         "- La autoridad final es la duración de voz real medida tras regenerar; el conteo de palabras es orientativo.",
@@ -1142,6 +1160,48 @@ def _build_voiceover_repair_prompt(
         lines.append("- El gate de imágenes generadas (desactivado) NO se modifica en esta reparación.")
 
     return "\n".join(lines)
+
+
+def repair_voiceover_duration(
+    script: dict,
+    *,
+    direction: str,
+    target_total_words: int,
+    scene_word_targets: list[int],
+    api_key: str,
+    model: str,
+    provider: str = "openai",
+) -> tuple[dict | None, list[dict]]:
+    """Repair only scene voiceovers for a post-TTS duration adjustment."""
+    scenes = script.get("scenes", [])
+    expected_scene_numbers = [scene.get("sceneNumber") for scene in scenes]
+    try:
+        prompt = _build_voiceover_repair_prompt(
+            script,
+            direction=direction,
+            current_word_count=_count_voiceover_words(script),
+            target_total_words=target_total_words,
+            scene_word_targets=scene_word_targets,
+        )
+        response = call_llm(
+            prompt, api_key, model, provider,
+            system_prompt=VOICEOVER_REPAIR_SYSTEM_PROMPT,
+        )
+        payload = json.loads(response)
+    except Exception as exc:
+        return None, [{"code": "DURATION_REPAIR_LLM_FAILED", "message": str(exc)}]
+
+    repaired, errors = _apply_voiceover_repair(
+        script, payload, expected_scene_numbers=expected_scene_numbers,
+    )
+    if errors or repaired is None:
+        return None, errors
+    canonical, validation_errors, _ = _validate_and_canonicalize_script_v2(
+        repaired, allow_generated_images=False,
+    )
+    if validation_errors or canonical is None:
+        return None, [{"code": "DURATION_REPAIR_V2_INVALID", "message": str(validation_errors)}]
+    return repaired, []
 
 
 def _apply_voiceover_repair(
