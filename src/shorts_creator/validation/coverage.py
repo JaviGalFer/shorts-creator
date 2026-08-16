@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 
-from subtitle_normalize import (
+from shorts_creator.validation.subtitle_normalize import (
     normalize_subtitle_text,
     normalize_subtitle_tokens,
     compare_cue_vs_narration_bulk,

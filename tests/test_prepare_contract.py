@@ -6,7 +6,7 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / "bin"))
 
-from prepare_job import _validate_asset_completion
+from shorts_creator.rendering.preparer import _validate_asset_completion
 
 
 def _make_data(scenes, assets, video_dir="/tmp/fake-job"):
@@ -254,7 +254,9 @@ class TestMainAssetGate:
     def test_main_rejects_unresolved_segment(self, monkeypatch, tmp_path):
         """main() with unresolved segment: non-zero exit, ASSET_UNRESOLVED,
         no subtitle/timeline artifacts."""
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -304,7 +306,9 @@ class TestMainAssetGate:
 
     def test_main_rejects_selected_false(self, monkeypatch, tmp_path):
         """main() with selected=false: non-zero exit, SCENE_NOT_SELECTED."""
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -355,7 +359,9 @@ class TestMainAssetGate:
     def test_main_cleans_stale_artifacts(self, monkeypatch, tmp_path):
         """Job with pre-existing subtitle.ass/timeline that then fails
         must have stale artifacts cleaned."""
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -414,7 +420,9 @@ class TestMainAssetGate:
 
     def test_main_accepts_valid_job(self, monkeypatch, tmp_path):
         """Fully valid job: exit 0, subtitle.ass created, timeline written."""
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()

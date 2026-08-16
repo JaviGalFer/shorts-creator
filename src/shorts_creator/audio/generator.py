@@ -1195,7 +1195,7 @@ async def main_continuous(metadata_path: Path, voice: str, join_style: str = "pe
 
     elif subtitle_provider == "whisper" or (subtitle_provider == "auto" and whisper_available):
         try:
-            from whisper_subtitles import align_with_canonical_text
+            from shorts_creator.audio.whisper import align_with_canonical_text
             w_cues_by_scene, wsource, wconfidence, w_warnings = align_with_canonical_text(
                 audio_path=str(output_path),
                 canonical_scenes=[

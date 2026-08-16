@@ -15,7 +15,7 @@ sys.path.insert(0, str(PROJECT / "bin"))
 
 import pytest
 
-from prepare_job import (
+from shorts_creator.rendering.preparer import (
     _resolve_asset_path,
     _validate_asset_completion,
     build_timeline,
@@ -343,7 +343,9 @@ class TestTimelinePreservesRelativePaths:
 
 class TestMainV2AssetsPaths:
     def test_main_accepts_v2_assets_relative_paths(self, monkeypatch, tmp_path):
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -404,7 +406,9 @@ class TestMainV2AssetsPaths:
         assert result["renderTimeline"][0]["assetPath"] == "assets/seg_001.jpg"
 
     def test_main_rejects_missing_v2_assets(self, monkeypatch, tmp_path):
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()

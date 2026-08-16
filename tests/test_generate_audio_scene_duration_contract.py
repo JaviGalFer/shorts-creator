@@ -237,8 +237,10 @@ class TestPerSceneDurationContract:
 
 class TestPreparePreservesDurationSec:
     def test_idempotent_prepare_preserves_duration_sec(self, monkeypatch, tmp_path):
-        """Two consecutive prepare_job runs must produce identical scene durations."""
-        import prepare_job as pj
+        """Two consecutive shorts_creator.rendering.preparer runs must produce identical scene durations."""
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -306,7 +308,9 @@ class TestPreparePreservesDurationSec:
 
     def test_prepare_blocks_missing_duration(self, monkeypatch, tmp_path):
         """Job without valid durationSec must be blocked by prepare."""
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -357,7 +361,9 @@ class TestPreparePreservesDurationSec:
 
     def test_prepare_blocks_none_duration(self, monkeypatch, tmp_path):
         """Job with null durationSec must be blocked."""
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()

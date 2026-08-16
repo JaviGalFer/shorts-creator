@@ -12,7 +12,7 @@ Configuration via environment variables:
   SUBTITLE_PROVIDER: estimated|whisper (default: estimated)
 
 Usage:
-    from whisper_subtitles import align_with_canonical_text
+    from shorts_creator.audio.whisper import align_with_canonical_text
     cues_by_scene, source, confidence, warnings = align_with_canonical_text(
         audio_path="narration.mp3",
         canonical_scenes=[...],  # [{sceneNumber, voiceover, targetDurationSec}]

@@ -6,10 +6,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from _package_bootstrap import ensure_src_on_path
-
-ensure_src_on_path()
-
 MIN_ASSET_WIDTH = 720
 MIN_ASSET_HEIGHT = 720
 MIN_SCORE = 30
@@ -521,13 +517,3 @@ def validate_job_for_render(metadata: dict, project_root: Path, video_dir: Path 
         }
     }
     return result
-
-
-if __name__ == "__main__":
-    import sys
-    path = Path(sys.argv[1]).resolve()
-    project_root = path.parents[3]
-    video_dir = path.parent
-    metadata = json.loads(path.read_text())
-    result = validate_job_for_render(metadata, project_root, video_dir)
-    print(json.dumps(result, indent=2, ensure_ascii=False))

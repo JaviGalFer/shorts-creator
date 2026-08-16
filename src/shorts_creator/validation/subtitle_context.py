@@ -19,7 +19,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from subtitle_normalize import normalize_subtitle_text
+from shorts_creator.validation.subtitle_normalize import normalize_subtitle_text
 
 
 # ── Public API ──────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ def build_validation_context(
 
 
 def _build_continuous_context(metadata: dict) -> dict:
-    from coverage_validation import run_coverage_validation
+    from shorts_creator.validation.coverage import run_coverage_validation
 
     audio_config = metadata.get("audio", {})
     scene_timings = audio_config.get("sceneTimings", [])

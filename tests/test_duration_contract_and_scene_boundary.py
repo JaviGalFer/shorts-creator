@@ -282,7 +282,7 @@ def test_span_aware_matching_berlin_wall():
 
 def test_canonical_validation_detects_cross_scene():
     """validate_canonical_cue_integrity must detect cross-scene word leaks."""
-    from coverage_validation import validate_canonical_cue_integrity
+    from shorts_creator.validation.coverage import validate_canonical_cue_integrity
     narration_units = [
         {"sceneNumber": 1, "sentenceIndex": 0, "text": "La erupción del Vesubio."},
         {"sceneNumber": 2, "sentenceIndex": 0, "text": "Pompeya fue sepultada."},
@@ -712,7 +712,7 @@ def test_skip_validation_produces_asset_warnings():
 
 def test_null_asset_path_caught_by_preflight():
     """Entry with assetPath='' or None must be caught by preflight_validate()."""
-    from render_job import preflight_validate
+    from shorts_creator.rendering.renderer import preflight_validate
     timeline = [
         {"sceneNumber": 1, "beatIndex": 1, "assetPath": "",
          "startSec": 0.0, "endSec": 5.0, "durationSec": 5.0,
@@ -728,7 +728,7 @@ def test_null_asset_path_caught_by_preflight():
 
 def test_null_asset_path_none_caught_by_preflight():
     """Entry with assetPath=None must be caught by preflight_validate()."""
-    from render_job import preflight_validate
+    from shorts_creator.rendering.renderer import preflight_validate
     timeline = [
         {"sceneNumber": 1, "beatIndex": 1, "assetPath": None,
          "startSec": 0.0, "endSec": 5.0, "durationSec": 5.0,

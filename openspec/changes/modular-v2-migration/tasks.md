@@ -39,7 +39,7 @@
 3. [x] Script domain — generation ownership moved to `script/`; `bin/` is a CLI adapter.
 4. [x] Audio.
 5. [x] Assets.
-6. [ ] Rendering + validation.
+6. [x] Rendering + validation.
 7. [ ] Pipeline + `bin/` adapter reduction.
 8. [ ] Stabilization and final review.
 
@@ -60,3 +60,12 @@ Additional infrastructure is extracted only when required by a migrating domain,
 - [x] Migrate internal imports, monkeypatches, source-isolation checks, and the `asset_validation` renderability consumer to canonical modules.
 - [x] Preserve deliberate atomic metadata writes (`.tmp` + `os.replace`) inside Assets rather than replacing them with the non-atomic shared store.
 - [x] Verify asset consumers (`517 passed`), CLI smokes, and full suite (`1203 passed`).
+
+## Rendering + validation domains
+- [x] Move prepare/timeline/subtitle runtime to `rendering/preparer.py` and FFmpeg/render runtime to `rendering/renderer.py`.
+- [x] Replace `prepare_job.py` and `render_job.py` with explicit CLI adapters.
+- [x] Move job, asset, audio, coverage, pacing, subtitle, and visual validation implementations under `validation/`.
+- [x] Replace `validate_job.py` with an explicit CLI adapter and remove all migrated validation auxiliaries from `bin/` without facades.
+- [x] Move Whisper subtitle alignment to `audio/whisper.py` and remove the remaining Audio dependency on `bin/`.
+- [x] Verify no package source imports migrated `bin/` runtimes, focal consumers (`486 passed`), CLI smokes, and full suite (`1210 passed`).
+- [x] Preserve `AUDIO_DURATION_MISSING`, rendering commands, metadata, gates, statuses, and exit-code behavior unchanged.

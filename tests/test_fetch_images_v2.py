@@ -970,8 +970,8 @@ class TestSourceIsolation:
         )
 
         v1_modules = [
-            "fetch_images", "asset_validation", "editorial_asset_contract",
-            "generate_script", "prepare_job", "render_job", "run_job",
+            "fetch_images", "shorts_creator.validation.asset", "editorial_asset_contract",
+            "generate_script", "shorts_creator.rendering.preparer", "shorts_creator.rendering.renderer", "run_job",
         ]
         v1_original_modules = {mod: sys.modules.get(mod) for mod in v1_modules}
 

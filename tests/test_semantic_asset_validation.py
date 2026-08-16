@@ -1,14 +1,14 @@
-"""Regression tests for asset validation, prepare_job, clone_job, and render_job.
+"""Regression tests for asset validation, shorts_creator.rendering.preparer, clone_job, and shorts_creator.rendering.renderer.
 
 These tests are neutral preserved regressions that do not depend on the
 legacy fetch_images V1 stack. They cover:
 
-- render_timeline gap-filling (prepare_job)
+- render_timeline gap-filling (shorts_creator.rendering.preparer)
 - clone_job derived-artifact stripping and scene patching
-- prepare_job path regeneration
-- render_job cross-job preflight
+- shorts_creator.rendering.preparer path regeneration
+- shorts_creator.rendering.renderer cross-job preflight
 - render_timeline per-scene sequential continuity
-- asset_validation role-evidence and reuse-compatibility rules
+- shorts_creator.validation.asset role-evidence and reuse-compatibility rules
 
 Run: python3 -m pytest tests/test_semantic_asset_validation.py -v
 """
@@ -22,7 +22,7 @@ def test_render_timeline_coverage_fills_scene_gaps():
     """Render timeline must cover gaps between scene windows and extend to audio end."""
     from pathlib import Path
     sys.path.insert(0, str(Path("/home/javi/projects/shorts-creator/bin")))
-    from prepare_job import _fill_timeline_gaps
+    from shorts_creator.rendering.preparer import _fill_timeline_gaps
 
     timeline = [
         {"sceneNumber": 1, "beatIndex": 1, "startSec": 0.1, "endSec": 5.675},
@@ -117,9 +117,9 @@ def test_clone_job_applies_scene_patch(tmp_path):
 
 
 def test_prepare_job_regenerates_paths_under_current_job_dir(tmp_path):
-    """prepare_job must write timeline/renderTimeline paths inside the current job dir."""
+    """shorts_creator.rendering.preparer must write timeline/renderTimeline paths inside the current job dir."""
     import json
-    from prepare_job import build_timeline, build_render_timeline
+    from shorts_creator.rendering.preparer import build_timeline, build_render_timeline
 
     video_dir = tmp_path / "v8-job"
     scenes_dir = video_dir / "scenes"
@@ -168,9 +168,9 @@ def test_prepare_job_regenerates_paths_under_current_job_dir(tmp_path):
 
 
 def test_render_preflight_rejects_cross_job_paths(tmp_path):
-    """render_job preflight must fail with CROSS_JOB_ARTIFACT_REFERENCE for external paths."""
+    """shorts_creator.rendering.renderer preflight must fail with CROSS_JOB_ARTIFACT_REFERENCE for external paths."""
     import json
-    from render_job import preflight_validate
+    from shorts_creator.rendering.renderer import preflight_validate
 
     project_root = tmp_path / "project"
     project_root.mkdir()
@@ -237,7 +237,7 @@ def test_render_timeline_per_scene_sequential_continuity():
     old_path = list(sys.path)
     sys.path.insert(0, bin_path)
     try:
-        from prepare_job import build_render_timeline
+        from shorts_creator.rendering.preparer import build_render_timeline
     finally:
         sys.path[:] = old_path
 
@@ -301,7 +301,7 @@ def test_render_timeline_per_scene_sequential_continuity():
 
 def test_border_closure_construction_without_evidence_fails_asset_validation():
     """border_closure_construction role without borderClosureSubjectEvidence fails."""
-    from asset_validation import check_role_evidence
+    from shorts_creator.validation.asset import check_role_evidence
 
     seg = {
         "editorialRole": "border_closure_construction",
@@ -313,7 +313,7 @@ def test_border_closure_construction_without_evidence_fails_asset_validation():
 
 def test_reuse_civilian_impact_for_distinct_event_1989_fails_asset_validation():
     """Reusing a civilian_impact asset for the 1989 fall must fail asset validation."""
-    from asset_validation import check_reuse_compatibility
+    from shorts_creator.validation.asset import check_reuse_compatibility
 
     seg = {
         "reuseReason": "reuse_previous_valid_asset",

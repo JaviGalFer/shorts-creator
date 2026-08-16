@@ -9,7 +9,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from audio_validation import detect_silence_ranges, classify_silences, compute_quality_grade
+from _package_bootstrap import ensure_src_on_path
+
+ensure_src_on_path()
+
+from shorts_creator.validation.audio import detect_silence_ranges, classify_silences, compute_quality_grade
 
 TARGET_CHAPTER_BREAK_SEC = 0.35
 TARGET_LEADING_SEC = 0.1

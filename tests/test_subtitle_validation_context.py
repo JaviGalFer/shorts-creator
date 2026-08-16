@@ -13,7 +13,7 @@ sys.path.insert(0, str(PROJECT / "bin"))
 
 import pytest
 
-from subtitle_validation_context import (
+from shorts_creator.validation.subtitle_context import (
     build_validation_context,
     _build_scene_windows,
     _build_audio_duration_map,
@@ -529,13 +529,15 @@ class TestAssDifferentText:
         assert len(text_errors) >= 1
 
 
-# ── Test 12: render_job uses shared function ─────────────────────────
+# ── Test 12: shorts_creator.rendering.renderer uses shared function ─────────────────────────
 
 
 class TestRenderJobSharedFunction:
     def test_render_job_uses_shared_context_non_continuous(self, tmp_path, monkeypatch):
         """render_job.py main() with non-continuous audio must call build_validation_context."""
-        import render_job as rj
+        import render_job as render_cli
+        import shorts_creator.rendering.renderer as rj
+        rj.main = render_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -609,7 +611,7 @@ class TestRenderJobSharedFunction:
 
 class TestUpdateManifestGates:
     def test_update_manifest_gates_per_scene(self, tmp_path):
-        from validate_job import update_manifest_gates
+        from shorts_creator.validation.job import update_manifest_gates
 
         job_dir = tmp_path / "job"
         job_dir.mkdir()
@@ -645,20 +647,20 @@ class TestUpdateManifestGates:
 
 class TestContinuousAudioRegression:
     def test_continuous_mode_uses_legacy(self, tmp_path, monkeypatch):
-        """Continuous audio must still go through the legacy coverage_validation path."""
+        """Continuous audio must still go through the legacy shorts_creator.validation.coverage path."""
         meta = _make_continuous_metadata()
         meta_copy = copy.deepcopy(meta)
 
         legacy_called = []
 
-        import coverage_validation
-        original_func = coverage_validation.run_coverage_validation
+        import shorts_creator.validation.coverage
+        original_func = shorts_creator.validation.coverage.run_coverage_validation
 
         def spy_run_coverage(scene_timings, audio_dur, cues_by_scene, narration_units, remapped_cues=None):
             legacy_called.append(True)
             return {"status": "PASS", "coverage": {"errors": [], "warnings": []}}
 
-        monkeypatch.setattr(coverage_validation, "run_coverage_validation", spy_run_coverage)
+        monkeypatch.setattr(shorts_creator.validation.coverage, "run_coverage_validation", spy_run_coverage)
 
         ctx = build_validation_context(meta_copy)
         assert ctx["mode"] == "continuous"
@@ -667,7 +669,7 @@ class TestContinuousAudioRegression:
 
     def test_continuous_validate_job_does_not_break(self):
         """Spot check: JobValidator with continuous audio doesn't crash."""
-        from validate_job import JobValidator
+        from shorts_creator.validation.job import JobValidator
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:

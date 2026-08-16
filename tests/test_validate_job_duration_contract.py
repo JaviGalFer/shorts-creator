@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bin"))
-from validate_job import JobValidator, MAX_TOTAL_DURATION, MAX_SEGMENT_DURATION
+from shorts_creator.validation.job import JobValidator, MAX_TOTAL_DURATION, MAX_SEGMENT_DURATION
 
 
 def _make_meta_path(tmp_path: Path, metadata: dict) -> Path:
@@ -339,22 +339,13 @@ def test_continuous_audio_zero_duration_fails(tmp_path):
 
 
 def test_max_segment_duration_matches_render_job():
-    """Verify that validate_job MAX_SEGMENT_DURATION matches render_job."""
-    render_job_mod = None
-    for p in sys.path:
-        candidate = Path(p) / "render_job.py"
-        if candidate.exists():
-            spec = __import__("importlib.util", fromlist=["spec_from_file_location"])
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("render_job", str(candidate))
-            render_job_mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(render_job_mod)
-            break
-    if render_job_mod is not None:
-        assert MAX_SEGMENT_DURATION == render_job_mod.MAX_SEGMENT_DURATION, (
-            f"validate_job MAX_SEGMENT_DURATION ({MAX_SEGMENT_DURATION}) "
-            f"!= render_job MAX_SEGMENT_DURATION ({render_job_mod.MAX_SEGMENT_DURATION})"
-        )
+    """Verify that shorts_creator.validation.job MAX_SEGMENT_DURATION matches shorts_creator.rendering.renderer."""
+    from shorts_creator.rendering import renderer
+
+    assert MAX_SEGMENT_DURATION == renderer.MAX_SEGMENT_DURATION, (
+        f"shorts_creator.validation.job MAX_SEGMENT_DURATION ({MAX_SEGMENT_DURATION}) "
+        f"!= shorts_creator.rendering.renderer MAX_SEGMENT_DURATION ({renderer.MAX_SEGMENT_DURATION})"
+    )
 
 
 # ── Additional: targetDurationSec above old 8.0 limit now passes ──────────

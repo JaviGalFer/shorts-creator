@@ -14,7 +14,7 @@ sys.path.insert(0, str(PROJECT / "bin"))
 
 import pytest
 
-from prepare_job import (
+from shorts_creator.rendering.preparer import (
     resolve_scene_window_duration,
     generate_ass_from_cues,
     fmt_ass_time,
@@ -373,13 +373,15 @@ class TestSubtitleSceneOffsets:
 
 
 # ---------------------------------------------------------------------------
-# Integration: prepare_job main with scene window
+# Integration: shorts_creator.rendering.preparer main with scene window
 # ---------------------------------------------------------------------------
 
 
 class TestMainSceneWindowIntegration:
     def test_non_continuous_scene_window_in_timeline(self, monkeypatch, tmp_path):
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -446,7 +448,9 @@ class TestMainSceneWindowIntegration:
 
     def test_scene_offset_used_in_ass(self, monkeypatch, tmp_path):
         """Subtitle cues must be globally offset in non-continuous mode."""
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -729,7 +733,7 @@ class TestDurationFractionNormalization:
 class TestCueValidation:
     def test_valid_cues_pass_validation(self):
         """Three scenes with valid local cues produce correct global cues."""
-        from prepare_job import resolve_and_validate_global_cues
+        from shorts_creator.rendering.preparer import resolve_and_validate_global_cues
 
         scenes = [
             {"sceneNumber": 1, "subtitleTiming": {"cues": [
@@ -751,7 +755,7 @@ class TestCueValidation:
 
     def test_cue_outside_window_raises(self):
         """Cue that exceeds scene window after offset → ValueError."""
-        from prepare_job import resolve_and_validate_global_cues
+        from shorts_creator.rendering.preparer import resolve_and_validate_global_cues
 
         scenes = [
             {"sceneNumber": 1, "subtitleTiming": {"cues": [
@@ -766,7 +770,7 @@ class TestCueValidation:
 
     def test_cross_scene_overlap_raises(self):
         """Cues from different scenes that overlap globally → ValueError."""
-        from prepare_job import resolve_and_validate_global_cues
+        from shorts_creator.rendering.preparer import resolve_and_validate_global_cues
 
         scenes = [
             {"sceneNumber": 1, "subtitleTiming": {"cues": [
@@ -784,7 +788,7 @@ class TestCueValidation:
 
     def test_nan_start_rejected(self):
         """NaN startSec → ValueError."""
-        from prepare_job import resolve_and_validate_global_cues
+        from shorts_creator.rendering.preparer import resolve_and_validate_global_cues
 
         scenes = [
             {"sceneNumber": 1, "subtitleTiming": {"cues": [
@@ -799,7 +803,7 @@ class TestCueValidation:
 
     def test_negative_start_rejected(self):
         """Negative startSec after offset → ValueError."""
-        from prepare_job import resolve_and_validate_global_cues
+        from shorts_creator.rendering.preparer import resolve_and_validate_global_cues
 
         scenes = [
             {"sceneNumber": 1, "subtitleTiming": {"cues": [
@@ -814,7 +818,7 @@ class TestCueValidation:
 
     def test_end_le_start_rejected(self):
         """endSec <= startSec → ValueError."""
-        from prepare_job import resolve_and_validate_global_cues
+        from shorts_creator.rendering.preparer import resolve_and_validate_global_cues
 
         scenes = [
             {"sceneNumber": 1, "subtitleTiming": {"cues": [
@@ -829,7 +833,7 @@ class TestCueValidation:
 
     def test_original_cues_not_mutated_by_validation(self):
         """Validation must not modify the original cue dicts."""
-        from prepare_job import resolve_and_validate_global_cues
+        from shorts_creator.rendering.preparer import resolve_and_validate_global_cues
 
         original = {"startSec": 0.0, "endSec": 2.0, "text": "pristine"}
         scenes = [
@@ -844,7 +848,7 @@ class TestCueValidation:
 
     def test_continuous_mode_returns_none(self):
         """scene_offsets=None returns None (no validation for continuous)."""
-        from prepare_job import resolve_and_validate_global_cues
+        from shorts_creator.rendering.preparer import resolve_and_validate_global_cues
 
         scenes = [{"sceneNumber": 1, "subtitleTiming": {"cues": []}}]
         result = resolve_and_validate_global_cues(scenes, None, None)

@@ -1,4 +1,4 @@
-"""Tests for asset_validation v2-neutral metadata support.
+"""Tests for shorts_creator.validation.asset v2-neutral metadata support.
 
 Verifies that v2 metadata (marked by _visualAssetBridgeV2) passes asset validation
 without requiring v1 legacy fields (editorialRole, etc.), while v1 behavior is preserved.
@@ -15,14 +15,14 @@ sys.path.insert(0, str(PROJECT / "bin"))
 
 import pytest
 
-import asset_validation
+import shorts_creator.validation.asset
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-MIN_SCORE = asset_validation.MIN_SCORE
+MIN_SCORE = shorts_creator.validation.asset.MIN_SCORE
 
 
 def _make_test_image(path: Path, width: int = 1200, height: int = 800) -> None:
@@ -190,7 +190,7 @@ def test_v2_neutral_wikimedia_passes(tmp_path):
         render_timeline=[_render_entry()],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     failures = result["failures"]
 
     assert result["status"] == "PASS", f"Expected PASS, got {result['status']}: {failures}"
@@ -213,7 +213,7 @@ def test_v2_missing_file_blocked(tmp_path):
         render_timeline=[_render_entry(asset_path="assets/missing.jpg")],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert result["status"] == "BLOCKED"
     assert any(f["rule"] == "file_not_found" for f in result["failures"])
 
@@ -230,7 +230,7 @@ def test_v2_missing_provider_blocked(tmp_path):
         render_timeline=[_render_entry()],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert result["status"] == "BLOCKED"
     assert any(f["rule"] == "missing_provider" for f in result["failures"])
 
@@ -247,7 +247,7 @@ def test_v2_score_zero_with_query_used_no_failures(tmp_path):
         render_timeline=[_render_entry()],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert not any(f["rule"] == "score_below_minimum" for f in result["failures"])
     assert not any(f["rule"] == "no_provenance" for f in result["failures"])
 
@@ -266,7 +266,7 @@ def test_v2_score_zero_no_query_no_provenance(tmp_path):
     metadata["assets"][0]["segments"][0].pop("searchQuery", None)
     metadata["assets"][0]["segments"][0]["queryUsed"] = ""
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert any(f["rule"] == "no_provenance" for f in result["failures"])
     assert result["status"] == "BLOCKED"
 
@@ -284,7 +284,7 @@ def test_v2_score_none_no_query_no_provenance(tmp_path):
     )
     metadata["assets"][0]["segments"][0].pop("searchQuery", None)
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert any(f["rule"] == "no_provenance" for f in result["failures"])
     assert result["status"] == "BLOCKED"
 
@@ -302,7 +302,7 @@ def test_v2_positive_score_below_min_raises_score_below_minimum(tmp_path):
         render_timeline=[_render_entry()],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert any(f["rule"] == "score_below_minimum" for f in result["failures"])
     assert result["status"] == "REVIEW_REQUIRED"
 
@@ -319,7 +319,7 @@ def test_v2_negative_score_detected_and_blocked(tmp_path):
         render_timeline=[_render_entry()],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert any(f["rule"] == "negative_score" for f in result["failures"])
     assert result["status"] == "BLOCKED"
 
@@ -338,7 +338,7 @@ def test_v2_pollinations_low_confidence_review_required(tmp_path):
         render_timeline=[_render_entry()],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     failures = result["failures"]
     assert any(f["rule"] == "low_confidence_provider" for f in failures)
     assert not any(f["rule"] == "ai_generated_misuse" for f in failures)
@@ -363,7 +363,7 @@ def test_v2_segment_validation_fail_blocks(tmp_path):
         render_timeline=[_render_entry()],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert result["status"] == "BLOCKED"
     assert any(f["rule"] == "segment_validation_fail" for f in result["failures"])
 
@@ -384,7 +384,7 @@ def test_v2_renderability_fail_blocks(tmp_path):
         render_timeline=[_render_entry()],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert result["status"] == "BLOCKED"
     assert any(f["rule"] == "renderability_fail" for f in result["failures"])
 
@@ -405,7 +405,7 @@ def test_v2_pexels_passes_no_low_confidence(tmp_path):
         render_timeline=[_render_entry(asset_type="photograph")],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     failures = result["failures"]
 
     assert result["status"] == "PASS", f"Expected PASS, got {result['status']}: {failures}"
@@ -431,7 +431,7 @@ def test_v2_pixabay_passes_no_modern_rules(tmp_path):
         render_timeline=[_render_entry(asset_type="photograph")],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     failures = result["failures"]
 
     assert result["status"] == "PASS", f"Expected PASS, got {result['status']}: {failures}"
@@ -452,7 +452,7 @@ def test_v2_per_segment_query_uses_query_used(tmp_path):
         render_timeline=[_render_entry(asset_type="photograph")],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     per_seg = result["perSegment"][0]
     assert per_seg["query"] == "historical test query"
 
@@ -471,7 +471,7 @@ def test_v2_no_legacy_fields_added(tmp_path):
 
     original_snapshot = json.loads(json.dumps(metadata))
 
-    asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
 
     # metadata dict should not have been mutated (no v1 fields injected into assets)
     for entry in metadata.get("assets", []):
@@ -509,7 +509,7 @@ def test_v2_no_legacy_semantic_rules_executed(tmp_path):
         render_timeline=[_render_entry(asset_type="modern_photograph")],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     failures = result["failures"]
 
     # None of these v1 legacy rules should fire for v2 metadata
@@ -540,7 +540,7 @@ def test_v1_legacy_editorial_role_still_required(tmp_path):
     )
     metadata["assets"][0]["segments"][0].pop("editorialRole", None)
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert any(f["rule"] == "missing_editorialRole" for f in result["failures"])
 
 
@@ -556,7 +556,7 @@ def test_v1_legacy_score_zero_triggers_score_below_minimum(tmp_path):
         render_timeline=[_render_entry(asset_path="scenes/scene-01.jpg", asset_type="historical_photograph")],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert any(f["rule"] == "score_below_minimum" for f in result["failures"])
 
 
@@ -572,7 +572,7 @@ def test_v1_legacy_search_query_still_works(tmp_path):
         render_timeline=[_render_entry(asset_path="scenes/scene-01.jpg", asset_type="historical_photograph")],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     per_seg = result["perSegment"][0]
     assert per_seg["query"] == "Napoleon portrait painting"
 
@@ -598,7 +598,7 @@ def test_v1_pollinations_ai_misuse_preserved(tmp_path):
         render_timeline=[_render_entry(asset_path="scenes/scene-01.jpg", asset_type="historical_photograph")],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert any(f["rule"] == "ai_generated_misuse" for f in result["failures"])
     assert any(f["rule"] == "low_confidence_provider" for f in result["failures"])
 
@@ -619,7 +619,7 @@ def test_v1_pexels_low_confidence_unchanged(tmp_path):
         render_timeline=[_render_entry(asset_path="scenes/scene-01.jpg", asset_type="atmospheric_broll")],
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     assert any(f["rule"] == "low_confidence_provider" for f in result["failures"])
 
 
@@ -641,7 +641,7 @@ def test_v1_modern_asset_rules_executed(tmp_path):
         script={"scenes": [{"sceneNumber": 1, "voiceover": "Historical building", "narrativeBeats": []}]},
     )
 
-    result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+    result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
     # Pexels + atmospheric_broll triggers _is_modern_asset; editorialRole=portrait not in SOFT_ROLES
     assert any(f["rule"] == "modern_asset_hard_role" for f in result["failures"])
 
@@ -668,7 +668,7 @@ class TestV2DimensionContract:
             assets=[_v2_asset_entry(segments=[_v2_segment(width=700, height=435)])],
             render_timeline=[_render_entry()],
         )
-        result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+        result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
         assert result["status"] == "BLOCKED"
         assert any(f["rule"] == "dimensions_too_small" for f in result["failures"])
 
@@ -681,7 +681,7 @@ class TestV2DimensionContract:
             assets=[_v2_asset_entry(segments=[_v2_segment(width=720, height=720)])],
             render_timeline=[_render_entry()],
         )
-        result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+        result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
         assert result["status"] == "PASS"
 
     def test_1200x600_blocked_in_v2(self, tmp_path):
@@ -693,7 +693,7 @@ class TestV2DimensionContract:
             assets=[_v2_asset_entry(segments=[_v2_segment(width=1200, height=600)])],
             render_timeline=[_render_entry()],
         )
-        result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+        result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
         assert result["status"] == "BLOCKED"
         assert any(f["rule"] == "dimensions_too_small" for f in result["failures"])
 
@@ -706,7 +706,7 @@ class TestV2DimensionContract:
             assets=[_v2_asset_entry(segments=[_v2_segment(width=600, height=1200)])],
             render_timeline=[_render_entry()],
         )
-        result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+        result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
         assert result["status"] == "BLOCKED"
         assert any(f["rule"] == "dimensions_too_small" for f in result["failures"])
 
@@ -719,7 +719,7 @@ class TestV2DimensionContract:
             assets=[_v2_asset_entry(segments=[_v2_segment(width=721, height=902)])],
             render_timeline=[_render_entry()],
         )
-        result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+        result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
         assert result["status"] == "PASS"
 
 
@@ -737,5 +737,5 @@ class TestV1DimensionContractPreserved:
             render_timeline=[_render_entry(asset_path="scenes/scene-01.jpg",
                                             asset_type="historical_photograph")],
         )
-        result = asset_validation.validate_job_for_render(metadata, project_root, video_dir)
+        result = shorts_creator.validation.asset.validate_job_for_render(metadata, project_root, video_dir)
         assert not any(f["rule"] == "dimensions_too_small" for f in result["failures"])

@@ -1,7 +1,7 @@
 """Regression tests for topic-specific sourcing contamination.
 
 Verifies that no Berlin, Constantinople, Istanbul, or other topic-specific
-hardcoded vocabulary remains in asset_validation.py production lists.
+hardcoded vocabulary remains in shorts_creator.validation.asset.py production lists.
 
 Run: python3 -m pytest tests/test_no_topic_specific_contamination.py -v
 """
@@ -30,22 +30,22 @@ PROHIBITED_TERMS = [
 
 
 def test_no_prohibited_terms_in_bin_asset_validation_source():
-    """bin/asset_validation.py must not contain prohibited topic-specific terms
+    """src/shorts_creator/validation/asset.py must not contain prohibited topic-specific terms
     in production-level term lists."""
-    content = (PROJECT / "bin" / "asset_validation.py").read_text()
+    content = (PROJECT / "src" / "shorts_creator" / "validation" / "asset.py").read_text()
     for term in PROHIBITED_TERMS:
         count = len(re.findall(re.escape(term), content, re.IGNORECASE))
         assert count == 0, (
-            f"PROHIBITED: '{term}' found {count} time(s) in bin/asset_validation.py"
+            f"PROHIBITED: '{term}' found {count} time(s) in src/shorts_creator/validation/asset.py"
         )
 
 
-# ── No theme constraints remain in asset_validation ──────────────────────
+# ── No theme constraints remain in shorts_creator.validation.asset ──────────────────────
 
 
 def test_theme_constraints_empty():
     """THEME_CONSTRAINTS must be empty — no hardcoded themes."""
-    from asset_validation import THEME_CONSTRAINTS
+    from shorts_creator.validation.asset import THEME_CONSTRAINTS
     assert len(THEME_CONSTRAINTS) == 0, (
         f"THEME_CONSTRAINTS must be empty, got: {list(THEME_CONSTRAINTS.keys())}"
     )
@@ -53,7 +53,7 @@ def test_theme_constraints_empty():
 
 def test_legacy_keywords_no_topic_specific():
     """LEGACY_KEYWORDS must not contain Istanbul/Estambul."""
-    from asset_validation import LEGACY_KEYWORDS
+    from shorts_creator.validation.asset import LEGACY_KEYWORDS
     assert "estambul" not in LEGACY_KEYWORDS and "Estambul" not in LEGACY_KEYWORDS, \
         f"LEGACY_KEYWORDS contains Istanbul-specific term"
     assert "istanbul" not in LEGACY_KEYWORDS, \
@@ -62,7 +62,7 @@ def test_legacy_keywords_no_topic_specific():
 
 def test_modern_query_keywords_no_topic_specific():
     """MODERN_QUERY_KEYWORDS must not contain Istanbul/Estambul."""
-    from asset_validation import MODERN_QUERY_KEYWORDS
+    from shorts_creator.validation.asset import MODERN_QUERY_KEYWORDS
     for kw in MODERN_QUERY_KEYWORDS:
         assert kw.lower() not in ("istanbul", "estambul"), \
             f"MODERN_QUERY_KEYWORDS contains Istanbul-specific term: '{kw}'"
