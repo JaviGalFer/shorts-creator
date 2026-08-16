@@ -11,6 +11,7 @@ Fit duration generically across provider, voice, language, and future TTS implem
 - Slice 2: projected-duration loop, maximum two repairs, forced TTS regeneration, retained assets. **Completed; focal simulated tests passed.**
 - Slice 2 runtime hardening: script `.env` LLM reuse and preservation of audio provider/voice/timing configuration. **Completed.**
 - Slice 3: MP4 `requestedDurationCompliance`, separate from render integrity, manifest/status gates. **Completed; full suite passed.**
+- E2E bootstrap fix: V2-valid scripts no longer block on WPM estimates; structural validity is the script-stage gate. **Completed; real E2E rerun pending.**
 
 ## Out of scope
 Provider calibration history, perceptual pacing, asset semantics, music, UI, n8n, and a real E2E validation of the completed fitting loop.

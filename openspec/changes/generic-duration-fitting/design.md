@@ -7,3 +7,5 @@ On repair, the script domain requests only scene voiceovers and validates the re
 Runtime hardening reuses the script domain's LLM resolution (including `.env`) and passes the previous audio provider, voice, and timing configuration explicitly to regeneration. This preserves configuration without expanding the existing per-scene multi-provider synthesis runtime.
 
 The post-TTS word target is operational guidance. Actual regenerated audio is re-measured on every attempt.
+
+Bootstrap WPM and the word budget remain initial prompt guidance and telemetry. A structurally valid V2 script is persisted as `SCRIPT_DRAFT` even when its estimated duration is out of range; the subsequent audio stage supplies the authoritative measurement.

@@ -23,7 +23,7 @@ Pipeline V2 funcional y E2E técnico demostrado. Docker se utiliza para render y
 
 El primer E2E técnico real solicitó 30s y generó un MP4 de aproximadamente 20.88s: el pipeline técnico pasó, pero incumplió el rango solicitado. El fitting post-TTS bounded y la comprobación final de cumplimiento de duración del MP4 están implementados; aún requieren una nueva validación E2E real.
 
-Suite completa más reciente en la rama activa: **`1267 passed, 0 failed`**.
+La estimación WPM del guion es bootstrap no bloqueante; tras TTS, la duración medida y el fitting bounded son la autoridad. Suite completa más reciente en la rama activa: **`1216 passed, 51 skipped, 0 failed`**.
 
 Referencias:
 - `docs/project/current-state.md` — estado detallado
@@ -202,7 +202,7 @@ n8n no es el orquestador canónico del pipeline V2.
 
 - `ffprobe` no está instalado en el host; la medición de duración de audio usa Docker como fallback.
 - La aceleración GPU no está implementada; el render usa CPU.
-- La validación final de duración solicitada del MP4 es el siguiente slice; la integridad del render y el cumplimiento de producto se tratarán por separado.
+- Falta repetir el E2E real del duration fitting; la integridad del render y el cumplimiento de producto ya se tratan por separado.
 - No hay publicación automática ni integración con redes sociales.
 
 ## Documentación adicional

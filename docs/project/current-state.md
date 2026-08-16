@@ -13,8 +13,9 @@
 - Slice 2 completado con tests focales simulados: loop en orquestador, máximo dos repairs, proyección compartida con prepare, regeneración TTS forzada y reutilización de assets. Si se agota, el job queda `REVIEW_REQUIRED` con `DURATION_FITTING_EXHAUSTED` sin ejecutar prepare/render.
 - Hardening runtime de Slice 2: el repair reutiliza la resolución LLM del dominio script (`.env` incluido) y la regeneración preserva provider/voice/timing del audio previo. No amplía el path per-scene real a multi-provider TTS.
 - Slice 3 completado (`6cfb8c3`): `requestedDurationCompliance` usa la duración real del MP4, queda separado de `renderDurationIntegrity`, se persiste en metadata/manifest y un producto fuera de rango termina `REVIEW_REQUIRED`, no `FAILED`.
+- Intento E2E real `cmo-2026-08-16-184819`: bloqueado en script porque el gate histórico de estimación WPM rechazó un V2 válido de 67 palabras (37.9s estimados). Fix implementado: V2 válido => `SCRIPT_DRAFT`; la estimación bootstrap sigue como telemetría no bloqueante y TTS real decide después.
 
 ## Baseline y límites
-- Baseline estable conocida en main: **`1215 passed, 0 failed`**. Suite completa de la rama activa tras Slice 3: **`1267 passed, 0 failed`**.
+- Baseline estable conocida en main: **`1215 passed, 0 failed`**. Suite completa de la rama activa tras el bootstrap fix: **`1216 passed, 51 skipped, 0 failed`**.
 - `AUDIO_DURATION_MISSING` está resuelto. `ffprobe` no está en host y depende del fallback Docker.
 - Siguiente paso exacto, antes de otra prioridad: repetir el E2E real con `python3 bin/run_job.py --topic "Cómo se forma un arcoíris" --duration 30 --verbose`.
