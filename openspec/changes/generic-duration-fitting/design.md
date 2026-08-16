@@ -9,3 +9,5 @@ Runtime hardening reuses the script domain's LLM resolution (including `.env`) a
 The post-TTS word target is operational guidance. Actual regenerated audio is re-measured on every attempt.
 
 Bootstrap WPM and the word budget remain initial prompt guidance and telemetry. A structurally valid V2 script is persisted as `SCRIPT_DRAFT` even when its estimated duration is out of range; the subsequent audio stage supplies the authoritative measurement.
+
+Duration presets are a product convenience only. The canonical contract resolves to target/min/max/tolerance and the fitting/final MP4 contracts consume only those numbers. Custom durations use a deterministic symmetric approximately-10% tolerance, without selecting or clamping to a legacy profile.

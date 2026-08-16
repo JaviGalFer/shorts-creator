@@ -23,7 +23,7 @@ Pipeline V2 funcional y E2E técnico demostrado. Docker se utiliza para render y
 
 El primer E2E técnico real solicitó 30s y generó un MP4 de aproximadamente 20.88s: el pipeline técnico pasó, pero incumplió el rango solicitado. El fitting post-TTS bounded y la comprobación final de cumplimiento de duración del MP4 están implementados; aún requieren una nueva validación E2E real.
 
-La estimación WPM del guion es bootstrap no bloqueante; tras TTS, la duración medida y el fitting bounded son la autoridad. Suite completa más reciente en la rama activa: **`1216 passed, 51 skipped, 0 failed`**.
+La estimación WPM del guion es bootstrap no bloqueante; tras TTS, la duración medida y el fitting bounded son la autoridad. Suite completa más reciente en la rama activa: **`1198 passed, 51 skipped, 0 failed`**.
 
 Referencias:
 - `docs/project/current-state.md` — estado detallado
@@ -122,15 +122,18 @@ python bin/run_job.py --topic "Prueba" --duration 35 --stop-after script
 
 ### Perfiles de duración
 
-| Perfil | Rango | Uso |
+| Preset | Rango | Uso |
 |--------|-------|-----|
-| `short_25_30` | 25-30s | Por defecto |
-| `standard_32_38` | 32-38s | Formato estándar |
-| `extended_50_60` | 50-60s | Vídeo más extenso |
+| `quick_30` | 27-33s | Rápido ~30 s |
+| `standard_45` | 41-49s | Estándar ~45 s |
+| `deep_60` | 55-65s | Detallado ~60 s |
 
 ```bash
-python bin/run_job.py --topic "Tema" --duration-profile standard_32_38
+python bin/run_job.py --topic "Tema" --duration-preset standard_45
+python bin/run_job.py --topic "Tema" --duration 37 --duration-tolerance 2
 ```
+
+Los presets son atajos de configuración: `--duration N` usa una tolerancia simétrica automática y no queda limitado por ningún preset. La arquitectura admite nuevos presets sin cambiar el fitting.
 
 ## Configuración
 
