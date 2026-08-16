@@ -12,7 +12,7 @@ sys.path.insert(0, str(PROJECT / "bin"))
 import pytest
 
 from generate_script import main as gs_main
-from run_job import build_script_command
+from shorts_creator.pipeline.orchestrator import build_script_command
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ class TestGenerateScriptDefaultV2:
 
     def test_default_dry_run_uses_v2(self, monkeypatch, capsys):
         """Dry-run without --visual-schema-version outputs schemaVersion=2."""
-        monkeypatch.setattr("generate_script.load_env", lambda: {"LLM_API_KEY": "fake"})
+        monkeypatch.setattr("shorts_creator.script.generator.load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", [
             "generate_script.py", "--topic", "test",
             "--dry-run", "--model", "gpt-4o-mini",
@@ -53,7 +53,7 @@ class TestGenerateScriptDefaultV2:
 
     def test_removed_visual_schema_flag_is_rejected(self, monkeypatch, capsys):
         """--visual-schema-version flag is rejected because it was removed."""
-        monkeypatch.setattr("generate_script.load_env", lambda: {"LLM_API_KEY": "fake"})
+        monkeypatch.setattr("shorts_creator.script.generator.load_env", lambda: {"LLM_API_KEY": "fake"})
         monkeypatch.setattr(sys, "argv", [
             "generate_script.py", "--topic", "test",
             "--visual-schema-version", "1",

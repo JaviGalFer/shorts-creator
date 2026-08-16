@@ -10,8 +10,8 @@ from pathlib import Path
 PROJECT = Path("/home/javi/projects/shorts-creator")
 sys.path.insert(0, str(PROJECT / "bin"))
 
-from visual_plan_v2 import canonicalize_visual_plan_v2, SCHEMA_VERSION
-from visual_asset_router_v2 import (
+from shorts_creator.contracts.visual import canonicalize_visual_plan_v2, SCHEMA_VERSION
+from shorts_creator.assets.router import (
     build_visual_sourcing_plan_v2,
     ROUTING_MATRIX,
     ALLOWED_ASSET_PREFERENCES,

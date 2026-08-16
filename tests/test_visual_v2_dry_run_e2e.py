@@ -13,9 +13,9 @@ from pathlib import Path
 PROJECT = Path("/home/javi/projects/shorts-creator")
 sys.path.insert(0, str(PROJECT / "bin"))
 
-from visual_plan_v2 import canonicalize_visual_plan_v2, SCHEMA_VERSION
-from visual_asset_router_v2 import build_visual_sourcing_plan_v2, LEGACY_V1_FIELDS
-from visual_asset_executor_v2 import execute_visual_sourcing_plan_v2
+from shorts_creator.contracts.visual import canonicalize_visual_plan_v2, SCHEMA_VERSION
+from shorts_creator.assets.router import build_visual_sourcing_plan_v2, LEGACY_V1_FIELDS
+from shorts_creator.assets.executor import execute_visual_sourcing_plan_v2
 
 LEGACY_FIELD_NAMES = frozenset({
     "editorialRole", "visualTemporalIntent", "strategy",
@@ -553,15 +553,15 @@ class TestPipelineInvariants:
 
 
 RUNTIME_MODULES = frozenset({
-    "fetch_images", "asset_validation", "editorial_asset_contract",
-    "generate_script", "prepare_job", "render_job", "run_job",
+    "fetch_images", "shorts_creator.validation.asset", "editorial_asset_contract",
+    "generate_script", "shorts_creator.rendering.preparer", "shorts_creator.rendering.renderer", "shorts_creator.pipeline.orchestrator",
 })
 
 V2_MODULES = [
-    ("visual_plan_v2", PROJECT / "bin" / "visual_plan_v2.py"),
-    ("visual_asset_router_v2", PROJECT / "bin" / "visual_asset_router_v2.py"),
-    ("visual_asset_executor_v2", PROJECT / "bin" / "visual_asset_executor_v2.py"),
-    ("visual_provider_wikimedia_v2", PROJECT / "bin" / "visual_provider_wikimedia_v2.py"),
+    ("visual", PROJECT / "src" / "shorts_creator" / "contracts" / "visual.py"),
+    ("router", PROJECT / "src" / "shorts_creator" / "assets" / "router.py"),
+    ("executor", PROJECT / "src" / "shorts_creator" / "assets" / "executor.py"),
+    ("wikimedia", PROJECT / "src" / "shorts_creator" / "assets" / "providers" / "wikimedia.py"),
 ]
 
 

@@ -67,7 +67,7 @@ def validate_asset_file(asset_path: str, project_root: Path, video_dir: Path | N
         with Image.open(p) as img:
             w, h = img.size
             if is_v2:
-                from visual_asset_renderability_v2 import is_v2_asset_dimension_renderable
+                from shorts_creator.assets.renderability import is_v2_asset_dimension_renderable
                 if not is_v2_asset_dimension_renderable(w, h):
                     failures.append({
                         "rule": "dimensions_too_small",
@@ -517,13 +517,3 @@ def validate_job_for_render(metadata: dict, project_root: Path, video_dir: Path 
         }
     }
     return result
-
-
-if __name__ == "__main__":
-    import sys
-    path = Path(sys.argv[1]).resolve()
-    project_root = path.parents[3]
-    video_dir = path.parent
-    metadata = json.loads(path.read_text())
-    result = validate_job_for_render(metadata, project_root, video_dir)
-    print(json.dumps(result, indent=2, ensure_ascii=False))

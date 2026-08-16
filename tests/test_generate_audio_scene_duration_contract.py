@@ -16,7 +16,7 @@ sys.path.insert(0, str(PROJECT / "bin"))
 
 import pytest
 
-from generate_audio import _get_mp3_duration
+from shorts_creator.audio.generator import _get_mp3_duration
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ class TestGetMp3Duration:
         mock_result.returncode = 0
         mock_result.stdout = json.dumps({"format": {"duration": "6.576"}})
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = "/usr/bin/ffprobe"
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock_result
@@ -47,7 +47,7 @@ class TestGetMp3Duration:
         mock_result.returncode = 0
         mock_result.stdout = json.dumps({"format": {"duration": "0"}})
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = "/usr/bin/ffprobe"
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock_result
@@ -62,7 +62,7 @@ class TestGetMp3Duration:
         mock_result.returncode = 0
         mock_result.stdout = json.dumps({"format": {"duration": "-1"}})
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = "/usr/bin/ffprobe"
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock_result
@@ -77,7 +77,7 @@ class TestGetMp3Duration:
         mock_result.returncode = 0
         mock_result.stdout = json.dumps({"format": {"duration": "NaN"}})
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = "/usr/bin/ffprobe"
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock_result
@@ -92,7 +92,7 @@ class TestGetMp3Duration:
         mock_docker.returncode = 0
         mock_docker.stdout = json.dumps({"format": {"duration": "3.141"}})
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = None
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock_docker
@@ -114,7 +114,7 @@ class TestGetMp3Duration:
             captured_env.append(kwargs.get("env", {}))
             return mock_docker
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = None
             with patch("subprocess.run") as mock_run:
                 mock_run.side_effect = capture_run
@@ -138,7 +138,7 @@ class TestGetMp3Duration:
         mock_docker.returncode = 0
         mock_docker.stdout = json.dumps({"format": {"duration": "2.5"}})
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = "/usr/bin/ffprobe"
             with patch("subprocess.run") as mock_run:
                 mock_run.side_effect = [mock_local, mock_docker]
@@ -155,7 +155,7 @@ class TestGetMp3Duration:
         mock_docker = MagicMock()
         mock_docker.returncode = 1
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = "/usr/bin/ffprobe"
             with patch("subprocess.run") as mock_run:
                 mock_run.side_effect = [mock_local, mock_docker]
@@ -167,7 +167,7 @@ class TestGetMp3Duration:
         mp3 = tmp_path / "test.mp3"
         mp3.write_text("fake")
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = "/usr/bin/ffprobe"
             with patch("subprocess.run") as mock_run:
                 mock_run.side_effect = Exception("boom")
@@ -182,7 +182,7 @@ class TestGetMp3Duration:
         mock_result.returncode = 0
         mock_result.stdout = json.dumps({"format": {"duration": "0.0001"}})
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = "/usr/bin/ffprobe"
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock_result
@@ -205,7 +205,7 @@ class TestPerSceneDurationContract:
         mock_result.returncode = 0
         mock_result.stdout = json.dumps({"format": {"duration": "6.576"}})
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = "/usr/bin/ffprobe"
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock_result
@@ -220,7 +220,7 @@ class TestPerSceneDurationContract:
         mp3 = tmp_path / "scene-01.mp3"
         mp3.write_text("x")
 
-        with patch("generate_audio.shutil.which") as mock_which:
+        with patch("shorts_creator.audio.generator.shutil.which") as mock_which:
             mock_which.return_value = "/usr/bin/ffprobe"
             with patch("subprocess.run") as mock_run:
                 mock_run.side_effect = Exception("fail")
@@ -237,8 +237,10 @@ class TestPerSceneDurationContract:
 
 class TestPreparePreservesDurationSec:
     def test_idempotent_prepare_preserves_duration_sec(self, monkeypatch, tmp_path):
-        """Two consecutive prepare_job runs must produce identical scene durations."""
-        import prepare_job as pj
+        """Two consecutive shorts_creator.rendering.preparer runs must produce identical scene durations."""
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -306,7 +308,9 @@ class TestPreparePreservesDurationSec:
 
     def test_prepare_blocks_missing_duration(self, monkeypatch, tmp_path):
         """Job without valid durationSec must be blocked by prepare."""
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -357,7 +361,9 @@ class TestPreparePreservesDurationSec:
 
     def test_prepare_blocks_none_duration(self, monkeypatch, tmp_path):
         """Job with null durationSec must be blocked."""
-        import prepare_job as pj
+        import prepare_job as prepare_cli
+        import shorts_creator.rendering.preparer as pj
+        pj.main = prepare_cli.main
 
         job = tmp_path / "job"
         job.mkdir()
@@ -427,7 +433,7 @@ class TestMainPerSceneAsync:
         meta_path, job = self._make_scene_meta(tmp_path, [
             {"sceneNumber": 1, "voiceover": "Test narration.", "targetDurationSec": 6.0},
         ])
-        from generate_audio import main_per_scene
+        from shorts_creator.audio.generator import main_per_scene
 
         async def mock_synth(text, output_path, options=None):
             Path(str(output_path)).write_bytes(b"\xff\xfb" + b"\x00" * 5000)
@@ -437,11 +443,11 @@ class TestMainPerSceneAsync:
                 "timing_source": "edge_tts_word_boundary"}
             return r
 
-        with patch("generate_audio.get_provider") as mock_gp:
+        with patch("shorts_creator.audio.generator.get_provider") as mock_gp:
             mock_provider = MagicMock()
             mock_provider.synthesize_with_timing_async = mock_synth
             mock_gp.return_value = mock_provider
-            monkeypatch.setattr("generate_audio._get_mp3_duration", lambda p: (6.576, "ffprobe_local"))
+            monkeypatch.setattr("shorts_creator.audio.generator._get_mp3_duration", lambda p: (6.576, "ffprobe_local"))
             exit_code = asyncio.run(main_per_scene(meta_path, "es-ES-AlvaroNeural"))
 
         assert exit_code == 0
@@ -455,7 +461,7 @@ class TestMainPerSceneAsync:
         meta_path, job = self._make_scene_meta(tmp_path, [
             {"sceneNumber": 1, "voiceover": "Test narration.", "targetDurationSec": 6.0},
         ])
-        from generate_audio import main_per_scene
+        from shorts_creator.audio.generator import main_per_scene
 
         async def mock_synth(text, output_path, options=None):
             Path(str(output_path)).write_bytes(b"\xff\xfb" + b"\x00" * 5000)
@@ -465,9 +471,9 @@ class TestMainPerSceneAsync:
                 "timing_source": "edge_tts_word_boundary"}
             return r
 
-        with patch("generate_audio.get_provider") as mock_gp:
+        with patch("shorts_creator.audio.generator.get_provider") as mock_gp:
             mock_gp.return_value = MagicMock(synthesize_with_timing_async=mock_synth)
-            monkeypatch.setattr("generate_audio._get_mp3_duration", lambda p: (None, None))
+            monkeypatch.setattr("shorts_creator.audio.generator._get_mp3_duration", lambda p: (None, None))
             exit_code = asyncio.run(main_per_scene(meta_path, "es-ES-AlvaroNeural"))
 
         assert exit_code == 0
@@ -482,13 +488,13 @@ class TestMainPerSceneAsync:
         meta_path, job = self._make_scene_meta(tmp_path, [
             {"sceneNumber": 1, "voiceover": "Test narration.", "targetDurationSec": 6.0},
         ])
-        from generate_audio import main_per_scene
+        from shorts_creator.audio.generator import main_per_scene
         sdir = job / "scenes"
         (sdir / "scene-01.mp3").write_bytes(b"\xff\xfb" + b"\x00" * 5000)
 
-        with patch("generate_audio.get_provider") as mock_gp:
+        with patch("shorts_creator.audio.generator.get_provider") as mock_gp:
             mock_gp.return_value = MagicMock()
-            monkeypatch.setattr("generate_audio._get_mp3_duration", lambda p: (6.576, "ffprobe_local"))
+            monkeypatch.setattr("shorts_creator.audio.generator._get_mp3_duration", lambda p: (6.576, "ffprobe_local"))
             exit_code = asyncio.run(main_per_scene(meta_path, "es-ES-AlvaroNeural"))
 
         assert exit_code == 0
@@ -500,12 +506,12 @@ class TestMainPerSceneAsync:
         meta_path, job = self._make_scene_meta(tmp_path, [
             {"sceneNumber": 1, "voiceover": "Test narration.", "targetDurationSec": 6.0},
         ])
-        from generate_audio import main_per_scene
+        from shorts_creator.audio.generator import main_per_scene
 
         async def mock_fail(text, output_path, options=None):
             return MagicMock(timing_data={})
 
-        with patch("generate_audio.get_provider") as mock_gp:
+        with patch("shorts_creator.audio.generator.get_provider") as mock_gp:
             mock_gp.return_value = MagicMock(synthesize_with_timing_async=mock_fail)
             exit_code = asyncio.run(main_per_scene(meta_path, "es-ES-AlvaroNeural"))
 

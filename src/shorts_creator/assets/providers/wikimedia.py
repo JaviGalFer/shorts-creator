@@ -22,7 +22,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from visual_asset_renderability_v2 import (
+from shorts_creator.assets.renderability import (
     MIN_V2_ASSET_WIDTH,
     MIN_V2_ASSET_HEIGHT,
     SUPPORTED_WIKIMEDIA_MIME_TYPES,

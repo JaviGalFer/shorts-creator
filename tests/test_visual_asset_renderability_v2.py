@@ -1,4 +1,4 @@
-"""Tests for visual_asset_renderability_v2 — canonical v2 dimension contract."""
+"""Tests for shorts_creator.assets.renderability — canonical v2 dimension contract."""
 
 import sys
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / "bin"))
 
-from visual_asset_renderability_v2 import (
+from shorts_creator.assets.renderability import (
     MIN_V2_ASSET_WIDTH,
     MIN_V2_ASSET_HEIGHT,
     is_v2_asset_dimension_renderable,

@@ -37,7 +37,7 @@ BIN_DIR = PROJECT / "bin"
 if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
 
-_ga = importlib.import_module("generate_audio")
+_ga = importlib.import_module("shorts_creator.audio.generator")
 
 split_sentences = _ga.split_sentences
 build_full_narration = _ga.build_full_narration

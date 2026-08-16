@@ -1,6 +1,6 @@
 """Tests for Phase 2B: render_job.py v2 assets/ relative path resolution.
 
-Verifies preflight_validate, _to_docker_asset_path, asset_validation.validate_asset_file
+Verifies preflight_validate, _to_docker_asset_path, shorts_creator.validation.asset.validate_asset_file
 all resolve assets/ paths relative to video_dir.
 
 No Docker. No FFmpeg. No real render.
@@ -17,8 +17,8 @@ sys.path.insert(0, str(PROJECT / "bin"))
 
 import pytest
 
-import asset_validation
-from render_job import _to_docker_asset_path, preflight_validate
+import shorts_creator.validation.asset
+from shorts_creator.rendering.renderer import _to_docker_asset_path, preflight_validate
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +192,7 @@ class TestPreflightV2AssetsPaths:
 
 
 # ---------------------------------------------------------------------------
-# asset_validation.validate_asset_file — v2 paths
+# shorts_creator.validation.asset.validate_asset_file — v2 paths
 # ---------------------------------------------------------------------------
 
 
@@ -204,7 +204,7 @@ class TestAssetValidationV2Paths:
         video_dir.mkdir(parents=True)
         _touch(video_dir / "assets" / "seg_001.jpg")
 
-        failures = asset_validation.validate_asset_file(
+        failures = shorts_creator.validation.asset.validate_asset_file(
             "assets/seg_001.jpg", project_root, video_dir=video_dir
         )
         file_failures = [f for f in failures if f["rule"] == "file_not_found"]
@@ -217,7 +217,7 @@ class TestAssetValidationV2Paths:
         video_dir.mkdir(parents=True)
         _touch(video_dir / "scenes" / "scene-01.jpg")
 
-        failures = asset_validation.validate_asset_file(
+        failures = shorts_creator.validation.asset.validate_asset_file(
             "scenes/scene-01.jpg", project_root, video_dir=video_dir
         )
         file_failures = [f for f in failures if f["rule"] == "file_not_found"]
@@ -230,7 +230,7 @@ class TestAssetValidationV2Paths:
         video_dir.mkdir(parents=True)
         (video_dir / "assets").mkdir(parents=True)
 
-        failures = asset_validation.validate_asset_file(
+        failures = shorts_creator.validation.asset.validate_asset_file(
             "assets/missing.jpg", project_root, video_dir=video_dir
         )
         file_failures = [f for f in failures if f["rule"] == "file_not_found"]
@@ -242,7 +242,7 @@ class TestAssetValidationV2Paths:
         project_root.mkdir()
         _touch(project_root / "assets" / "seg_001.jpg")
 
-        failures = asset_validation.validate_asset_file(
+        failures = shorts_creator.validation.asset.validate_asset_file(
             "assets/seg_001.jpg", project_root, video_dir=None
         )
         file_failures = [f for f in failures if f["rule"] == "file_not_found"]
@@ -252,7 +252,7 @@ class TestAssetValidationV2Paths:
         project_root = tmp_path / "project"
         project_root.mkdir()
 
-        failures = asset_validation.validate_asset_file(
+        failures = shorts_creator.validation.asset.validate_asset_file(
             "assets/missing.jpg", project_root, video_dir=None
         )
         file_failures = [f for f in failures if f["rule"] == "file_not_found"]
@@ -267,7 +267,7 @@ class TestAssetValidationV2Paths:
         abs_img = project_root / "some" / "absolute.jpg"
         _touch(abs_img)
 
-        failures = asset_validation.validate_asset_file(
+        failures = shorts_creator.validation.asset.validate_asset_file(
             str(abs_img), project_root, video_dir=video_dir
         )
         file_failures = [f for f in failures if f["rule"] == "file_not_found"]

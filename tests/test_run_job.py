@@ -15,8 +15,9 @@ PROJECT = Path("/home/javi/projects/shorts-creator")
 sys.path.insert(0, str(PROJECT / "bin"))
 
 import pytest
+from run_job import main
 
-from run_job import (
+from shorts_creator.pipeline.orchestrator import (
     STAGES,
     STAGE_STATUS_MAP,
     build_script_command,
@@ -32,7 +33,6 @@ from run_job import (
     _schema_error_for_category,
     V1_POSITIVE_FIELDS,
     dry_run,
-    main,
 )
 
 
@@ -313,20 +313,20 @@ def test_script_stage_extracts_job_id(fake_job_dir, capsys):
     meta_path = str(fake_job_dir / "metadata.json")
     script_output = json.dumps({"jobId": "test-2000-01-01-000000", "path": meta_path, "status": "SCRIPT_DRAFT"})
 
-    with patch("run_job.subprocess.run") as mock_run:
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run") as mock_run:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout=script_output, stderr=""
         )
-        with patch("run_job.load_metadata") as mock_load:
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata") as mock_load:
             mock_load.return_value = {
                 "jobId": "test-2000-01-01-000000",
                 "status": "SCRIPT_DRAFT",
                 "createdAt": "2000-01-01T00:00:00.000Z",
             }
-            with patch("run_job.save_metadata"):
-                with patch("run_job.os.path.exists", return_value=True):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+                with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                     # Don't save on exit - just verify the parsing path
-                    with patch("run_job._final_summary"):
+                    with patch("shorts_creator.pipeline.orchestrator._final_summary"):
                         args = _make_args(topic="Test", duration=35)
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--duration", "35", "--stop-after", "script"]):
                             rc = main()
@@ -334,11 +334,11 @@ def test_script_stage_extracts_job_id(fake_job_dir, capsys):
 
 
 def test_script_stage_missing_output_fails(capsys):
-    with patch("run_job.subprocess.run") as mock_run:
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run") as mock_run:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="No JSON here", stderr=""
         )
-        with patch("run_job._final_summary"):
+        with patch("shorts_creator.pipeline.orchestrator._final_summary"):
             with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "script"]):
                 rc = main()
                 assert rc == 1
@@ -360,13 +360,13 @@ def test_review_required_stops_before_assets(fake_job_dir, capsys):
         "reviewReasons": ["DURATION_OUT_OF_RANGE"],
     }
 
-    with patch("run_job.subprocess.run") as mock_run:
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run") as mock_run:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout=script_output, stderr=""
         )
-        with patch("run_job.load_metadata", return_value=metadata):
-            with patch("run_job.save_metadata"):
-                with patch("run_job.os.path.exists", return_value=True):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=metadata):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+                with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                     with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "script"]):
                         rc = main()
                         assert rc == 0
@@ -392,10 +392,10 @@ def test_non_zero_exit_fails_metadata(fake_job_dir, capsys):
             return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
         return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="Asset download failed")
 
-    with patch("run_job.subprocess.run", side_effect=_side_effect):
-        with patch("run_job.load_metadata", return_value=metadata):
-            with patch("run_job.save_metadata") as mock_save:
-                with patch("run_job.os.path.exists", return_value=True):
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=_side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=metadata):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
+                with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                     with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                         rc = main()
                         assert rc == 1
@@ -414,10 +414,10 @@ def test_stop_after_script_does_not_run_later_stages(fake_job_dir, capsys):
     script_output = json.dumps({"jobId": "test-1", "path": meta_path, "status": "SCRIPT_DRAFT"})
     metadata = {"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"}
 
-    mock_subprocess = patch("run_job.subprocess.run")
-    mock_load = patch("run_job.load_metadata", return_value=metadata)
-    mock_save = patch("run_job.save_metadata")
-    mock_exists = patch("run_job.os.path.exists", return_value=True)
+    mock_subprocess = patch("shorts_creator.pipeline.orchestrator.subprocess.run")
+    mock_load = patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=metadata)
+    mock_save = patch("shorts_creator.pipeline.orchestrator.save_metadata")
+    mock_exists = patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True)
 
     with mock_subprocess as m:
         m.return_value = subprocess.CompletedProcess([], 0, stdout=script_output, stderr="")
@@ -468,10 +468,10 @@ def test_stop_after_assets_does_not_run_audio(fake_job_dir, initial_metadata_fil
     metadata = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
     assets_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
 
-    with patch("run_job.subprocess.run", side_effect=side_effect):
-        with patch("run_job.load_metadata",
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                    side_effect=[dict(metadata), dict(metadata), dict(assets_meta), dict(assets_meta)]):
-            with patch("run_job.save_metadata"):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
                 with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                     rc = main()
                     assert rc == 0
@@ -527,10 +527,10 @@ def test_asset_failure_stops_before_audio(fake_job_dir, capsys):
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    with patch("run_job.subprocess.run", side_effect=side_effect):
-        with patch("run_job.load_metadata", return_value=metadata):
-            with patch("run_job.save_metadata"):
-                with patch("run_job.os.path.exists", return_value=True):
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=metadata):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+                with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                     with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "validate"]):
                         rc = main()
                         assert rc == 1
@@ -567,11 +567,11 @@ def test_metadata_preserved_across_stages(fake_job_dir, capsys):
         "updatedAt": "2000-01-01T00:00:00.000Z",
     }
 
-    with patch("run_job.subprocess.run") as mock_run:
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run") as mock_run:
         mock_run.return_value = subprocess.CompletedProcess([], 0, stdout=script_output, stderr="")
-        with patch("run_job.load_metadata", return_value=rich_meta):
-            with patch("run_job.save_metadata") as mock_save:
-                with patch("run_job.os.path.exists", return_value=True):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=rich_meta):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
+                with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                     with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "script"]):
                         rc = main()
                         assert rc == 0
@@ -867,9 +867,9 @@ def test_assets_exit0_but_stale_status_fails(fake_job_dir, initial_metadata_file
     script_meta = _v2_meta({"jobId": "test-1", "status": "SCRIPT_DRAFT", "createdAt": "2000-01-01T00:00:00.000Z"})
     stale_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_FETCHING", "createdAt": "2000-01-01T00:00:00.000Z"})
 
-    with patch("run_job.subprocess.run", side_effect=side_effect):
-        with patch("run_job.load_metadata", side_effect=[script_meta, stale_meta, stale_meta]):
-            with patch("run_job.save_metadata") as mock_save:
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata", side_effect=[script_meta, stale_meta, stale_meta]):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
                 with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                     rc = main()
                     assert rc == 1
@@ -908,9 +908,9 @@ def test_audio_exit0_but_no_audio_file_fails(fake_job_dir, initial_metadata_file
     assets_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
     audio_meta = _v2_meta({"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
 
-    with patch("run_job.subprocess.run", side_effect=side_effect):
-        with patch("run_job.load_metadata", side_effect=[script_meta, assets_meta, audio_meta, audio_meta]):
-            with patch("run_job.save_metadata") as mock_save:
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata", side_effect=[script_meta, assets_meta, audio_meta, audio_meta]):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
                 with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "audio"]):
                     rc = main()
                     assert rc == 1
@@ -952,10 +952,10 @@ def test_prepare_missing_subtitle_fails_pipeline(fake_job_dir, initial_metadata_
         # no renderTimeline — will trigger contract failure
     })
 
-    with patch("run_job.subprocess.run", side_effect=side_effect):
-        with patch("run_job.load_metadata",
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                    side_effect=[dict(script_meta), dict(assets_meta), dict(assets_meta), dict(audio_meta), dict(audio_meta), dict(prepare_meta), dict(prepare_meta)]):
-            with patch("run_job.save_metadata") as mock_save:
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
                 with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "prepare"]):
                     rc = main()
                     assert rc == 1
@@ -998,10 +998,10 @@ def test_render_exit0_but_no_video_fails(fake_job_dir, initial_metadata_file, ca
     })
     render_meta = _v2_meta({"jobId": "test-1", "status": "RENDERED"})
 
-    with patch("run_job.subprocess.run", side_effect=side_effect):
-        with patch("run_job.load_metadata",
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                    side_effect=[dict(script_meta), dict(assets_meta), dict(assets_meta), dict(audio_meta), dict(audio_meta), dict(prepare_meta), dict(prepare_meta), dict(render_meta), dict(render_meta)]):
-            with patch("run_job.save_metadata") as mock_save:
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
                 with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "render"]):
                     rc = main()
                     assert rc == 1
@@ -1049,10 +1049,10 @@ def test_render_exit1_with_warnings_and_video_succeeds(fake_job_dir, initial_met
     })
     render_meta = _v2_meta({"jobId": "test-1", "status": "RENDERED_WITH_WARNINGS"})
 
-    with patch("run_job.subprocess.run", side_effect=side_effect):
-        with patch("run_job.load_metadata",
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                    side_effect=[dict(script_meta), dict(assets_meta), dict(assets_meta), dict(audio_meta), dict(audio_meta), dict(prepare_meta), dict(prepare_meta), dict(render_meta), dict(render_meta), dict(render_meta)]):
-            with patch("run_job.save_metadata"):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
                 with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "render"]):
                     rc = main()
                     assert rc == 0
@@ -1092,10 +1092,10 @@ def test_render_exit1_with_failure_and_no_video_fails(fake_job_dir, initial_meta
     })
     render_meta = _v2_meta({"jobId": "test-1", "status": "RENDER_FAILED"})
 
-    with patch("run_job.subprocess.run", side_effect=side_effect):
-        with patch("run_job.load_metadata",
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                    side_effect=[dict(script_meta), dict(assets_meta), dict(assets_meta), dict(audio_meta), dict(audio_meta), dict(prepare_meta), dict(prepare_meta), dict(render_meta), dict(render_meta)]):
-            with patch("run_job.save_metadata") as mock_save:
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
                 with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "render"]):
                     rc = main()
                     assert rc == 1
@@ -1141,10 +1141,10 @@ def test_validate_exit0_sets_validated(fake_job_dir, initial_metadata_file, caps
     render_meta = _v2_meta({"jobId": "test-1", "status": "RENDERED"})
     validated_meta = _v2_meta({"jobId": "test-1", "status": "RENDERED"})
 
-    with patch("run_job.subprocess.run", side_effect=side_effect):
-        with patch("run_job.load_metadata",
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                    side_effect=[dict(script_meta), dict(assets_meta), dict(assets_meta), dict(audio_meta), dict(audio_meta), dict(prepare_meta), dict(prepare_meta), dict(render_meta), dict(render_meta), dict(render_meta), dict(render_meta), dict(render_meta)]):
-            with patch("run_job.save_metadata"):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
                 with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "validate"]):
                     rc = main()
                     assert rc == 0
@@ -1180,13 +1180,13 @@ def test_prepare_exit1_fails_pipeline(fake_job_dir, initial_metadata_file, capsy
     assets_meta = _v2_meta({"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
     audio_meta = _v2_meta({"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"})
 
-    with patch("run_job.subprocess.run", side_effect=side_effect):
-        with patch("run_job.load_metadata",
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                    side_effect=[dict(script_meta), dict(script_meta),
                                 dict(assets_meta), dict(assets_meta),
                                 dict(audio_meta), dict(audio_meta),
                                 dict(audio_meta)]):
-            with patch("run_job.save_metadata") as mock_save:
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
                 with patch.object(sys, "argv",
                                   ["run_job.py", "--topic", "Test", "--stop-after", "prepare"]):
                     rc = main()
@@ -1227,13 +1227,13 @@ def test_prepare_exit1_no_render_no_validate(fake_job_dir, initial_metadata_file
     assets_meta = {"jobId": "test-1", "status": "ASSETS_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
     audio_meta = {"jobId": "test-1", "status": "AUDIO_READY", "createdAt": "2000-01-01T00:00:00.000Z"}
 
-    with patch("run_job.subprocess.run", side_effect=side_effect):
-        with patch("run_job.load_metadata",
+    with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+        with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                    side_effect=[dict(script_meta), dict(script_meta),
                                 dict(assets_meta), dict(assets_meta),
                                 dict(audio_meta), dict(audio_meta),
                                 dict(audio_meta)]):
-            with patch("run_job.save_metadata"):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
                 with patch.object(sys, "argv",
                                   ["run_job.py", "--topic", "Test", "--stop-after", "validate"]):
                     rc = main()
@@ -1372,10 +1372,10 @@ class TestMainSchemaRejection:
                 return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with patch("run_job.subprocess.run", side_effect=side_effect):
-            with patch("run_job.load_metadata", return_value=v1_meta):
-                with patch("run_job.save_metadata") as mock_save:
-                    with patch("run_job.os.path.exists", return_value=True):
+        with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+            with patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=v1_meta):
+                with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
+                    with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                             rc = main()
                             assert rc == 1
@@ -1410,10 +1410,10 @@ class TestMainSchemaRejection:
                 return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with patch("run_job.subprocess.run", side_effect=side_effect):
-            with patch("run_job.load_metadata", return_value=v1_meta):
-                with patch("run_job.save_metadata"):
-                    with patch("run_job.os.path.exists", return_value=True):
+        with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+            with patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=v1_meta):
+                with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+                    with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                             rc = main()
                             assert rc == 1
@@ -1440,10 +1440,10 @@ class TestMainSchemaRejection:
                 return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with patch("run_job.subprocess.run", side_effect=side_effect):
-            with patch("run_job.load_metadata", return_value=mixed_meta):
-                with patch("run_job.save_metadata") as mock_save:
-                    with patch("run_job.os.path.exists", return_value=True):
+        with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+            with patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=mixed_meta):
+                with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
+                    with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                             rc = main()
                             assert rc == 1
@@ -1470,10 +1470,10 @@ class TestMainSchemaRejection:
                 return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with patch("run_job.subprocess.run", side_effect=side_effect):
-            with patch("run_job.load_metadata", return_value=invalid_meta):
-                with patch("run_job.save_metadata") as mock_save:
-                    with patch("run_job.os.path.exists", return_value=True):
+        with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+            with patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=invalid_meta):
+                with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
+                    with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                             rc = main()
                             assert rc == 1
@@ -1520,11 +1520,11 @@ class TestMainSchemaRejection:
                 return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with patch("run_job.subprocess.run", side_effect=side_effect):
-            with patch("run_job.load_metadata",
+        with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+            with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                        side_effect=[dict(v2_meta), dict(v2_meta), dict(assets_meta), dict(assets_meta)]):
-                with patch("run_job.save_metadata"):
-                    with patch("run_job.os.path.exists", return_value=True):
+                with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+                    with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                             rc = main()
                             assert rc == 0

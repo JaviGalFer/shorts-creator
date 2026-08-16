@@ -15,7 +15,7 @@ sys.path.insert(0, str(PROJECT / "bin"))
 
 import pytest
 
-from run_job import (
+from shorts_creator.pipeline.orchestrator import (
     _verify_stage_contract,
     build_stage_command,
     STAGE_SCRIPTS,
@@ -245,12 +245,12 @@ class TestV2NoGuardAfterAssets:
                 return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with patch("run_job.subprocess.run", side_effect=side_effect):
-            with patch("run_job.load_metadata",
+        with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+            with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                        side_effect=[dict(script_meta), dict(script_meta),
                                     dict(assets_meta), dict(assets_meta)]):
-                with patch("run_job.save_metadata"):
-                    with patch("run_job.os.path.exists", return_value=True):
+                with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+                    with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                             rc = __import__("run_job").main()
                             assert rc == 0
@@ -283,13 +283,13 @@ class TestV2NoGuardAfterAssets:
                 return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with patch("run_job.subprocess.run", side_effect=side_effect):
-            with patch("run_job.load_metadata",
+        with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+            with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                        side_effect=[dict(script_meta), dict(script_meta),
                                     dict(assets_meta), dict(assets_meta),
                                     dict(audio_meta), dict(audio_meta)]):
-                with patch("run_job.save_metadata"):
-                    with patch("run_job.os.path.exists", return_value=True):
+                with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+                    with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "audio"]):
                             rc = __import__("run_job").main()
                             assert rc == 0
@@ -322,12 +322,12 @@ class TestV2NoGuardAfterAssets:
                 return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with patch("run_job.subprocess.run", side_effect=side_effect):
-            with patch("run_job.load_metadata",
+        with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+            with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                        side_effect=[dict(script_meta), dict(script_meta),
                                     dict(assets_meta), dict(assets_meta)]):
-                with patch("run_job.save_metadata", side_effect=mock_save):
-                    with patch("run_job.os.path.exists", return_value=True):
+                with patch("shorts_creator.pipeline.orchestrator.save_metadata", side_effect=mock_save):
+                    with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                             rc = __import__("run_job").main()
                             assert rc == 0
@@ -363,11 +363,11 @@ class TestMixedSchemaFailFast:
                 return subprocess.CompletedProcess(cmd, 0, stdout=script_output, stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with patch("run_job.subprocess.run", side_effect=side_effect):
-            with patch("run_job.load_metadata",
+        with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+            with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                        side_effect=[dict(mixed_meta), dict(mixed_meta)]):
-                with patch("run_job.save_metadata") as mock_save:
-                    with patch("run_job.os.path.exists", return_value=True):
+                with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
+                    with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                             rc = __import__("run_job").main()
                             assert rc == 1
@@ -404,11 +404,11 @@ class TestMixedSchemaFailFast:
                 return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with patch("run_job.subprocess.run", side_effect=side_effect):
-            with patch("run_job.load_metadata",
+        with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
+            with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                        side_effect=[dict(mixed_meta), dict(mixed_meta)]):
-                with patch("run_job.save_metadata"):
-                    with patch("run_job.os.path.exists", return_value=True):
+                with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+                    with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                         with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                             rc = __import__("run_job").main()
                             assert rc == 1

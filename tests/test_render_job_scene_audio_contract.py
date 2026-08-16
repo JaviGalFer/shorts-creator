@@ -13,7 +13,7 @@ sys.path.insert(0, str(PROJECT / "bin"))
 
 import pytest
 
-from render_job import (
+from shorts_creator.rendering.renderer import (
     preflight_validate,
     _to_workspace_path,
     _to_docker_asset_path,
@@ -439,7 +439,9 @@ class TestExpandedScenesPreflight:
 
     def test_main_passes_expected_to_preflight(self, monkeypatch, tmp_path):
         """main() with --skip-render passes expected_total from resolve_expected_duration."""
-        import render_job as rj
+        import render_job as render_cli
+        import shorts_creator.rendering.renderer as rj
+        rj.main = render_cli.main
         import json
 
         job = tmp_path / "job"
@@ -507,7 +509,7 @@ class TestExpandedScenesPreflight:
             return []
 
         monkeypatch.setattr(rj, "preflight_validate", spy_preflight)
-        monkeypatch.setattr("render_job._docker_ffprobe_duration", lambda ws, root, timeout=30: 9.0)
+        monkeypatch.setattr("shorts_creator.rendering.renderer._docker_ffprobe_duration", lambda ws, root, timeout=30: 9.0)
 
         monkeypatch.setattr("sys.argv", [
             "render_job.py", str(meta_path),
@@ -591,7 +593,9 @@ class TestManifestSceneAudioDuration:
 
     def test_integration_with_skip_render(self, monkeypatch, tmp_path):
         """--skip-render must produce manifest with real audio durations."""
-        import render_job as rj
+        import render_job as render_cli
+        import shorts_creator.rendering.renderer as rj
+        rj.main = render_cli.main
         import json
 
         job = tmp_path / "job"

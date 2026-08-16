@@ -5,7 +5,7 @@ Mantiene compatibilidad backward con JSON legacy.
 Normaliza escenas a estructura visual.type, visual.path, visual.fit, visual.motion.
 
 Uso:
-    from visual_normalize import normalize_scene_visual
+    from shorts_creator.validation.visual_normalize import normalize_scene_visual
     visual = normalize_scene_visual(scene, video_dir)
 """
 
