@@ -26,6 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--force-regenerate",
+        action="store_true",
+        help="Regenerate per-scene TTS and subtitle timing instead of reusing existing MP3 files",
+    )
+    parser.add_argument(
         "--subtitle-timing-provider",
         default=defaults["subtitle_timing_provider"],
         choices=["auto", "edge_tts", "whisper", "estimated"],
@@ -63,6 +68,7 @@ async def main_async() -> int:
         subtitle_timing_provider=args.subtitle_timing_provider,
         continuous=args.continuous,
         join_style=args.join_style,
+        force_regenerate=args.force_regenerate,
     )
 
 

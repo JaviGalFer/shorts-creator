@@ -1171,6 +1171,7 @@ def repair_voiceover_duration(
     api_key: str,
     model: str,
     provider: str = "openai",
+    allow_generated_images: bool = False,
 ) -> tuple[dict | None, list[dict]]:
     """Repair only scene voiceovers for a post-TTS duration adjustment."""
     scenes = script.get("scenes", [])
@@ -1197,7 +1198,7 @@ def repair_voiceover_duration(
     if errors or repaired is None:
         return None, errors
     canonical, validation_errors, _ = _validate_and_canonicalize_script_v2(
-        repaired, allow_generated_images=False,
+        repaired, allow_generated_images=allow_generated_images,
     )
     if validation_errors or canonical is None:
         return None, [{"code": "DURATION_REPAIR_V2_INVALID", "message": str(validation_errors)}]

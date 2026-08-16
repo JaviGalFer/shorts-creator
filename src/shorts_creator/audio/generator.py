@@ -1387,7 +1387,7 @@ async def main_continuous(metadata_path: Path, voice: str, join_style: str = "pe
     return 0 if data["status"] == "AUDIO_READY" else 1
 
 
-async def main_per_scene(metadata_path: Path, voice: str) -> int:
+async def main_per_scene(metadata_path: Path, voice: str, *, force_regenerate: bool = False) -> int:
     data = load_metadata(str(metadata_path))
     job_id = data["jobId"]
     scenes = data["script"]["scenes"]
@@ -1407,7 +1407,7 @@ async def main_per_scene(metadata_path: Path, voice: str) -> int:
         dest = sdir / f"scene-{scene_num:02}.mp3"
         subtitle_timing = None
 
-        if dest.exists() and dest.stat().st_size > 1000:
+        if not force_regenerate and dest.exists() and dest.stat().st_size > 1000:
             duration = float(scene.get("targetDurationSec", 5))
             cues, source, confidence = estimate_cues_uniform(text, duration)
             subtitle_timing = {
@@ -1561,6 +1561,7 @@ async def generate_audio(
     subtitle_timing_provider: str,
     continuous: bool = False,
     join_style: str = "period",
+    force_regenerate: bool = False,
 ) -> int:
     """Generate audio artifacts and update metadata for one job."""
     resolved_metadata_path = Path(metadata_path).resolve()
@@ -1578,4 +1579,4 @@ async def generate_audio(
             join_style=join_style,
             subtitle_provider=subtitle_timing_provider,
         )
-    return await main_per_scene(resolved_metadata_path, voice)
+    return await main_per_scene(resolved_metadata_path, voice, force_regenerate=force_regenerate)
