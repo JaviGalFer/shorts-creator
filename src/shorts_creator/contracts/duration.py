@@ -1,31 +1,21 @@
-"""Duration profile system for shorts-creator.
+"""Target-centered duration presets and canonical request resolution."""
 
-Provides reusable duration presets and a resolution function
-that merges profile defaults with explicit CLI overrides.
-"""
-
-DURATION_PROFILES = {
-    "short_25_30": {
-        "targetSec": 28,
-        "minSec": 25,
-        "maxSec": 30,
-        "strictness": "balanced",
-    },
-    "standard_32_38": {
-        "targetSec": 35,
-        "minSec": 32,
-        "maxSec": 38,
-        "strictness": "balanced",
-    },
-    "extended_50_60": {
-        "targetSec": 55,
-        "minSec": 50,
-        "maxSec": 60,
-        "strictness": "balanced",
-    },
+DURATION_PRESETS = {
+    "quick_30": {"targetSec": 30, "toleranceSec": 3},
+    "standard_45": {"targetSec": 45, "toleranceSec": 4},
+    "deep_60": {"targetSec": 60, "toleranceSec": 5},
 }
+DEFAULT_DURATION_PRESET = "quick_30"
 
-DEFAULT_PROFILE = "short_25_30"
+# Deprecated CLI aliases resolve through DURATION_PRESETS; they are not a
+# second resolution engine and cannot reintroduce asymmetric ranges.
+LEGACY_PROFILE_ALIASES = {
+    "short_25_30": "quick_30",
+    "standard_32_38": "standard_45",
+    "extended_50_60": "deep_60",
+}
+DURATION_PROFILES = DURATION_PRESETS
+DEFAULT_PROFILE = DEFAULT_DURATION_PRESET
 
 
 def calculate_word_budget(
@@ -76,85 +66,51 @@ SUPPORTED_DURATION_MAX = 60
 def resolve_requested_duration(
     requested_sec: int | None = None,
     requested_profile: str | None = None,
+    requested_preset: str | None = None,
+    requested_tolerance: int | None = None,
     explicit_target: int | None = None,
     explicit_min: int | None = None,
     explicit_max: int | None = None,
     explicit_strictness: str | None = None,
-) -> dict:
-    """Resolve a full duration config from approximate --duration and/or profile.
+ ) -> dict:
+    """Resolve numeric target/range from preset, custom duration, and overrides."""
+    if requested_sec is not None and requested_preset is not None:
+        raise ValueError("--duration and --duration-preset cannot be used together")
+    if requested_sec is not None and requested_profile is not None:
+        raise ValueError("--duration and deprecated --duration-profile cannot be used together")
+    if requested_sec is not None and (isinstance(requested_sec, bool) or not isinstance(requested_sec, int)):
+        raise ValueError("--duration must be an integer")
+    if requested_sec is not None and requested_sec < SUPPORTED_DURATION_MIN:
+        raise ValueError(f"--duration {requested_sec} is below the minimum supported duration of {SUPPORTED_DURATION_MIN}s.")
+    if requested_sec is not None and requested_sec > SUPPORTED_DURATION_MAX:
+        raise ValueError(f"--duration {requested_sec} exceeds the maximum supported duration of {SUPPORTED_DURATION_MAX}s.")
+    if requested_tolerance is not None and (isinstance(requested_tolerance, bool) or not isinstance(requested_tolerance, int) or requested_tolerance <= 0):
+        raise ValueError("--duration-tolerance must be a positive integer")
 
-    Priority order:
-      1. Explicit exact overrides (--duration-target, --duration-min, --duration-max, --strictness)
-      2. Approximate --duration value
-      3. Explicit --duration-profile name
-      4. Default: short_25_30
-
-    Returns dict with keys:
-      profile_name, targetSec, minSec, maxSec, strictness,
-      requestedSec (or None), requestedProfile (or None),
-      spokenWordsPerMinute, estimatedScenePauseMs.
-    """
+    preset_id = requested_preset or LEGACY_PROFILE_ALIASES.get(requested_profile)
+    if requested_profile and preset_id is None:
+        raise ValueError(f"Unknown duration profile '{requested_profile}'")
+    if requested_sec is not None:
+        target_sec, source = requested_sec, "custom"
+        tolerance = requested_tolerance if requested_tolerance is not None else max(2, (requested_sec + 5) // 10)
+    else:
+        preset_id = preset_id or DEFAULT_DURATION_PRESET
+        preset = DURATION_PRESETS.get(preset_id)
+        if preset is None:
+            raise ValueError(f"Unknown duration preset '{preset_id}'. Available: {', '.join(DURATION_PRESETS)}")
+        target_sec, source = preset["targetSec"], "preset"
+        tolerance = requested_tolerance if requested_tolerance is not None else preset["toleranceSec"]
+    min_sec, max_sec = target_sec - tolerance, target_sec + tolerance
     result = {
+        "profile_name": preset_id,
+        "presetId": preset_id if source == "preset" else None,
+        "source": source,
         "requestedSec": requested_sec,
-        "requestedProfile": requested_profile or ("auto" if requested_sec else None),
+        "requestedProfile": requested_profile,
+        "toleranceSec": tolerance,
         "spokenWordsPerMinute": 110,
         "estimatedScenePauseMs": 350,
     }
-
-    # --- Step 0: validate requested_sec bounds ---
-    if requested_sec is not None:
-        if requested_sec < SUPPORTED_DURATION_MIN:
-            raise ValueError(
-                f"--duration {requested_sec} is below the minimum supported duration "
-                f"of {SUPPORTED_DURATION_MIN}s. Choose a value between "
-                f"{SUPPORTED_DURATION_MIN} and {SUPPORTED_DURATION_MAX}s."
-            )
-        if requested_sec > SUPPORTED_DURATION_MAX:
-            raise ValueError(
-                f"--duration {requested_sec} exceeds the maximum supported duration "
-                f"of {SUPPORTED_DURATION_MAX}s. Choose a value between "
-                f"{SUPPORTED_DURATION_MIN} and {SUPPORTED_DURATION_MAX}s."
-            )
-
-    # --- Step 1: determine profile ---
-    profile_name = requested_profile or DEFAULT_PROFILE
-
-    # If --duration is given without explicit profile, auto-select
-    if requested_sec is not None and requested_profile is None:
-        profile_name = _auto_select_profile(requested_sec)
-
-    # Validate profile exists
-    profile = DURATION_PROFILES.get(profile_name)
-    if profile is None:
-        raise ValueError(
-            f"Unknown duration profile '{profile_name}'. "
-            f"Available: {', '.join(DURATION_PROFILES.keys())}"
-        )
-    result["profile_name"] = profile_name
-
-    # --- Step 2: resolve numeric values ---
-    if requested_sec is not None:
-        # Tolerance-based range from --duration
-        tolerance = max(2, min(5, round(requested_sec * 0.10)))
-        target_sec = requested_sec
-        min_sec = requested_sec - tolerance
-        max_sec = requested_sec + tolerance
-        # Clamp to profile bounds when the result stays valid
-        if requested_profile:
-            # Explicit profile: always constrain
-            min_sec = max(min_sec, profile["minSec"])
-            max_sec = min(max_sec, profile["maxSec"])
-        else:
-            # Auto-selected: constrain only if valid (min <= target <= max)
-            clamped_min = max(min_sec, profile["minSec"])
-            clamped_max = min(max_sec, profile["maxSec"])
-            if clamped_min <= target_sec <= clamped_max:
-                min_sec, max_sec = clamped_min, clamped_max
-    else:
-        # No --duration: use profile defaults
-        target_sec = profile["targetSec"]
-        min_sec = profile["minSec"]
-        max_sec = profile["maxSec"]
 
     # Explicit overrides take highest priority
     if explicit_target is not None:
@@ -175,15 +131,7 @@ def resolve_requested_duration(
             f"Invalid duration: targetSec={target_sec} > maxSec={max_sec}. "
             f"Target must not exceed maximum."
         )
-    if requested_sec is not None and requested_profile:
-        if requested_sec < profile["minSec"] or requested_sec > profile["maxSec"]:
-            raise ValueError(
-                f"--duration {requested_sec}s is outside the range of profile "
-                f"'{requested_profile}' ({profile['minSec']}-{profile['maxSec']}s). "
-                f"Use --duration-auto or a different profile."
-            )
-
-    strictness = explicit_strictness or profile.get("strictness", "balanced")
+    strictness = explicit_strictness or "balanced"
 
     result.update({
         "targetSec": target_sec,
@@ -192,20 +140,6 @@ def resolve_requested_duration(
         "strictness": strictness,
     })
     return result
-
-
-def _auto_select_profile(requested_sec: int) -> str:
-    """Map an approximate duration to the best profile automatically."""
-    if 20 <= requested_sec <= 30:
-        return "short_25_30"
-    elif 31 <= requested_sec <= 45:
-        return "standard_32_38"
-    elif 46 <= requested_sec <= 60:
-        return "extended_50_60"
-    raise ValueError(
-        f"Requested duration {requested_sec}s is outside the supported range "
-        f"({SUPPORTED_DURATION_MIN}-{SUPPORTED_DURATION_MAX}s)."
-    )
 
 
 def resolve_duration_config(

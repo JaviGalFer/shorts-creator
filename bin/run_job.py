@@ -42,6 +42,8 @@ def main() -> int:
         verbose=args.verbose,
         duration=args.duration,
         duration_profile=args.duration_profile,
+        duration_preset=args.duration_preset,
+        duration_tolerance=args.duration_tolerance,
         duration_target=args.duration_target,
         duration_min=args.duration_min,
         duration_max=args.duration_max,

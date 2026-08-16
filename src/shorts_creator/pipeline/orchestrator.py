@@ -142,6 +142,10 @@ def build_script_command(args) -> list[str]:
         cmd.extend(["--duration", str(args.duration)])
     if args.duration_profile is not None:
         cmd.extend(["--duration-profile", args.duration_profile])
+    if getattr(args, "duration_preset", None) is not None:
+        cmd.extend(["--duration-preset", args.duration_preset])
+    if getattr(args, "duration_tolerance", None) is not None:
+        cmd.extend(["--duration-tolerance", str(args.duration_tolerance)])
     if args.duration_target is not None:
         cmd.extend(["--duration-target", str(args.duration_target)])
     if args.duration_min is not None:
@@ -358,6 +362,8 @@ def resolve_duration_for_dry_run(args) -> dict | None:
         return resolve_requested_duration(
             requested_sec=args.duration,
             requested_profile=args.duration_profile,
+            requested_preset=getattr(args, "duration_preset", None),
+            requested_tolerance=getattr(args, "duration_tolerance", None),
             explicit_target=args.duration_target,
             explicit_min=args.duration_min,
             explicit_max=args.duration_max,
@@ -498,7 +504,7 @@ def dry_run(args) -> int:
     resolved = resolve_duration_for_dry_run(args)
     if resolved:
         print(f"Duration: {resolved['targetSec']}s "
-              f"(profile={resolved['profile_name']}, "
+              f"(source={resolved['source']}, preset={resolved.get('presetId')}, "
               f"range={resolved['minSec']}-{resolved['maxSec']}s, "
               f"strictness={resolved['strictness']})")
     else:
@@ -558,6 +564,8 @@ def run_pipeline(
     verbose: bool = False,
     duration: int | None = None,
     duration_profile: str | None = None,
+    duration_preset: str | None = None,
+    duration_tolerance: int | None = None,
     duration_target: int | None = None,
     duration_min: int | None = None,
     duration_max: int | None = None,
@@ -572,6 +580,8 @@ def run_pipeline(
         verbose=verbose,
         duration=duration,
         duration_profile=duration_profile,
+        duration_preset=duration_preset,
+        duration_tolerance=duration_tolerance,
         duration_target=duration_target,
         duration_min=duration_min,
         duration_max=duration_max,

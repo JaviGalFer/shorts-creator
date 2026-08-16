@@ -276,7 +276,7 @@ def test_dry_run_prints_plan(capsys):
     captured = capsys.readouterr().out
     assert "RUNNER DRY-RUN" in captured
     assert "Duration: 42s" in captured
-    assert "standard_32_38" in captured
+    assert "source=custom" in captured
     assert "EXECUTION PLAN" in captured
     assert "SCRIPT_GENERATING" in captured
     assert "generate_script.py" in captured
@@ -394,7 +394,7 @@ def test_non_zero_exit_fails_metadata(fake_job_dir, capsys):
 
     with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=_side_effect):
         with patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=metadata):
-            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
                 with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                     with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                         rc = main()
@@ -1144,7 +1144,7 @@ def test_validate_exit0_sets_validated(fake_job_dir, initial_metadata_file, caps
     with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=side_effect):
         with patch("shorts_creator.pipeline.orchestrator.load_metadata",
                    side_effect=[dict(script_meta), dict(assets_meta), dict(assets_meta), dict(audio_meta), dict(audio_meta), dict(prepare_meta), dict(prepare_meta), dict(render_meta), dict(render_meta), dict(render_meta), dict(render_meta), dict(render_meta)]):
-            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
                 with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "validate"]):
                     rc = main()
                     assert rc == 0

@@ -1319,6 +1319,8 @@ def generate_script(
     model: str | None = None,
     duration: int | None = None,
     duration_profile: str | None = None,
+    duration_preset: str | None = None,
+    duration_tolerance: int | None = None,
     duration_target: int | None = None,
     duration_min: int | None = None,
     duration_max: int | None = None,
@@ -1338,6 +1340,8 @@ def generate_script(
         resolved = resolve_requested_duration(
             requested_sec=duration,
             requested_profile=duration_profile,
+            requested_preset=duration_preset,
+            requested_tolerance=duration_tolerance,
             explicit_target=duration_target,
             explicit_min=duration_min,
             explicit_max=duration_max,
@@ -1794,11 +1798,15 @@ def generate_script(
         "strictness": strictness,
         "spokenWordsPerMinute": SPOKEN_WORDS_PER_MINUTE,
         "estimatedScenePauseMs": ESTIMATED_SCENE_PAUSE_MS,
+        "toleranceSec": resolved["toleranceSec"],
+        "source": resolved["source"],
     }
     if requested_sec is not None:
         duration_dict["requestedSec"] = requested_sec
     if requested_profile is not None:
         duration_dict["requestedProfile"] = requested_profile
+    if resolved.get("presetId"):
+        duration_dict["presetId"] = resolved["presetId"]
 
     visuals_request = {
         "mode": "images",
