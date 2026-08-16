@@ -41,7 +41,7 @@
 5. [x] Assets.
 6. [x] Rendering + validation.
 7. [x] Pipeline + `bin/` adapter reduction.
-8. [ ] Stabilization and final review.
+8. [x] Stabilization and final review.
 
 Additional infrastructure is extracted only when required by a migrating domain, not as an independent campaign. Job/state/result contracts remain deferred until concrete consumers establish their boundaries.
 
