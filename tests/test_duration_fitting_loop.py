@@ -108,3 +108,50 @@ def test_real_regression_decision_is_expand_approximately_75_words():
     )
     assert result["decision"] == "EXPAND"
     assert result["proposedWords"] == 75
+
+
+def test_repair_uses_script_domain_llm_config_without_persisting_secret(tmp_path, monkeypatch):
+    path = _metadata(tmp_path)
+    captured = {}
+
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setattr(
+        orchestrator, "resolve_llm_config",
+        lambda: {"api_key": "from-dotenv", "model": "configured-model", "provider": "openai"},
+    )
+
+    def fake_repair(script, **kwargs):
+        captured.update(kwargs)
+        return None, [{"code": "stop"}]
+
+    monkeypatch.setattr(orchestrator, "repair_voiceover_duration", fake_repair)
+    ok, reason = orchestrator._run_duration_fitting(str(path), verbose=False)
+    assert not ok and reason == "DURATION_FITTING_REPAIR_FAILED"
+    assert captured["api_key"] == "from-dotenv"
+    assert captured["model"] == "configured-model"
+    assert "from-dotenv" not in path.read_text()
+
+
+def test_audio_regeneration_command_preserves_effective_audio_config(tmp_path):
+    path = _metadata(tmp_path)
+    data = json.loads(path.read_text())
+    data["audio"].update({
+        "provider": "elevenlabs", "voice": "voice-A", "timingProvider": "auto",
+    })
+    cmd = orchestrator.build_audio_regeneration_command(str(path), data)
+    assert cmd[-7:] == [
+        "--force-regenerate", "--tts-provider", "elevenlabs", "--voice", "voice-A",
+        "--subtitle-timing-provider", "auto",
+    ]
+
+
+def test_audio_regeneration_uses_request_config_when_old_audio_metadata_lacks_it(tmp_path):
+    path = _metadata(tmp_path)
+    data = json.loads(path.read_text())
+    data["audio"].pop("provider", None)
+    data["audio"].pop("voice", None)
+    data["request"].update({"voice": {"provider": "edge_tts", "voiceId": "voice-B"}, "subtitles": {"timingProvider": "estimated"}})
+    cmd = orchestrator.build_audio_regeneration_command(str(path), data)
+    assert "voice-B" in cmd
+    assert cmd[cmd.index("--tts-provider") + 1] == "edge_tts"
+    assert cmd[cmd.index("--subtitle-timing-provider") + 1] == "estimated"

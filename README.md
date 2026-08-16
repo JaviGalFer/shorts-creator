@@ -36,7 +36,7 @@ Referencias:
 | Tema o instrucción | `--topic` | Tema del vídeo |
 | Duración | `--duration`, `--duration-profile`, `--duration-target`, `--duration-min`, `--duration-max`, `--strictness` | Duración exacta, perfil predefinido o rango con nivel de tolerancia |
 | Modelo LLM | `--model` | Modelo del proveedor LLM (OpenAI-compatible) |
-| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | `edge_tts` (canónico, gratuito) o `elevenlabs` (secundario) |
+| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | Edge TTS es el provider canónico operativo; el registry contempla alternativas, pero ElevenLabs no está confirmado como path E2E per-scene |
 | Voz | `--voice`, `TTS_VOICE` | Voz para la narración (default: `es-ES-AlvaroNeural`) |
 | Timing de subtítulos | `--subtitle-timing-provider`, `SUBTITLE_TIMING_PROVIDER` | `auto`, `edge_tts`, `whisper` o `estimated` |
 | Estilo de subtítulos | `--subtitle-style` | `documentary_safe`, `shorts_dynamic`, `shorts_upper_dynamic` |

@@ -25,8 +25,9 @@ from shorts_creator.contracts.duration import (
     resolve_requested_duration,
 )
 from shorts_creator.infrastructure.metadata_store import load_metadata, save_metadata
+from shorts_creator.audio.generator import resolve_audio_regeneration_config
 from shorts_creator.rendering.preparer import _get_tail_pause_sec, project_render_duration
-from shorts_creator.script.generator import repair_voiceover_duration
+from shorts_creator.script.generator import repair_voiceover_duration, resolve_llm_config
 
 ORCHESTRATION_VERSION = "1"
 MAX_DURATION_REPAIRS = 2
@@ -192,6 +193,17 @@ def _duration_fitting_request(data: dict) -> dict | None:
     return duration
 
 
+def build_audio_regeneration_command(metadata_path: str, metadata: dict) -> list[str]:
+    """Build a force-regeneration command preserving the prior audio attempt."""
+    config = resolve_audio_regeneration_config(metadata)
+    return build_stage_command("audio", metadata_path, metadata=metadata) + [
+        "--force-regenerate",
+        "--tts-provider", config["tts_provider"],
+        "--voice", config["voice"],
+        "--subtitle-timing-provider", config["subtitle_timing_provider"],
+    ]
+
+
 def _run_duration_fitting(metadata_path: str, *, verbose: bool) -> tuple[bool, str | None]:
     """Fit measured audio duration before prepare; returns (may_continue, reason)."""
     data = load_metadata(metadata_path)
@@ -247,12 +259,13 @@ def _run_duration_fitting(metadata_path: str, *, verbose: bool) -> tuple[bool, s
                 minimum_words_per_scene=MINIMUM_WORDS_PER_SCENE,
             )
             request_visuals = data.get("request", {}).get("visuals", {})
+            llm_config = resolve_llm_config()
             repaired, errors = repair_voiceover_duration(
                 data["script"], direction=decision["decision"],
                 target_total_words=decision["proposedWords"], scene_word_targets=targets,
-                api_key=os.environ.get("LLM_API_KEY", ""),
-                model=os.environ.get("LLM_MODEL", "gpt-4o-mini"),
-                provider=os.environ.get("LLM_PROVIDER", "openai"),
+                api_key=llm_config["api_key"] or "",
+                model=llm_config["model"],
+                provider=llm_config["provider"],
                 allow_generated_images=bool(request_visuals.get("allowGeneratedImages", False)),
             )
         except Exception as exc:
@@ -271,7 +284,7 @@ def _run_duration_fitting(metadata_path: str, *, verbose: bool) -> tuple[bool, s
         entry["sceneWordTargets"] = targets
         entry["repairOutcome"] = "APPLIED"
         save_metadata(metadata_path, data)
-        cmd = build_stage_command("audio", metadata_path, metadata=data) + ["--force-regenerate"]
+        cmd = build_audio_regeneration_command(metadata_path, data)
         result = run_subprocess(cmd, verbose, "audio")
         data = load_metadata(metadata_path)
         if result.returncode != 0 or data.get("status") != "AUDIO_READY":

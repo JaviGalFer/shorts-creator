@@ -285,6 +285,16 @@ def load_env():
     return env
 
 
+def resolve_llm_config(*, model_override: str | None = None) -> dict[str, str | None]:
+    """Resolve LLM runtime configuration with generate_script's precedence."""
+    env = load_env()
+    return {
+        "api_key": env.get("LLM_API_KEY") or os.environ.get("LLM_API_KEY"),
+        "model": model_override or env.get("LLM_MODEL") or "gpt-4o-mini",
+        "provider": env.get("LLM_PROVIDER") or "openai",
+    }
+
+
 def _llm_temperature_for_system_prompt(system_prompt: str) -> float:
     if system_prompt in (VOICEOVER_COMPRESSION_SYSTEM_PROMPT, VOICEOVER_REPAIR_SYSTEM_PROMPT):
         return COMPRESSION_LLM_TEMPERATURE
@@ -1315,10 +1325,10 @@ def generate_script(
     strictness: str | None = None,
 ) -> int:
     """Generate and persist a canonical V2 script for one request."""
-    env = load_env()
-    api_key = env.get("LLM_API_KEY") or os.environ.get("LLM_API_KEY")
-    model = model or env.get("LLM_MODEL") or "gpt-4o-mini"
-    provider = env.get("LLM_PROVIDER") or "openai"
+    llm_config = resolve_llm_config(model_override=model)
+    api_key = llm_config["api_key"]
+    model = llm_config["model"]
+    provider = llm_config["provider"]
 
     if not api_key:
         print("ERROR: LLM_API_KEY not found in .env or environment")
