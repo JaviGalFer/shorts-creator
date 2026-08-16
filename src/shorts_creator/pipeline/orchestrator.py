@@ -480,6 +480,12 @@ def _verify_stage_contract(
             )
         if result.returncode != 0:
             return False, "VALIDATION_FAILED", None
+        if data.get("validation", {}).get("gates", {}).get("requestedDurationCompliance") == "FAIL":
+            data["status"] = "REVIEW_REQUIRED"
+            reasons = data.setdefault("reviewReasons", [])
+            if "REQUESTED_DURATION_OUT_OF_RANGE" not in reasons:
+                reasons.append("REQUESTED_DURATION_OUT_OF_RANGE")
+            return False, "REVIEW_REQUIRED", None
         # Exit 0: all checks passed
         return True, "VALIDATED", None
 

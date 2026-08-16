@@ -354,6 +354,38 @@ def evaluate_duration_fitting(
     }
 
 
+def evaluate_requested_duration_compliance(
+    *,
+    actual_video_duration_sec: float,
+    target_sec: int,
+    min_sec: int,
+    max_sec: int,
+) -> dict:
+    """Evaluate final MP4 duration against the requested product window."""
+    actual = _validate_positive_number(actual_video_duration_sec, "actual_video_duration_sec")
+    target = _validate_positive_int(target_sec, "target_sec")
+    minimum = _validate_positive_int(min_sec, "min_sec")
+    maximum = _validate_positive_int(max_sec, "max_sec")
+    if minimum > target or target > maximum:
+        raise ValueError(
+            f"Invalid duration window: minSec={minimum}, targetSec={target}, maxSec={maximum}"
+        )
+    if minimum <= actual <= maximum:
+        status, delta = "PASS", 0.0
+    elif actual < minimum:
+        status, delta = "FAIL", minimum - actual
+    else:
+        status, delta = "FAIL", actual - maximum
+    return {
+        "status": status,
+        "actualVideoDurationSec": round(actual, 3),
+        "targetSec": target,
+        "minSec": minimum,
+        "maxSec": maximum,
+        "deltaToRangeSec": round(delta, 3),
+    }
+
+
 def distribute_words(
     *,
     current_counts: list[int],
