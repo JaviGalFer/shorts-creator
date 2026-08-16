@@ -21,7 +21,7 @@ Visual Plan V2 es el único contrato visual canónico. La arquitectura modular V
 
 Pipeline V2 funcional y E2E técnico demostrado. Docker se utiliza para render y servicios auxiliares; `bin/run_job.py` es el orquestador canónico.
 
-El fitting post-TTS y la validación de cumplimiento de duración del MP4 están implementados y validadas por E2E reales. quick_30 y deep_60 son la evidencia canónica exitosa. Suite completa: **`1243 passed, 0 skipped, 0 failed`**.
+El fitting post-TTS y la validación de cumplimiento de duración del MP4 están implementados y validados por E2E reales. quick_30 y deep_60 son la evidencia canónica exitosa. Suite completa: **`1243 passed, 0 skipped, 0 failed`**.
 
 Referencias:
 - `docs/project/current-state.md` — estado detallado
