@@ -358,14 +358,18 @@ def distribute_words(
     *,
     current_counts: list[int],
     target_total: int,
+    minimum_words_per_scene: int = 1,
 ) -> list[int]:
     """Deterministically distribute a new word total across scenes.
 
     - sum(result) == target_total
-    - each scene target >= 1
+    - each scene target >= minimum_words_per_scene
     - roughly proportional to current_counts
     - remainder fixed by rounding (largest fractional part, index tie-break)
     - independent of provider/voice/language
+
+    minimum_words_per_scene must be a positive int (bool rejected) and
+    target_total must be >= scene_count * minimum_words_per_scene.
 
     Raises ValueError on invalid input.
     """
@@ -379,10 +383,18 @@ def distribute_words(
         raise ValueError("target_total must be an int")
     if target_total <= 0:
         raise ValueError("target_total must be positive")
+    if isinstance(minimum_words_per_scene, bool) or not isinstance(minimum_words_per_scene, int):
+        raise ValueError("minimum_words_per_scene must be an int")
+    if minimum_words_per_scene <= 0:
+        raise ValueError("minimum_words_per_scene must be positive")
 
     n = len(current_counts)
-    if target_total < n:
-        raise ValueError("target_total must be >= number of scenes")
+    min_per_scene = minimum_words_per_scene
+    if target_total < n * min_per_scene:
+        raise ValueError(
+            f"target_total ({target_total}) must be >= "
+            f"scene_count * minimum_words_per_scene ({n} * {min_per_scene} = {n * min_per_scene})"
+        )
 
     total = sum(current_counts)
     raw = [count / total * target_total for count in current_counts]
@@ -395,11 +407,11 @@ def distribute_words(
     for idx in order[:remaining]:
         floors[idx] += 1
 
-    # Guarantee every scene has at least one word.
+    # Guarantee every scene has at least minimum_words_per_scene.
     for i in range(n):
-        if floors[i] < 1:
-            deficit = 1 - floors[i]
-            floors[i] = 1
+        if floors[i] < min_per_scene:
+            deficit = min_per_scene - floors[i]
+            floors[i] = min_per_scene
             for _ in range(deficit):
                 j = max(range(n), key=lambda k: floors[k] if k != i else -1)
                 floors[j] -= 1

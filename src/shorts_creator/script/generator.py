@@ -1031,20 +1031,24 @@ def _build_voiceover_repair_prompt(
     direction: str,
     current_word_count: int,
     target_total_words: int,
-    minimum_words: int,
-    maximum_words: int,
     scene_word_targets: list[int],
     allow_generated_images: bool = False,
 ) -> str:
     """Build a generic voiceover-only repair prompt (EXPAND or COMPRESS).
 
-    Direction-agnostic replacement for the compression-only builder. It asks
-    the LLM for NEW voiceovers only, preserving every structural field and the
-    exact sceneNumber sequence. The global word total must land on
-    target_total_words and stay within [minimum_words, maximum_words].
+    Direction-agnostic builder used for post-TTS duration fitting. It asks the
+    LLM for NEW voiceovers only, preserving every structural field and the
+    exact sceneNumber sequence.
 
-    The repair payload contract is identical to
-    _apply_voiceover_repair(): {"scenes": [{"sceneNumber", "voiceover"}]}.
+    target_total_words is the OPERATIONAL post-TTS objective derived from the
+    REAL measured duration. It is deliberately NOT tied to the bootstrap WPM
+    word budget (minimumWords/maximumWords are ignored here on purpose): the
+    real TTS measurement — not WPM — is the authority once audio exists. The
+    LLM should APPROXIMATE target_total_words; exact word count is guidance,
+    not a hard product contract. scene_word_targets are per-scene guidance.
+
+    The repair payload contract is identical to _apply_voiceover_repair():
+    {"scenes": [{"sceneNumber", "voiceover"}]}.
     """
     direction = direction.upper()
     if direction not in ("EXPAND", "COMPRESS"):
@@ -1062,11 +1066,11 @@ def _build_voiceover_repair_prompt(
     noun = "expansión" if direction == "EXPAND" else "compresión"
 
     lines = [
-        f"## CONTRATO DE {noun.upper()} DE VOZ EN OFF — PRIORIDAD MÁXIMA",
+        f"## OBJETIVO DE {noun.upper()} DE VOZ EN OFF — POST-TTS",
         "",
         f"Candidato actual: {current_word_count} palabras.",
-        f"Objetivo global: {target_total_words} palabras (mínimo aceptado {minimum_words}, "
-        f"máximo aceptado {maximum_words}).",
+        f"Objetivo operativo global: aproximadamente {target_total_words} palabras "
+        "(derivado de la duración de voz real medida).",
         "",
         f"Debes {verb} EXCLUSIVAMENTE los voiceovers que se proporcionan a continuación.",
         "No añadas ni elimines escenas. Conserva exactamente los `sceneNumber` y su orden.",
@@ -1079,8 +1083,6 @@ def _build_voiceover_repair_prompt(
             "direction": direction,
             "currentWordCount": current_word_count,
             "targetTotalWords": target_total_words,
-            "minimumWords": minimum_words,
-            "maximumWords": maximum_words,
             "scenes": [
                 {
                     "sceneNumber": scenes[i]["sceneNumber"],
@@ -1100,16 +1102,17 @@ def _build_voiceover_repair_prompt(
         "- Cada escena debe contener únicamente `sceneNumber` y `voiceover`.",
         "- Conserva la secuencia completa y exacta de `sceneNumber`.",
         "- Cada voiceover debe ser un string no vacío.",
-        f"- El total final DEBE quedar en {target_total_words} palabras "
-        f"y entre {minimum_words} y {maximum_words}.",
+        "- Mantén una longitud de voz equilibrada entre escenas y una progresión narrativa coherente.",
+        "- No existe un tope de palabras del bootstrap: la duración real medida decide.",
         "- Conserva el significado principal de cada escena.",
         "- No modifiques ningún campo visual ni estructural.",
         "",
         "## Objetivos recomendados (guidance)",
         "",
+        "- Aproximate al objetivo global de {target_total_words} palabras, sin obsesionarte con el conteo exacto.",
         "- Los targets por escena son recomendaciones (suman el objetivo global).",
-        "- El total global es obligatorio.",
         "- Reparte cambios de forma equilibrada entre escenas.",
+        "- La autoridad final es la duración de voz real medida tras regenerar; el conteo de palabras es orientativo.",
         "",
         "## Cómo se cuenta una palabra",
         "",
@@ -1129,7 +1132,6 @@ def _build_voiceover_repair_prompt(
         "",
         "## Autocomprobación final",
         "",
-        f"- Revisa que el total final sea {target_total_words} palabras.",
         f"- Revisa que los `sceneNumber` sean {expected}.",
         "- Las restricciones visuales no son editables durante esta reparación.",
     ]
