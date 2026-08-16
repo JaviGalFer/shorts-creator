@@ -522,6 +522,76 @@ class TestExpandedScenesPreflight:
             f"preflight received {captured_expected[0]}, expected ~19.0"
 
 
+class TestResolvedConfigScenePlan:
+    def test_resolved_config_preserves_request_scene_plan(self, monkeypatch, tmp_path):
+        """resolvedConfig.scenePlan must be preserved when the request carries one."""
+        import render_job as render_cli
+        import shorts_creator.rendering.renderer as rj
+        rj.main = render_cli.main
+
+        job = tmp_path / "job"
+        job.mkdir()
+        (job / "scenes").mkdir()
+        (job / "assets").mkdir()
+        (job / "assets" / "seg_001.jpg").write_text("x")
+        (job / "scenes" / "scene-01.mp3").write_bytes(b"\xff\xfb" + b"\x00" * 100)
+        meta_path = job / "metadata.json"
+
+        plan = {
+            "targetSceneDurationSec": 6,
+            "preferredSceneCount": 10,
+            "minSceneCount": 9,
+            "maxSceneCount": 11,
+        }
+        meta = {
+            "jobId": "test-scene-plan-preserved",
+            "request": {
+                "duration": {"targetSec": 60, "minSec": 55, "maxSec": 65},
+                "scenePlan": plan,
+            },
+            "script": {"scenes": [
+                {"sceneNumber": 1, "targetDurationSec": 6.0},
+            ]},
+            "audio": {
+                "provider": "edge-tts",
+                "voice": "es-ES-AlvaroNeural",
+                "continuous": False,
+                "scenes": [
+                    {"sceneNumber": 1, "path": str(job / "scenes" / "scene-01.mp3"),
+                     "exists": True, "durationSec": 6.0},
+                ],
+            },
+            "assets": [
+                {"sceneNumber": 1, "selected": True, "segments": [
+                    {"segmentIndex": 1, "path": str(job / "assets" / "seg_001.jpg"),
+                     "segmentValidationStatus": "PASS", "error": None}]},
+            ],
+            "renderTimeline": [
+                {"sceneNumber": 1, "segmentIndex": 1, "startSec": 0.0, "endSec": 6.0,
+                 "durationSec": 6.0, "beatIndex": 1, "assetType": "broll",
+                 "motionType": "static", "assetPath": str(job / "assets" / "seg_001.jpg"),
+                 "audioPath": str(job / "scenes" / "scene-01.mp3"),
+                 "transitionIn": "cut", "transitionOut": "fade",
+                 "subtitleCueIndexes": []},
+            ],
+            "status": "SUBTITLES_READY",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "render": {"path": str(job / "video.mp4"), "durationSeconds": 6.0},
+            "subtitles": {"path": str(job / "subtitle.ass"), "format": "ass"},
+        }
+        meta_path.write_text(json.dumps(meta))
+
+        monkeypatch.setattr("sys.argv", [
+            "render_job.py", str(meta_path),
+            "--skip-render", "--skip-validation", "--skip-asset-validation",
+        ])
+        exit_code = rj.main()
+        assert exit_code == 0
+
+        saved = json.loads(meta_path.read_text())
+        assert saved["resolvedConfig"]["scenePlan"] == plan
+
+
 # ---------------------------------------------------------------------------
 # Manifest scene audio duration
 # ---------------------------------------------------------------------------

@@ -1392,6 +1392,7 @@ def render_job(
             "format": "shorts-9x16",
             "fps": FPS,
         },
+        "scenePlan": req.get("scenePlan"),
     }
     audio_pacing = data.get("audioPacing", {})
     if isinstance(audio_pacing, dict) and audio_pacing:
