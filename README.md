@@ -15,13 +15,13 @@ A partir de un tema y de una configuración de producción, coordina la generaci
 
 El núcleo del pipeline es independiente de la temática. El proyecto está diseñado para adaptarse progresivamente a diferentes duraciones, voces, estilos visuales y formatos de contenido.
 
-Visual Plan V2 es el único contrato visual canónico. El proyecto no es todavía un producto final: el pipeline es funcional pero la arquitectura modular está en proceso de consolidación.
+Visual Plan V2 es el único contrato visual canónico. La arquitectura modular V2 está completa: los dominios viven en `src/shorts_creator/` y `bin/` mantiene adaptadores CLI delgados.
 
 ## Estado del proyecto
 
-Pipeline funcional. Todo el código de ejecución reside en `bin/`. Docker se utiliza para render y servicios auxiliares. `bin/run_job.py` es el orquestador canónico.
+Pipeline V2 funcional y E2E técnico demostrado. Docker se utiliza para render y servicios auxiliares; `bin/run_job.py` es el orquestador canónico.
 
-**Change completado:** `retire-legacy-visual-v1` — retirada del contrato visual V1; Visual Plan V2 es el único contrato visual soportado. Siguiente trabajo: infraestructura de agentes/contexto y, después, la modularización hacia `src/shorts_creator/`.
+El primer E2E técnico real solicitó 30s y generó un MP4 de aproximadamente 20.88s: el pipeline técnico pasó, pero el ajuste de duración continúa evolucionando. El fitting post-TTS bounded está implementado y aún requiere una nueva validación E2E real.
 
 Referencias:
 - `docs/project/current-state.md` — estado detallado
@@ -169,7 +169,11 @@ Las variables de entorno se configuran en `.env`. Ver `.env.example` para la lis
 ## Arquitectura actual
 
 ```
-bin/                    # Scripts del pipeline
+src/shorts_creator/     # Dominios modulares V2
+  contracts/            # Contratos compartidos
+  pipeline/             # Orquestación
+  script/ audio/ assets/ rendering/ validation/ infrastructure/
+bin/                    # Adaptadores CLI y compatibilidad fina
   run_job.py            # Orquestador canónico
   generate_script.py    # Generación de guion
   fetch_images_v2.py    # Obtención de imágenes (V2)
@@ -181,10 +185,6 @@ data/
   videos/{jobId}/       # Un directorio por job: metadata.json, assets/, scenes/, video.mp4
 docker-compose.yml      # n8n, Postgres, render-worker (infraestructura auxiliar)
 ```
-
-### Arquitectura futura (roadmap)
-
-El proyecto evolucionará hacia una arquitectura modular con `src/shorts_creator/` y `pyproject.toml`, donde `bin/` se reduzca a adaptadores CLI delgados. Ver `docs/architecture/modular-v2-transformation-roadmap.md`.
 
 ## Docker y n8n
 
@@ -200,7 +200,7 @@ n8n no es el orquestador canónico del pipeline V2.
 
 - `ffprobe` no está instalado en el host; la medición de duración de audio usa Docker como fallback.
 - La aceleración GPU no está implementada; el render usa CPU.
-- El proyecto está en transformación modular; la documentación puede ir por detrás del código.
+- La validación final de duración solicitada del MP4 es el siguiente slice; la integridad del render y el cumplimiento de producto se tratarán por separado.
 - No hay publicación automática ni integración con redes sociales.
 
 ## Documentación adicional
