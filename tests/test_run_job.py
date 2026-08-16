@@ -323,7 +323,7 @@ def test_script_stage_extracts_job_id(fake_job_dir, capsys):
                 "status": "SCRIPT_DRAFT",
                 "createdAt": "2000-01-01T00:00:00.000Z",
             }
-            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
                 with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                     # Don't save on exit - just verify the parsing path
                     with patch("shorts_creator.pipeline.orchestrator._final_summary"):
@@ -365,7 +365,7 @@ def test_review_required_stops_before_assets(fake_job_dir, capsys):
             args=[], returncode=0, stdout=script_output, stderr=""
         )
         with patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=metadata):
-            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
                 with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                     with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "script"]):
                         rc = main()
@@ -394,7 +394,7 @@ def test_non_zero_exit_fails_metadata(fake_job_dir, capsys):
 
     with patch("shorts_creator.pipeline.orchestrator.subprocess.run", side_effect=_side_effect):
         with patch("shorts_creator.pipeline.orchestrator.load_metadata", return_value=metadata):
-            with patch("shorts_creator.pipeline.orchestrator.save_metadata"):
+            with patch("shorts_creator.pipeline.orchestrator.save_metadata") as mock_save:
                 with patch("shorts_creator.pipeline.orchestrator.os.path.exists", return_value=True):
                     with patch.object(sys, "argv", ["run_job.py", "--topic", "Test", "--stop-after", "assets"]):
                         rc = main()
@@ -1150,6 +1150,7 @@ def test_validate_exit0_sets_validated(fake_job_dir, initial_metadata_file, caps
                     assert rc == 0
                     out = capsys.readouterr().out
                     assert "VALIDATED" in out
+                    assert mock_save.call_args[0][1]["status"] == "VALIDATED"
 
 
 # ── Prepare exit-1 pipeline integration ──────────────────────────────────

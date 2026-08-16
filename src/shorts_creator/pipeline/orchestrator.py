@@ -776,6 +776,8 @@ def run_pipeline(
                     return 0
 
             # Success
+            # Persist the resolved contract status, not the transient running status.
+            data["status"] = resolved_status
             append_orchestration(data, stage, resolved_status, started, finished)
             save_metadata(metadata_path, data)
             print(f"[{stage}] Completed: {resolved_status}")
