@@ -1727,7 +1727,7 @@ def generate_script(
                 best_candidate_rank = candidate_rank
                 retry_entry["becameBestCandidate"] = True
 
-        if v2_valid and duration_ok:
+        if v2_valid:
             script_data = canonical
             best_candidate = copy.deepcopy(canonical)
             best_word_count = word_count
@@ -1735,7 +1735,10 @@ def generate_script(
             best_distance = distance
             best_scene_word_counts = scene_word_counts
             best_candidate_rank = candidate_rank
-            print(f"  Accepted v2: canonical valid + duration OK ({estimated_dur:.1f}s within range)")
+            print(
+                "  Accepted v2: canonical valid; bootstrap duration estimate is "
+                f"non-blocking ({estimated_dur:.1f}s)"
+            )
             break
 
         retries += 1
@@ -1879,15 +1882,9 @@ def generate_script(
         for issue in v2_errs:
             review_reasons.append(f"V2_STRUCTURE_{issue.get('code', 'UNKNOWN')}: {issue.get('message', '')}")
 
-    if not duration_ok_after_retries:
-        review_reasons.append(
-            f"DURATION_OUT_OF_RANGE: estimated={estimated_dur:.1f}s "
-            f"(spoken={spoken_sec:.1f}s + pauses={pause_sec:.1f}s), "
-            f"target={target_dur}s, min={min_sec}s, max={max_sec}s, "
-            f"words={word_count}, scenes={scene_count}"
-        )
-
-    all_ok = duration_ok_after_retries and structure_valid_after_retries
+    # Bootstrap WPM is guidance before TTS only. Real audio duration and the
+    # bounded fitting loop are authoritative after this structural stage.
+    all_ok = structure_valid_after_retries
     status = "SCRIPT_DRAFT" if all_ok else "REVIEW_REQUIRED"
 
     # For REVIEW_REQUIRED after exhausted retries, add explicit reason
@@ -1951,7 +1948,9 @@ def generate_script(
             "bestAttempt": best_attempt_idx,
             "bestAttemptWordCount": best_word_count,
             "lastAttemptDiscardedAsRegression": last_attempt_discarded_as_regression,
-            "status": "PASS" if all_ok else "FAIL",
+            "status": "PASS" if duration_ok_after_retries else "FAIL",
+            "authority": "bootstrap_estimate",
+            "blocking": False,
         },
         "createdAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),

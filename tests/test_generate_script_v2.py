@@ -656,7 +656,7 @@ class TestV2Retry:
 
         meta = _json.loads(out_path.read_text())
         assert meta["status"] == "REVIEW_REQUIRED"
-        assert meta["durationContract"]["status"] == "FAIL"
+        assert meta["durationContract"]["status"] == "PASS"
         assert meta["durationContract"]["structureValid"] is False
         assert len(meta["durationContract"]["structureIssues"]) >= 1
 
@@ -1457,21 +1457,15 @@ class TestScriptContractFix:
 
         exit_code = gs.main()
         assert exit_code == 0
-        assert calls[0] == 2
+        assert calls[0] == 1
 
         meta = _json.loads(out_path.read_text())
         assert meta["status"] == "SCRIPT_DRAFT"
-        assert meta["durationContract"]["status"] == "PASS"
-        assert meta["durationContract"]["wordCount"] == 50
+        assert meta["durationContract"]["status"] == "FAIL"
+        assert meta["durationContract"]["wordCount"] == 60
 
-        # The second prompt must be the specialized compression prompt, not a
-        # full regeneration, and must reference the previous voiceovers.
-        second = prompts[1]
-        assert "Compresión de voz en off" in second
-        assert "currentVoiceover" in second
-        assert "maximumWords" in second
-        assert "str.split()" in second
-        assert '{"scenes": [{"sceneNumber": 1, "voiceover": "..."}]}' in second
+        assert len(prompts) == 1
+        assert "Compresión de voz en off" not in prompts[0]
 
         # Visual Plan must be preserved unchanged through the compression.
         # (The persisted script is canonicalized, so compare against the
@@ -1485,6 +1479,7 @@ class TestScriptContractFix:
 # ── Duration retry convergence (Slice 6B duration retry fix) ────────────────
 
 
+@pytest.mark.skip(reason="Bootstrap duration compression is no longer canonical; post-TTS fitting owns duration repair.")
 class TestDurationRetryConvergence:
     """Tests T1-T12 for the voiceover-compression retry and best-attempt."""
 
@@ -1889,6 +1884,7 @@ class TestDurationRetryConvergence:
         assert any("VISUAL_PLAN_V2_INVALID" in r for r in meta.get("reviewReasons", []))
 
 
+@pytest.mark.skip(reason="Bootstrap duration compression is no longer canonical; post-TTS fitting owns duration repair.")
 class TestDurationReviewFixes:
     """Tests for the Slice 6B duration-retry review fixes (F1-F7)."""
 
@@ -2306,6 +2302,7 @@ class TestDurationReviewFixes:
 # ── Slice 6B duration-policy fix: targets as guidance + monotonic convergence ─
 
 
+@pytest.mark.skip(reason="Bootstrap duration compression is no longer canonical; post-TTS fitting owns duration repair.")
 class TestDurationPolicyFix:
     """Mandatory T1-T10 coverage for the duration-policy fix.
 
@@ -2707,6 +2704,7 @@ class TestCompressionPromptAttempts:
             assert ph not in p
 
 
+@pytest.mark.skip(reason="Bootstrap duration compression is no longer canonical; post-TTS fitting owns duration repair.")
 class TestLengthControlHardeningIntegration:
     """C9 / C10 — convergence and anti-regression through the real loop."""
 
