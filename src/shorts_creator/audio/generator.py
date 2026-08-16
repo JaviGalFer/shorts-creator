@@ -1387,7 +1387,14 @@ async def main_continuous(metadata_path: Path, voice: str, join_style: str = "pe
     return 0 if data["status"] == "AUDIO_READY" else 1
 
 
-async def main_per_scene(metadata_path: Path, voice: str) -> int:
+async def main_per_scene(
+    metadata_path: Path,
+    voice: str,
+    *,
+    force_regenerate: bool = False,
+    tts_provider: str = "edge_tts",
+    subtitle_timing_provider: str = "auto",
+) -> int:
     data = load_metadata(str(metadata_path))
     job_id = data["jobId"]
     scenes = data["script"]["scenes"]
@@ -1407,7 +1414,7 @@ async def main_per_scene(metadata_path: Path, voice: str) -> int:
         dest = sdir / f"scene-{scene_num:02}.mp3"
         subtitle_timing = None
 
-        if dest.exists() and dest.stat().st_size > 1000:
+        if not force_regenerate and dest.exists() and dest.stat().st_size > 1000:
             duration = float(scene.get("targetDurationSec", 5))
             cues, source, confidence = estimate_cues_uniform(text, duration)
             subtitle_timing = {
@@ -1471,8 +1478,9 @@ async def main_per_scene(metadata_path: Path, voice: str) -> int:
 
     duration_estimated = any_duration_missing
     data["audio"] = {
-        "provider": "edge-tts",
+        "provider": tts_provider,
         "voice": voice,
+        "timingProvider": subtitle_timing_provider,
         "continuous": False,
         "scenes": audio_scenes,
         "duration_estimated": duration_estimated,
@@ -1553,6 +1561,20 @@ def get_audio_defaults() -> dict[str, str]:
     }
 
 
+def resolve_audio_regeneration_config(metadata: dict) -> dict[str, str]:
+    """Resolve the effective per-scene audio configuration from job metadata."""
+    defaults = get_audio_defaults()
+    audio = metadata.get("audio", {})
+    request = metadata.get("request", {})
+    request_voice = request.get("voice", {}) if isinstance(request, dict) else {}
+    request_subtitles = request.get("subtitles", {}) if isinstance(request, dict) else {}
+    return {
+        "tts_provider": audio.get("provider") or request_voice.get("provider") or defaults["tts_provider"],
+        "voice": audio.get("voice") or request_voice.get("voiceId") or defaults["voice"],
+        "subtitle_timing_provider": audio.get("timingProvider") or request_subtitles.get("timingProvider") or defaults["subtitle_timing_provider"],
+    }
+
+
 async def generate_audio(
     *,
     metadata_path: str | Path,
@@ -1561,6 +1583,7 @@ async def generate_audio(
     subtitle_timing_provider: str,
     continuous: bool = False,
     join_style: str = "period",
+    force_regenerate: bool = False,
 ) -> int:
     """Generate audio artifacts and update metadata for one job."""
     resolved_metadata_path = Path(metadata_path).resolve()
@@ -1578,4 +1601,7 @@ async def generate_audio(
             join_style=join_style,
             subtitle_provider=subtitle_timing_provider,
         )
-    return await main_per_scene(resolved_metadata_path, voice)
+    return await main_per_scene(
+        resolved_metadata_path, voice, force_regenerate=force_regenerate,
+        tts_provider=tts_provider, subtitle_timing_provider=subtitle_timing_provider,
+    )

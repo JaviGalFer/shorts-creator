@@ -6,6 +6,8 @@ ensure_src_on_path()
 
 from shorts_creator.contracts.duration import (
     DEFAULT_PROFILE,
+    DEFAULT_DURATION_PRESET,
+    DURATION_PRESETS,
     DURATION_PROFILES,
     SUPPORTED_DURATION_MAX,
     SUPPORTED_DURATION_MIN,
@@ -16,16 +18,23 @@ from shorts_creator.contracts.duration import (
 
 
 def add_duration_profile_args(parser) -> None:
-    """Add --duration, --duration-profile and explicit duration args to argparse."""
-    parser.add_argument(
+    """Add canonical preset/custom duration options and legacy aliases."""
+    duration_group = parser.add_mutually_exclusive_group()
+    duration_group.add_argument(
         "--duration", type=int, default=None,
-        help="Approximate target duration in seconds (e.g. 42). Auto-selects profile.",
+        help="Custom target duration in seconds with symmetric tolerance.",
     )
+    duration_group.add_argument(
+        "--duration-preset", default=None, choices=list(DURATION_PRESETS),
+        help=f"Duration preset (default: {DEFAULT_DURATION_PRESET})",
+    )
+    parser.add_argument("--duration-tolerance", type=int, default=None,
+                        help="Symmetric tolerance in seconds around the target")
     parser.add_argument(
         "--duration-profile",
         default=None,
-        choices=list(DURATION_PROFILES.keys()),
-        help=f"Duration profile (default: {DEFAULT_PROFILE})",
+        choices=["short_25_30", "standard_32_38", "extended_50_60"],
+        help="Deprecated alias for --duration-preset",
     )
     parser.add_argument(
         "--duration-target", type=int, default=None,
@@ -48,6 +57,8 @@ def add_duration_profile_args(parser) -> None:
 
 __all__ = [
     "DEFAULT_PROFILE",
+    "DEFAULT_DURATION_PRESET",
+    "DURATION_PRESETS",
     "DURATION_PROFILES",
     "SUPPORTED_DURATION_MAX",
     "SUPPORTED_DURATION_MIN",

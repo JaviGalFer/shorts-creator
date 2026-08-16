@@ -67,21 +67,16 @@ def test_max_script_attempts_is_three():
     )
 
 
-def test_main_retry_loop_3_attempts_3rd_succeeds(monkeypatch, tmp_path):
-    """Integration: main() calls LLM 3 times.
-
-    Attempt 1 is structurally valid but over the maximum word budget, so the
-    retry uses the specialized voiceover-compression prompt. Attempt 2's repair
-    payload (40 words) is cap-valid but below the minimum, so attempt 3 is a
-    full expansion that lands in range -> SCRIPT_DRAFT on the third call.
-    """
+def test_valid_over_budget_script_is_accepted_without_bootstrap_retry(monkeypatch, tmp_path):
+    """A V2-valid 67-word candidate reaches audio; WPM is telemetry only."""
     import sys as _sys
     out = tmp_path / "metadata.json"
 
-    # resp_1: full script of 60 words (5 scenes x 12) -> over max 52.
+    # resp_1: full script of 67 words -> estimated ~37.9s, over bootstrap max.
     resp_1 = _json.dumps({
         "title": "Test",
-        "scenes": [_v2_scene(i, voiceover=" ".join(f"w{i}_{j}" for j in range(1, 13))) for i in range(1, 6)],
+        "scenes": [_v2_scene(i, voiceover=" ".join(f"w{i}_{j}" for j in range(1, n + 1)))
+                   for i, n in enumerate([14, 14, 13, 13, 13], start=1)],
     })
     # resp_2: voiceover-only repair payload of 40 words (cap-valid, below min 47).
     resp_2 = _json.dumps({
@@ -118,23 +113,19 @@ def test_main_retry_loop_3_attempts_3rd_succeeds(monkeypatch, tmp_path):
     exit_code = cli.main()
     assert exit_code == 0
 
-    assert call_count[0] == 3, f"Expected 3 LLM calls, got {call_count[0]}"
+    assert call_count[0] == 1
 
     meta = _json.loads(out.read_text())
     assert meta["status"] == "SCRIPT_DRAFT"
-    assert meta["durationContract"]["status"] == "PASS"
+    assert meta["durationContract"]["status"] == "FAIL"
+    assert meta["durationContract"]["authority"] == "bootstrap_estimate"
+    assert meta["durationContract"]["blocking"] is False
     assert meta["durationContract"]["structureValid"] is True
     rh = meta["durationContract"]["retryHistory"]
-    assert len(rh) == 3
+    assert len(rh) == 1
     assert rh[0]["strategy"] == "initial"
     assert rh[0]["reason"] == "above_maximum_words"
-    # Attempt 1 compresses the voiceovers (structurally valid, over budget).
-    assert rh[1]["strategy"] == "compression"
-    assert rh[1]["reason"] == "below_minimum_words"
-    # Attempt 2 is a full expansion because the previous candidate was below min.
-    assert rh[2]["strategy"] == "duration"
-    assert rh[2]["reason"] == "in_range"
-    assert rh[2]["acceptedAsBest"] is True
+    assert not any("DURATION_OUT_OF_RANGE" in r for r in meta.get("reviewReasons", []))
 
 
 def test_main_retry_loop_3_attempts_all_fail_review_required(monkeypatch, tmp_path):

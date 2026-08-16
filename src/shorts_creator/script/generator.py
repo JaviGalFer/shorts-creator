@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from shorts_creator.contracts.duration import calculate_word_budget, resolve_requested_duration
+from shorts_creator.contracts.duration import calculate_word_budget, resolve_requested_duration, resolve_scene_plan
 from shorts_creator.contracts.visual import ALLOWED_ASSET_PREFERENCES, canonicalize_visual_plan_v2
 from shorts_creator.infrastructure.metadata_store import save_metadata
 
@@ -28,13 +28,6 @@ SPOKEN_WORDS_PER_SECOND = SPOKEN_WORDS_PER_MINUTE / 60.0
 # Inter-scene pause added by Edge TTS between narration units.
 # Each scene transition adds this pause to total duration.
 ESTIMATED_SCENE_PAUSE_MS = 350
-
-# For under-30 Shorts: 4-6 scenes, not 10.
-# 10 micro-scenes inflate effective duration via cumulative pauses.
-# With 5 transitions (6 scenes): 5 * 350ms = 1.75s pause overhead.
-# With 9 transitions (10 scenes): 9 * 350ms = 3.15s pause overhead.
-MAX_SCENES = 6
-
 
 def _build_asset_preferences_section() -> str:
     """Build the AssetPreferences enum section of the prompt from the contractual source.
@@ -78,7 +71,7 @@ SYSTEM_PROMPT_V2 = """Eres un guionista senior especializado en Shorts/TikTok/Re
 Devuelve SOLO JSON válido, sin markdown, sin explicaciones.
 
 ## Reglas de ritmo
-- Máximo 6 escenas (normalmente 4-6). Prefiere 5 escenas.
+- Respeta el rango dinámico de escenas suministrado en las instrucciones.
 - La duración total, palabras totales y palabras por escena se especifican en las instrucciones dinámicas. Respeta esos valores.
 - Mínimo 7 palabras por escena
 - Frases contundentes, sin relleno
@@ -88,7 +81,7 @@ Devuelve SOLO JSON válido, sin markdown, sin explicaciones.
 ## Reglas de narración (voiceover)
 - En español de España (no latinoamericano)
 - Mínimo 7 palabras por escena
-- DEBEN SER ENTRE 4 Y 6 ESCENAS. Mínimo 4, máximo 6. Prefiere 5.
+- Respeta el rango dinámico de escenas suministrado en las instrucciones.
 - Tono divulgativo y preciso
 - No inventar datos factuales
 - Priorizar datos concretos cuando apliquen: fechas, cifras, nombres propios
@@ -251,6 +244,24 @@ Cuando el mensaje indique minimumWords y maximumWords:
 Los objetivos por escena son recomendaciones de distribución; el presupuesto global es prioritario."""
 
 
+VOICEOVER_REPAIR_SYSTEM_PROMPT = """Eres un editor de voz en off para ajuste de duración post-TTS.
+
+Devuelve SOLO JSON válido, sin markdown ni explicaciones, con esta forma exacta:
+{
+  "scenes": [
+    {"sceneNumber": 1, "voiceover": "..."}
+  ]
+}
+
+No devuelvas title, hook, summary, subtitle, targetDurationSec, visualPlan ni
+ningún otro campo. Conserva todas las escenas, su orden y sus sceneNumber.
+No modifiques estructura, significado principal ni planes visuales.
+
+Para EXPAND puedes añadir detalle relevante. Para COMPRESS elimina redundancia
+conservando significado. Sigue el objetivo operativo como guidance: la duración
+TTS real medida posteriormente es la autoridad, no un conteo exacto de palabras."""
+
+
 DEFAULT_LLM_TEMPERATURE = 0.8
 COMPRESSION_LLM_TEMPERATURE = 0.2
 
@@ -267,8 +278,18 @@ def load_env():
     return env
 
 
+def resolve_llm_config(*, model_override: str | None = None) -> dict[str, str | None]:
+    """Resolve LLM runtime configuration with generate_script's precedence."""
+    env = load_env()
+    return {
+        "api_key": env.get("LLM_API_KEY") or os.environ.get("LLM_API_KEY"),
+        "model": model_override or env.get("LLM_MODEL") or "gpt-4o-mini",
+        "provider": env.get("LLM_PROVIDER") or "openai",
+    }
+
+
 def _llm_temperature_for_system_prompt(system_prompt: str) -> float:
-    if system_prompt == VOICEOVER_COMPRESSION_SYSTEM_PROMPT:
+    if system_prompt in (VOICEOVER_COMPRESSION_SYSTEM_PROMPT, VOICEOVER_REPAIR_SYSTEM_PROMPT):
         return COMPRESSION_LLM_TEMPERATURE
     return DEFAULT_LLM_TEMPERATURE
 
@@ -369,6 +390,10 @@ def _build_duration_prompt_instruction_v2(budget: dict, strictness: str) -> str:
     max_w = budget.get("maximumWords", 0)
     operational = _compute_operational_word_target(budget)
     pause_ms = budget.get("estimatedScenePauseMs", 350)
+    min_scenes = budget.get("minSceneCount", 4)
+    preferred_scenes = budget.get("preferredSceneCount", 5)
+    max_scenes = budget.get("maxSceneCount", 6)
+    scene_seconds = budget.get("targetSceneDurationSec", 6)
     per_scene_low = max(1, min_w // budget.get("sceneCount", 5)) if budget.get("sceneCount", 5) else 7
     per_scene_high = max(per_scene_low + 2, 7)
     lines = [
@@ -382,7 +407,10 @@ def _build_duration_prompt_instruction_v2(budget: dict, strictness: str) -> str:
         f"- El total de palabras habladas debe estar entre {min_w} y {max_w} "
         f"(preferredWords del perfil: {pref_w}; pausas entre escenas de ~{pause_ms}ms cada una)"
     )
-    lines.append(f"- Escenas: entre 4 y 6. Prefiere 5 escenas.")
+    lines.append(
+        f"- Escenas: entre {budget.get('minSceneCount', 4)} y {budget.get('maxSceneCount', 6)}. "
+        f"Prefiere {budget.get('preferredSceneCount', 5)} escenas (~{budget.get('targetSceneDurationSec', 6)}s por escena)."
+    )
     lines.append(f"- Mínimo 7 palabras por escena. Aproximadamente {per_scene_low}-{per_scene_high} palabras por escena.")
     lines.append(f"- El CTA debe incluirse dentro de la voz en off de la última escena, no como escena separada.")
     lines.append(f"- NO uses frases de relleno, CTA repetido, oraciones duplicadas ni pausas dramáticas falsas.")
@@ -398,8 +426,6 @@ def _build_duration_prompt_instruction_v2(budget: dict, strictness: str) -> str:
     return "\n".join(lines)
 
 
-PROVISIONAL_SCENE_COUNT = 5
-MIN_SCENE_COUNT = 4
 MAX_SCRIPT_ATTEMPTS = 3  # initial generation + up to 2 corrective retries
 
 
@@ -446,6 +472,7 @@ def _validate_and_canonicalize_script_v2(
     script_data: dict,
     *,
     allow_generated_images: bool,
+    scene_plan: dict | None = None,
 ) -> tuple[dict | None, list[dict], list[dict]]:
     """Validate and canonicalize a v2 script.
 
@@ -464,12 +491,14 @@ def _validate_and_canonicalize_script_v2(
 
     # ── Scene count ──────────────────────────────────────────────────
     scene_count = len(scenes)
-    if scene_count < 4:
+    min_scenes = (scene_plan or {}).get("minSceneCount", 4)
+    max_scenes = (scene_plan or {}).get("maxSceneCount", 6)
+    if scene_count < min_scenes:
         errors.append({"sceneNumber": None, "code": "INSUFFICIENT_SCENE_COUNT",
-                       "path": "scenes", "message": f"got {scene_count} scenes, need at least 4"})
-    elif scene_count > 6:
+                        "path": "scenes", "message": f"got {scene_count} scenes, need at least {min_scenes}"})
+    elif scene_count > max_scenes:
         errors.append({"sceneNumber": None, "code": "EXCESSIVE_SCENE_COUNT",
-                       "path": "scenes", "message": f"got {scene_count} scenes, max 6 allowed"})
+                        "path": "scenes", "message": f"got {scene_count} scenes, max {max_scenes} allowed"})
 
     # ── Per-scene basic structural checks + sceneNumber validation ────
     scene_nums_raw: list = []
@@ -666,6 +695,10 @@ def _build_retry_instruction_v2(
     dur_min = budget.get("minSec", 0)
     dur_max = budget.get("maxSec", 0)
     pause_ms = budget.get("estimatedScenePauseMs", 350)
+    min_scenes = budget.get("minSceneCount", 4)
+    preferred_scenes = budget.get("preferredSceneCount", 5)
+    max_scenes = budget.get("maxSceneCount", 6)
+    scene_seconds = budget.get("targetSceneDurationSec", 6)
 
     lines = [
         "## Corrección de guion — intento anterior insuficiente",
@@ -751,7 +784,10 @@ def _build_retry_instruction_v2(
 
     lines.append("")
     lines.append("### Reglas obligatorias:")
-    lines.append("- DEBEN SER ENTRE 4 Y 6 ESCENAS. Mínimo 4, máximo 6. Prefiere 5.")
+    lines.append(
+        f"- DEBEN SER ENTRE {min_scenes} Y {max_scenes} ESCENAS. "
+        f"Mínimo {min_scenes}, máximo {max_scenes}. Prefiere {preferred_scenes} (~{scene_seconds}s por escena)."
+    )
     lines.append("- El CTA debe estar DENTRO de la última escena, nunca como escena aparte.")
     lines.append("- Cada escena debe tener al menos 7 palabras de voiceover.")
     lines.append("- Cada escena DEBE tener visualPlan v2 completo con _schemaVersion=2.")
@@ -1025,6 +1061,169 @@ def _build_voiceover_compression_prompt(
     return "\n".join(lines)
 
 
+def _build_voiceover_repair_prompt(
+    canonical_script: dict,
+    *,
+    direction: str,
+    current_word_count: int,
+    target_total_words: int,
+    scene_word_targets: list[int],
+    allow_generated_images: bool = False,
+) -> str:
+    """Build a generic voiceover-only repair prompt (EXPAND or COMPRESS).
+
+    Direction-agnostic builder used for post-TTS duration fitting. It asks the
+    LLM for NEW voiceovers only, preserving every structural field and the
+    exact sceneNumber sequence.
+
+    target_total_words is the OPERATIONAL post-TTS objective derived from the
+    REAL measured duration. It is deliberately NOT tied to the bootstrap WPM
+    word budget (minimumWords/maximumWords are ignored here on purpose): the
+    real TTS measurement — not WPM — is the authority once audio exists. The
+    LLM should APPROXIMATE target_total_words; exact word count is guidance,
+    not a hard product contract. scene_word_targets are per-scene guidance.
+
+    The repair payload contract is identical to _apply_voiceover_repair():
+    {"scenes": [{"sceneNumber", "voiceover"}]}.
+    """
+    direction = direction.upper()
+    if direction not in ("EXPAND", "COMPRESS"):
+        raise ValueError(f"direction must be EXPAND or COMPRESS, got {direction!r}")
+
+    scenes = canonical_script.get("scenes", [])
+    if len(scenes) != len(scene_word_targets):
+        raise ValueError(
+            "scene_word_targets length must match number of scenes "
+            f"({len(scene_word_targets)} != {len(scenes)})"
+        )
+    expected = list(range(1, len(scenes) + 1))
+
+    verb = "ampliar" if direction == "EXPAND" else "comprimir"
+    noun = "expansión" if direction == "EXPAND" else "compresión"
+
+    lines = [
+        f"## OBJETIVO DE {noun.upper()} DE VOZ EN OFF — POST-TTS",
+        "",
+        f"Candidato actual: {current_word_count} palabras.",
+        f"Objetivo operativo global: aproximadamente {target_total_words} palabras "
+        "(derivado de la duración de voz real medida).",
+        "",
+        f"Debes {verb} EXCLUSIVAMENTE los voiceovers que se proporcionan a continuación.",
+        "No añadas ni elimines escenas. Conserva exactamente los `sceneNumber` y su orden.",
+        "No regeneres ni modifiques el plan visual ni ningún otro campo estructural.",
+        "",
+        "## Voiceovers a reparar",
+        "",
+        "```json",
+        json.dumps({
+            "direction": direction,
+            "currentWordCount": current_word_count,
+            "targetTotalWords": target_total_words,
+            "scenes": [
+                {
+                    "sceneNumber": scenes[i]["sceneNumber"],
+                    "currentVoiceover": scenes[i].get("voiceover", ""),
+                    "currentWords": len((scenes[i].get("voiceover") or "").split()),
+                    "recommendedTargetWords": scene_word_targets[i],
+                }
+                for i in range(len(scenes))
+            ]
+        }, ensure_ascii=False, indent=2),
+        "```",
+        "",
+        "## Restricciones obligatorias",
+        "",
+        "- Devuelve solo JSON válido, sin markdown ni explicaciones.",
+        "- El objeto debe contener únicamente `scenes`.",
+        "- Cada escena debe contener únicamente `sceneNumber` y `voiceover`.",
+        "- Conserva la secuencia completa y exacta de `sceneNumber`.",
+        "- Cada voiceover debe ser un string no vacío.",
+        "- Mantén una longitud de voz equilibrada entre escenas y una progresión narrativa coherente.",
+        "- No existe un tope de palabras del bootstrap: la duración real medida decide.",
+        "- Conserva el significado principal de cada escena.",
+        "- No modifiques ningún campo visual ni estructural.",
+        "",
+        "## Objetivos recomendados (guidance)",
+        "",
+        f"- Aproximate al objetivo global de {target_total_words} palabras, sin obsesionarte con el conteo exacto.",
+        "- Los targets por escena son recomendaciones (suman el objetivo global).",
+        "- Reparte cambios de forma equilibrada entre escenas.",
+        "- La autoridad final es la duración de voz real medida tras regenerar; el conteo de palabras es orientativo.",
+        "",
+        "## Cómo se cuenta una palabra",
+        "",
+        "- Una palabra es cada token separado por espacios mediante Python `str.split()`.",
+        "- La puntuación unida a una palabra NO crea una palabra adicional.",
+        "",
+        "## Formato de respuesta",
+        "",
+        "Devuelve SOLO JSON válido, sin markdown ni explicaciones, con este formato exacto:",
+        "",
+        "```json",
+        '{"scenes": [{"sceneNumber": 1, "voiceover": "..."}]}',
+        "```",
+        "",
+        "- Únicamente los campos `sceneNumber` y `voiceover` por escena.",
+        "- El resto de campos se preservarán localmente; no los repitas.",
+        "",
+        "## Autocomprobación final",
+        "",
+        f"- Revisa que los `sceneNumber` sean {expected}.",
+        "- Las restricciones visuales no son editables durante esta reparación.",
+    ]
+
+    if allow_generated_images:
+        lines.append("- El gate de imágenes generadas NO se modifica en esta reparación.")
+    else:
+        lines.append("- El gate de imágenes generadas (desactivado) NO se modifica en esta reparación.")
+
+    return "\n".join(lines)
+
+
+def repair_voiceover_duration(
+    script: dict,
+    *,
+    direction: str,
+    target_total_words: int,
+    scene_word_targets: list[int],
+    api_key: str,
+    model: str,
+    provider: str = "openai",
+    allow_generated_images: bool = False,
+    scene_plan: dict | None = None,
+) -> tuple[dict | None, list[dict]]:
+    """Repair only scene voiceovers for a post-TTS duration adjustment."""
+    scenes = script.get("scenes", [])
+    expected_scene_numbers = [scene.get("sceneNumber") for scene in scenes]
+    try:
+        prompt = _build_voiceover_repair_prompt(
+            script,
+            direction=direction,
+            current_word_count=_count_voiceover_words(script),
+            target_total_words=target_total_words,
+            scene_word_targets=scene_word_targets,
+        )
+        response = call_llm(
+            prompt, api_key, model, provider,
+            system_prompt=VOICEOVER_REPAIR_SYSTEM_PROMPT,
+        )
+        payload = json.loads(response)
+    except Exception as exc:
+        return None, [{"code": "DURATION_REPAIR_LLM_FAILED", "message": str(exc)}]
+
+    repaired, errors = _apply_voiceover_repair(
+        script, payload, expected_scene_numbers=expected_scene_numbers,
+    )
+    if errors or repaired is None:
+        return None, errors
+    canonical, validation_errors, _ = _validate_and_canonicalize_script_v2(
+        repaired, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
+    )
+    if validation_errors or canonical is None:
+        return None, [{"code": "DURATION_REPAIR_V2_INVALID", "message": str(validation_errors)}]
+    return repaired, []
+
+
 def _apply_voiceover_repair(
     base_script: dict,
     repair_payload: dict,
@@ -1129,16 +1328,18 @@ def generate_script(
     model: str | None = None,
     duration: int | None = None,
     duration_profile: str | None = None,
+    duration_preset: str | None = None,
+    duration_tolerance: int | None = None,
     duration_target: int | None = None,
     duration_min: int | None = None,
     duration_max: int | None = None,
     strictness: str | None = None,
 ) -> int:
     """Generate and persist a canonical V2 script for one request."""
-    env = load_env()
-    api_key = env.get("LLM_API_KEY") or os.environ.get("LLM_API_KEY")
-    model = model or env.get("LLM_MODEL") or "gpt-4o-mini"
-    provider = env.get("LLM_PROVIDER") or "openai"
+    llm_config = resolve_llm_config(model_override=model)
+    api_key = llm_config["api_key"]
+    model = llm_config["model"]
+    provider = llm_config["provider"]
 
     if not api_key:
         print("ERROR: LLM_API_KEY not found in .env or environment")
@@ -1148,6 +1349,8 @@ def generate_script(
         resolved = resolve_requested_duration(
             requested_sec=duration,
             requested_profile=duration_profile,
+            requested_preset=duration_preset,
+            requested_tolerance=duration_tolerance,
             explicit_target=duration_target,
             explicit_min=duration_min,
             explicit_max=duration_max,
@@ -1164,6 +1367,7 @@ def generate_script(
     strictness = resolved["strictness"]
     requested_sec = resolved.get("requestedSec")
     requested_profile = resolved.get("requestedProfile")
+    scene_plan = resolve_scene_plan(target_dur)
 
     # ── Provisional word budget ────────────────────────────────────────
     provisional_budget = calculate_word_budget(
@@ -1171,9 +1375,10 @@ def generate_script(
         min_sec=min_sec,
         max_sec=max_sec,
         spoken_words_per_minute=SPOKEN_WORDS_PER_MINUTE,
-        scene_count=PROVISIONAL_SCENE_COUNT,
+        scene_count=scene_plan["preferredSceneCount"],
         estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
     )
+    provisional_budget.update(scene_plan)
 
     active_system_prompt = SYSTEM_PROMPT_V2
 
@@ -1232,7 +1437,7 @@ def generate_script(
         if retries > 0:
             # V2 structural validation
             canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
-                script_data, allow_generated_images=allow_generated_images,
+                script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
             )
             v2_structural_issues = v2_errs
             v2_valid = canonical is not None
@@ -1250,9 +1455,10 @@ def generate_script(
                 min_sec=min_sec,
                 max_sec=max_sec,
                 spoken_words_per_minute=SPOKEN_WORDS_PER_MINUTE,
-                scene_count=scene_count if scene_count >= MIN_SCENE_COUNT else PROVISIONAL_SCENE_COUNT,
+                scene_count=scene_count if scene_count >= scene_plan["minSceneCount"] else scene_plan["preferredSceneCount"],
                 estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
             )
+            retry_budget.update(scene_plan)
 
             if not v2_valid:
                 # Case A — invalid structure: keep the full contractual regeneration.
@@ -1352,7 +1558,7 @@ def generate_script(
                 else:
                     repair_payload_eligible = True
                     proposed_canonical, proposed_v2_errs, _ = _validate_and_canonicalize_script_v2(
-                        repaired, allow_generated_images=allow_generated_images,
+                        repaired, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
                     )
                     if proposed_canonical is None:
                         # canonicalization failed: reject the payload, keep active
@@ -1435,7 +1641,7 @@ def generate_script(
 
         # ── V2 validation ───────────────────────────────────────
         canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
-            script_data, allow_generated_images=allow_generated_images,
+            script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
         )
         v2_structural_issues = v2_errs
         v2_valid = canonical is not None
@@ -1537,7 +1743,7 @@ def generate_script(
                 best_candidate_rank = candidate_rank
                 retry_entry["becameBestCandidate"] = True
 
-        if v2_valid and duration_ok:
+        if v2_valid:
             script_data = canonical
             best_candidate = copy.deepcopy(canonical)
             best_word_count = word_count
@@ -1545,7 +1751,10 @@ def generate_script(
             best_distance = distance
             best_scene_word_counts = scene_word_counts
             best_candidate_rank = candidate_rank
-            print(f"  Accepted v2: canonical valid + duration OK ({estimated_dur:.1f}s within range)")
+            print(
+                "  Accepted v2: canonical valid; bootstrap duration estimate is "
+                f"non-blocking ({estimated_dur:.1f}s)"
+            )
             break
 
         retries += 1
@@ -1601,11 +1810,15 @@ def generate_script(
         "strictness": strictness,
         "spokenWordsPerMinute": SPOKEN_WORDS_PER_MINUTE,
         "estimatedScenePauseMs": ESTIMATED_SCENE_PAUSE_MS,
+        "toleranceSec": resolved["toleranceSec"],
+        "source": resolved["source"],
     }
     if requested_sec is not None:
         duration_dict["requestedSec"] = requested_sec
     if requested_profile is not None:
         duration_dict["requestedProfile"] = requested_profile
+    if resolved.get("presetId"):
+        duration_dict["presetId"] = resolved["presetId"]
 
     visuals_request = {
         "mode": "images",
@@ -1618,6 +1831,7 @@ def generate_script(
         "language": "es-ES",
         "format": "shorts-9x16",
         "durationProfile": duration_profile_name,
+        "scenePlan": scene_plan,
         "duration": duration_dict,
         "voice": {
             "provider": "edge_tts",
@@ -1680,7 +1894,7 @@ def generate_script(
     structure_issue_codes: list[str] = []
 
     canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
-        script_data, allow_generated_images=allow_generated_images,
+        script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
     )
     v2_valid = canonical is not None
     if not v2_valid:
@@ -1689,15 +1903,9 @@ def generate_script(
         for issue in v2_errs:
             review_reasons.append(f"V2_STRUCTURE_{issue.get('code', 'UNKNOWN')}: {issue.get('message', '')}")
 
-    if not duration_ok_after_retries:
-        review_reasons.append(
-            f"DURATION_OUT_OF_RANGE: estimated={estimated_dur:.1f}s "
-            f"(spoken={spoken_sec:.1f}s + pauses={pause_sec:.1f}s), "
-            f"target={target_dur}s, min={min_sec}s, max={max_sec}s, "
-            f"words={word_count}, scenes={scene_count}"
-        )
-
-    all_ok = duration_ok_after_retries and structure_valid_after_retries
+    # Bootstrap WPM is guidance before TTS only. Real audio duration and the
+    # bounded fitting loop are authoritative after this structural stage.
+    all_ok = structure_valid_after_retries
     status = "SCRIPT_DRAFT" if all_ok else "REVIEW_REQUIRED"
 
     # For REVIEW_REQUIRED after exhausted retries, add explicit reason
@@ -1715,13 +1923,14 @@ def generate_script(
             "estimatedScenePauseMs": ESTIMATED_SCENE_PAUSE_MS,
         },
         "durationProfile": duration_profile_name,
+        "scenePlan": scene_plan,
     }
 
     # Use canonical script whenever the structure is valid (canonical is the
     # contract representation; it must be persisted even when duration fails).
     script_to_persist = script_data
     canonical_final, _, _ = _validate_and_canonicalize_script_v2(
-        script_data, allow_generated_images=allow_generated_images,
+        script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
     )
     if canonical_final is not None:
         script_to_persist = canonical_final
@@ -1761,7 +1970,9 @@ def generate_script(
             "bestAttempt": best_attempt_idx,
             "bestAttemptWordCount": best_word_count,
             "lastAttemptDiscardedAsRegression": last_attempt_discarded_as_regression,
-            "status": "PASS" if all_ok else "FAIL",
+            "status": "PASS" if duration_ok_after_retries else "FAIL",
+            "authority": "bootstrap_estimate",
+            "blocking": False,
         },
         "createdAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
@@ -1799,7 +2010,7 @@ def generate_script(
         "spokenDurationSec": round(spoken_sec, 1),
         "pauseDurationSec": round(pause_sec, 1),
         "estimatedDurationSec": round(estimated_dur, 1),
-        "durationContractStatus": "PASS" if all_ok else "FAIL",
+        "durationContractStatus": "PASS" if duration_ok_after_retries else "FAIL",
         "retries": retries,
         "visualSchemaVersion": 2,
         "status": status,

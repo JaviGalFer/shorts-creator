@@ -19,10 +19,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-from shorts_creator.contracts.duration import resolve_requested_duration
+from shorts_creator.contracts.duration import (
+    distribute_words,
+    evaluate_duration_fitting,
+    resolve_requested_duration,
+)
 from shorts_creator.infrastructure.metadata_store import load_metadata, save_metadata
+from shorts_creator.audio.generator import resolve_audio_regeneration_config
+from shorts_creator.rendering.preparer import _get_tail_pause_sec, project_render_duration
+from shorts_creator.script.generator import repair_voiceover_duration, resolve_llm_config
 
 ORCHESTRATION_VERSION = "1"
+MAX_DURATION_REPAIRS = 2
+MINIMUM_WORDS_PER_SCENE = 7
 
 STAGES = ["script", "assets", "audio", "prepare", "render", "validate"]
 
@@ -133,6 +142,10 @@ def build_script_command(args) -> list[str]:
         cmd.extend(["--duration", str(args.duration)])
     if args.duration_profile is not None:
         cmd.extend(["--duration-profile", args.duration_profile])
+    if getattr(args, "duration_preset", None) is not None:
+        cmd.extend(["--duration-preset", args.duration_preset])
+    if getattr(args, "duration_tolerance", None) is not None:
+        cmd.extend(["--duration-tolerance", str(args.duration_tolerance)])
     if args.duration_target is not None:
         cmd.extend(["--duration-target", str(args.duration_target)])
     if args.duration_min is not None:
@@ -172,6 +185,122 @@ def run_subprocess(cmd: list[str], verbose: bool, stage: str) -> subprocess.Comp
             stdout="", stderr="[TIMEOUT] Stage exceeded 600s limit"
         )
     return result
+
+
+def _duration_fitting_request(data: dict) -> dict | None:
+    duration = data.get("request", {}).get("duration")
+    if not isinstance(duration, dict):
+        return None
+    required = ("targetSec", "minSec", "maxSec")
+    if not all(key in duration for key in required):
+        return None
+    return duration
+
+
+def build_audio_regeneration_command(metadata_path: str, metadata: dict) -> list[str]:
+    """Build a force-regeneration command preserving the prior audio attempt."""
+    config = resolve_audio_regeneration_config(metadata)
+    return build_stage_command("audio", metadata_path, metadata=metadata) + [
+        "--force-regenerate",
+        "--tts-provider", config["tts_provider"],
+        "--voice", config["voice"],
+        "--subtitle-timing-provider", config["subtitle_timing_provider"],
+    ]
+
+
+def _run_duration_fitting(metadata_path: str, *, verbose: bool) -> tuple[bool, str | None]:
+    """Fit measured audio duration before prepare; returns (may_continue, reason)."""
+    data = load_metadata(metadata_path)
+    duration = _duration_fitting_request(data)
+    if duration is None or data.get("audio", {}).get("continuous"):
+        return True, None
+
+    fitting = data.setdefault("durationFitting", {
+        "maxRepairs": MAX_DURATION_REPAIRS,
+        "repairAttempts": 0,
+        "history": [],
+    })
+    fitting["maxRepairs"] = MAX_DURATION_REPAIRS
+    while True:
+        # Audio regeneration reloads metadata, so always mutate the current
+        # persisted fitting object rather than a stale pre-regeneration dict.
+        fitting = data["durationFitting"]
+        scenes = data.get("script", {}).get("scenes", [])
+        try:
+            projected = project_render_duration(
+                scenes, data.get("audio", {}), tail_pause_sec=_get_tail_pause_sec(data)
+            )
+            decision = evaluate_duration_fitting(
+                current_word_count=sum(len((s.get("voiceover") or "").split()) for s in scenes),
+                projected_duration_sec=projected,
+                target_sec=duration["targetSec"], min_sec=duration["minSec"], max_sec=duration["maxSec"],
+            )
+        except (TypeError, ValueError) as exc:
+            data["status"] = "REVIEW_REQUIRED"
+            data.setdefault("reviewReasons", []).append(f"DURATION_FITTING_INVALID_INPUT: {exc}")
+            save_metadata(metadata_path, data)
+            return False, "DURATION_FITTING_INVALID_INPUT"
+
+        entry = dict(decision)
+        entry["attempt"] = fitting["repairAttempts"]
+        fitting["history"].append(entry)
+        fitting.update({"projectedDurationSec": projected, "decision": decision["decision"]})
+        if decision["decision"] == "PASS":
+            fitting["status"] = "PASS"
+            save_metadata(metadata_path, data)
+            return True, None
+        if fitting["repairAttempts"] >= MAX_DURATION_REPAIRS:
+            fitting["status"] = "REVIEW_REQUIRED"
+            data["status"] = "REVIEW_REQUIRED"
+            data.setdefault("reviewReasons", []).append("DURATION_FITTING_EXHAUSTED")
+            save_metadata(metadata_path, data)
+            return False, "DURATION_FITTING_EXHAUSTED"
+
+        counts = [len((scene.get("voiceover") or "").split()) for scene in scenes]
+        try:
+            targets = distribute_words(
+                current_counts=counts, target_total=decision["proposedWords"],
+                minimum_words_per_scene=MINIMUM_WORDS_PER_SCENE,
+            )
+            request_visuals = data.get("request", {}).get("visuals", {})
+            scene_plan = (
+                data.get("resolvedConfig", {}).get("scenePlan")
+                or data.get("request", {}).get("scenePlan")
+            )
+            llm_config = resolve_llm_config()
+            repaired, errors = repair_voiceover_duration(
+                data["script"], direction=decision["decision"],
+                target_total_words=decision["proposedWords"], scene_word_targets=targets,
+                api_key=llm_config["api_key"] or "",
+                model=llm_config["model"],
+                provider=llm_config["provider"],
+                allow_generated_images=bool(request_visuals.get("allowGeneratedImages", False)),
+                scene_plan=scene_plan,
+            )
+        except Exception as exc:
+            repaired, errors = None, [{"code": "DURATION_REPAIR_FAILED", "message": str(exc)}]
+        if repaired is None:
+            fitting["status"] = "REVIEW_REQUIRED"
+            data["status"] = "REVIEW_REQUIRED"
+            data.setdefault("reviewReasons", []).append(
+                f"DURATION_FITTING_REPAIR_FAILED: {errors}"
+            )
+            save_metadata(metadata_path, data)
+            return False, "DURATION_FITTING_REPAIR_FAILED"
+
+        data["script"] = repaired
+        fitting["repairAttempts"] += 1
+        entry["sceneWordTargets"] = targets
+        entry["repairOutcome"] = "APPLIED"
+        save_metadata(metadata_path, data)
+        cmd = build_audio_regeneration_command(metadata_path, data)
+        result = run_subprocess(cmd, verbose, "audio")
+        data = load_metadata(metadata_path)
+        if result.returncode != 0 or data.get("status") != "AUDIO_READY":
+            data["status"] = "REVIEW_REQUIRED"
+            data.setdefault("reviewReasons", []).append("DURATION_FITTING_AUDIO_REGENERATION_FAILED")
+            save_metadata(metadata_path, data)
+            return False, "DURATION_FITTING_AUDIO_REGENERATION_FAILED"
 
 
 def parse_script_output(stdout: str) -> dict | None:
@@ -238,6 +367,8 @@ def resolve_duration_for_dry_run(args) -> dict | None:
         return resolve_requested_duration(
             requested_sec=args.duration,
             requested_profile=args.duration_profile,
+            requested_preset=getattr(args, "duration_preset", None),
+            requested_tolerance=getattr(args, "duration_tolerance", None),
             explicit_target=args.duration_target,
             explicit_min=args.duration_min,
             explicit_max=args.duration_max,
@@ -360,6 +491,12 @@ def _verify_stage_contract(
             )
         if result.returncode != 0:
             return False, "VALIDATION_FAILED", None
+        if data.get("validation", {}).get("gates", {}).get("requestedDurationCompliance") == "FAIL":
+            data["status"] = "REVIEW_REQUIRED"
+            reasons = data.setdefault("reviewReasons", [])
+            if "REQUESTED_DURATION_OUT_OF_RANGE" not in reasons:
+                reasons.append("REQUESTED_DURATION_OUT_OF_RANGE")
+            return False, "REVIEW_REQUIRED", None
         # Exit 0: all checks passed
         return True, "VALIDATED", None
 
@@ -372,7 +509,7 @@ def dry_run(args) -> int:
     resolved = resolve_duration_for_dry_run(args)
     if resolved:
         print(f"Duration: {resolved['targetSec']}s "
-              f"(profile={resolved['profile_name']}, "
+              f"(source={resolved['source']}, preset={resolved.get('presetId')}, "
               f"range={resolved['minSec']}-{resolved['maxSec']}s, "
               f"strictness={resolved['strictness']})")
     else:
@@ -432,6 +569,8 @@ def run_pipeline(
     verbose: bool = False,
     duration: int | None = None,
     duration_profile: str | None = None,
+    duration_preset: str | None = None,
+    duration_tolerance: int | None = None,
     duration_target: int | None = None,
     duration_min: int | None = None,
     duration_max: int | None = None,
@@ -446,6 +585,8 @@ def run_pipeline(
         verbose=verbose,
         duration=duration,
         duration_profile=duration_profile,
+        duration_preset=duration_preset,
+        duration_tolerance=duration_tolerance,
         duration_target=duration_target,
         duration_min=duration_min,
         duration_max=duration_max,
@@ -627,7 +768,21 @@ def run_pipeline(
                 _final_summary(data, metadata_path, stage)
                 return 0
 
+            if stage == "audio" and "prepare" in stage_plan and data.get("audio", {}).get("scenes"):
+                may_continue, fitting_reason = _run_duration_fitting(
+                    metadata_path, verbose=args.verbose,
+                )
+                data = load_metadata(metadata_path)
+                if not may_continue:
+                    append_orchestration(data, "audio", "REVIEW_REQUIRED", started, _utcnow(), fitting_reason)
+                    save_metadata(metadata_path, data)
+                    print(f"[audio] Blocked by duration fitting: {fitting_reason}")
+                    _final_summary(data, metadata_path, "audio")
+                    return 0
+
             # Success
+            # Persist the resolved contract status, not the transient running status.
+            data["status"] = resolved_status
             append_orchestration(data, stage, resolved_status, started, finished)
             save_metadata(metadata_path, data)
             print(f"[{stage}] Completed: {resolved_status}")

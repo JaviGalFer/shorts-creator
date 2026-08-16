@@ -15,13 +15,13 @@ A partir de un tema y de una configuración de producción, coordina la generaci
 
 El núcleo del pipeline es independiente de la temática. El proyecto está diseñado para adaptarse progresivamente a diferentes duraciones, voces, estilos visuales y formatos de contenido.
 
-Visual Plan V2 es el único contrato visual canónico. El proyecto no es todavía un producto final: el pipeline es funcional pero la arquitectura modular está en proceso de consolidación.
+Visual Plan V2 es el único contrato visual canónico. La arquitectura modular V2 está completa: los dominios viven en `src/shorts_creator/` y `bin/` mantiene adaptadores CLI delgados.
 
 ## Estado del proyecto
 
-Pipeline funcional. Todo el código de ejecución reside en `bin/`. Docker se utiliza para render y servicios auxiliares. `bin/run_job.py` es el orquestador canónico.
+Pipeline V2 funcional y E2E técnico demostrado. Docker se utiliza para render y servicios auxiliares; `bin/run_job.py` es el orquestador canónico.
 
-**Change completado:** `retire-legacy-visual-v1` — retirada del contrato visual V1; Visual Plan V2 es el único contrato visual soportado. Siguiente trabajo: infraestructura de agentes/contexto y, después, la modularización hacia `src/shorts_creator/`.
+El fitting post-TTS y la validación de cumplimiento de duración del MP4 están implementados y validados por E2E reales. quick_30 y deep_60 son la evidencia canónica exitosa. Suite completa: **`1243 passed, 0 skipped, 0 failed`**.
 
 Referencias:
 - `docs/project/current-state.md` — estado detallado
@@ -36,7 +36,7 @@ Referencias:
 | Tema o instrucción | `--topic` | Tema del vídeo |
 | Duración | `--duration`, `--duration-profile`, `--duration-target`, `--duration-min`, `--duration-max`, `--strictness` | Duración exacta, perfil predefinido o rango con nivel de tolerancia |
 | Modelo LLM | `--model` | Modelo del proveedor LLM (OpenAI-compatible) |
-| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | `edge_tts` (canónico, gratuito) o `elevenlabs` (secundario) |
+| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | Edge TTS es el provider canónico operativo; el registry contempla alternativas, pero ElevenLabs no está confirmado como path E2E per-scene |
 | Voz | `--voice`, `TTS_VOICE` | Voz para la narración (default: `es-ES-AlvaroNeural`) |
 | Timing de subtítulos | `--subtitle-timing-provider`, `SUBTITLE_TIMING_PROVIDER` | `auto`, `edge_tts`, `whisper` o `estimated` |
 | Estilo de subtítulos | `--subtitle-style` | `documentary_safe`, `shorts_dynamic`, `shorts_upper_dynamic` |
@@ -120,15 +120,20 @@ python bin/run_job.py --topic "Prueba" --duration 35 --stop-after script
 
 ### Perfiles de duración
 
-| Perfil | Rango | Uso |
+| Preset | Rango | Uso |
 |--------|-------|-----|
-| `short_25_30` | 25-30s | Por defecto |
-| `standard_32_38` | 32-38s | Formato estándar |
-| `extended_50_60` | 50-60s | Vídeo más extenso |
+| `quick_30` | 27-33s | Rápido ~30 s |
+| `standard_45` | 41-49s | Estándar ~45 s |
+| `deep_60` | 55-65s | Detallado ~60 s |
 
 ```bash
-python bin/run_job.py --topic "Tema" --duration-profile standard_32_38
+python bin/run_job.py --topic "Tema" --duration-preset standard_45
+python bin/run_job.py --topic "Tema" --duration 37 --duration-tolerance 2
 ```
+
+Los presets son atajos de configuración: `--duration N` usa una tolerancia simétrica automática y no queda limitado por ningún preset. La arquitectura admite nuevos presets sin cambiar el fitting.
+
+La planificación inicial también escala con la duración, con una referencia de aproximadamente seis segundos por escena: 30s prefiere 5 escenas y 60s prefiere 10. El fitting posterior conserva la estructura y ajusta solo los voiceovers.
 
 ## Configuración
 
@@ -169,7 +174,11 @@ Las variables de entorno se configuran en `.env`. Ver `.env.example` para la lis
 ## Arquitectura actual
 
 ```
-bin/                    # Scripts del pipeline
+src/shorts_creator/     # Dominios modulares V2
+  contracts/            # Contratos compartidos
+  pipeline/             # Orquestación
+  script/ audio/ assets/ rendering/ validation/ infrastructure/
+bin/                    # Adaptadores CLI y compatibilidad fina
   run_job.py            # Orquestador canónico
   generate_script.py    # Generación de guion
   fetch_images_v2.py    # Obtención de imágenes (V2)
@@ -181,10 +190,6 @@ data/
   videos/{jobId}/       # Un directorio por job: metadata.json, assets/, scenes/, video.mp4
 docker-compose.yml      # n8n, Postgres, render-worker (infraestructura auxiliar)
 ```
-
-### Arquitectura futura (roadmap)
-
-El proyecto evolucionará hacia una arquitectura modular con `src/shorts_creator/` y `pyproject.toml`, donde `bin/` se reduzca a adaptadores CLI delgados. Ver `docs/architecture/modular-v2-transformation-roadmap.md`.
 
 ## Docker y n8n
 
@@ -200,7 +205,7 @@ n8n no es el orquestador canónico del pipeline V2.
 
 - `ffprobe` no está instalado en el host; la medición de duración de audio usa Docker como fallback.
 - La aceleración GPU no está implementada; el render usa CPU.
-- El proyecto está en transformación modular; la documentación puede ir por detrás del código.
+- La estimación bootstrap WPM es telemetría no bloqueante; la duración real del audio TTS y el fitting post-TTS son autoritativos. El fitting se validó en E2E reales (`quick_30` y `deep_60`).
 - No hay publicación automática ni integración con redes sociales.
 
 ## Documentación adicional

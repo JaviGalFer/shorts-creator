@@ -53,6 +53,24 @@ def _get_tail_pause_sec(data: dict) -> float:
     return DEFAULT_SCENE_TAIL_PAUSE_SEC
 
 
+def project_render_duration(scenes: list[dict], audio_config: dict, *, tail_pause_sec: float) -> float:
+    """Project non-continuous render duration using prepare's window policy.
+
+    This is deliberately the same active-audio-or-physical-audio plus tail
+    semantic consumed by build_render_timeline(), before any timeline is written.
+    """
+    by_scene = {entry.get("sceneNumber"): entry for entry in audio_config.get("scenes", [])}
+    total = 0.0
+    for scene in scenes:
+        sn = scene.get("sceneNumber")
+        entry = by_scene.get(sn, {})
+        active = entry.get("activeAudioDurationSec")
+        physical = entry.get("durationSec")
+        duration = active if isinstance(active, (int, float)) and not isinstance(active, bool) and active > 0 else physical
+        total += resolve_scene_window_duration(duration, tail_pause_sec=tail_pause_sec)
+    return round(total, 3)
+
+
 def fmt_srt_time(seconds: float) -> str:
     ms_total = int(round(seconds * 1000))
     hours = ms_total // 3600000

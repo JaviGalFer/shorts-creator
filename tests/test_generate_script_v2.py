@@ -656,7 +656,7 @@ class TestV2Retry:
 
         meta = _json.loads(out_path.read_text())
         assert meta["status"] == "REVIEW_REQUIRED"
-        assert meta["durationContract"]["status"] == "FAIL"
+        assert meta["durationContract"]["status"] == "PASS"
         assert meta["durationContract"]["structureValid"] is False
         assert len(meta["durationContract"]["structureIssues"]) >= 1
 
@@ -1457,21 +1457,15 @@ class TestScriptContractFix:
 
         exit_code = gs.main()
         assert exit_code == 0
-        assert calls[0] == 2
+        assert calls[0] == 1
 
         meta = _json.loads(out_path.read_text())
         assert meta["status"] == "SCRIPT_DRAFT"
-        assert meta["durationContract"]["status"] == "PASS"
-        assert meta["durationContract"]["wordCount"] == 50
+        assert meta["durationContract"]["status"] == "FAIL"
+        assert meta["durationContract"]["wordCount"] == 60
 
-        # The second prompt must be the specialized compression prompt, not a
-        # full regeneration, and must reference the previous voiceovers.
-        second = prompts[1]
-        assert "Compresión de voz en off" in second
-        assert "currentVoiceover" in second
-        assert "maximumWords" in second
-        assert "str.split()" in second
-        assert '{"scenes": [{"sceneNumber": 1, "voiceover": "..."}]}' in second
+        assert len(prompts) == 1
+        assert "Compresión de voz en off" not in prompts[0]
 
         # Visual Plan must be preserved unchanged through the compression.
         # (The persisted script is canonicalized, so compare against the
@@ -1615,150 +1609,7 @@ class TestDurationRetryConvergence:
         assert merged is None
         assert any(e["code"] == "REPAIR_NOT_JSON" for e in shape_errors)
 
-    # T6 — integrated 60 → 56 → 69
-    def _five_scene_script(self, words_per_scene):
-        return _v2_script(scenes=[
-            _v2_scene(i, vp_overrides={},
-                      voiceover=" ".join(f"palabra{i}_{j}" for j in range(1, words_per_scene + 1)))
-            for i in range(1, 6)
-        ])
-
-    def _repair_payload(self, words_per_scene):
-        return {
-            "scenes": [
-                {"sceneNumber": i, "voiceover": " ".join(f"nueva{i}_{j}" for j in range(1, words_per_scene + 1))}
-                for i in range(1, 6)
-            ]
-        }
-
-    # T4 — monotonic convergence then regression among compression candidates
-    def test_t4_convergence_then_regression(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._five_scene_script(12)),   # attempt 0: 60 words
-            _json.dumps({                                # attempt 1: 56 words improves
-                "scenes": [{"sceneNumber": i, "voiceover": " ".join(f"nueva{i}_{j}" for j in range(1, n + 1))}
-                           for i, n in enumerate([12, 11, 11, 11, 11], start=1)]
-            }),
-            _json.dumps({                                # attempt 2: 69 words regression
-                "scenes": [{"sceneNumber": i, "voiceover": " ".join(f"nueva{i}_{j}" for j in range(1, n + 1))}
-                           for i, n in enumerate([14, 14, 14, 14, 13], start=1)]
-            }),
-        ]
-
-        calls = [0]
-
-        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
-            idx = calls[0]
-            calls[0] += 1
-            return responses[idx]
-
-        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
-        monkeypatch.setattr(gs, "call_llm", mock_call)
-        out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Arcoíris",
-                                           "--duration", "30", "--output", str(out_path)])
-
-        exit_code = gs.main()
-        assert exit_code == 0
-        assert calls[0] == 3
-
-        meta = _json.loads(out_path.read_text())
-        assert meta["status"] == "REVIEW_REQUIRED"
-        dc = meta["durationContract"]
-        assert dc["status"] == "FAIL"
-        # 56 was accepted as the active/best candidate; 69 was a regression.
-        assert dc["bestAttempt"] == 1
-        assert dc["bestAttemptWordCount"] == 56
-        assert dc["lastAttemptDiscardedAsRegression"] is True
-        rh = dc["retryHistory"]
-        assert [e["wordCount"] for e in rh] == [60, 56, 56]
-        assert [e["wordCountSource"] for e in rh] == [
-            "generated_candidate", "repaired_candidate", "previous_candidate"]
-        # attempt 1: eligible (shape-valid), evaluated, global budget FAIL, accepted.
-        assert rh[1]["repairPayloadEligible"] is True
-        assert rh[1]["repairShapeValid"] is True
-        assert rh[1]["repairGlobalBudgetValid"] is False
-        assert rh[1]["repairPayloadValid"] is True
-        assert rh[1]["repairBudgetValid"] is False
-        assert rh[1]["candidateUpdated"] is True
-        # attempt 2: eligible but regression -> previous candidate conserved.
-        assert rh[2]["repairPayloadEligible"] is True
-        assert rh[2]["repairGlobalBudgetValid"] is False
-        assert rh[2]["candidateUpdated"] is False
-        assert rh[2]["candidateReused"] is True
-        # Persisted script is the 56-word candidate (attempt 1).
-        assert meta["script"]["scenes"][0]["voiceover"].startswith("nueva1_")
-
-    # T6B — Scenario B: real regression among cap-valid candidates (60 → 46 → 40).
-    def test_t6b_integrated_cap_valid_regression(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._five_scene_script(12)),   # attempt 0: 60 words
-            _json.dumps({                                # attempt 1: 46 = [10,9,9,9,9] cap-valid
-                "scenes": [{"sceneNumber": i, "voiceover": " ".join(f"nueva{i}_{j}" for j in range(1, n + 1))}
-                           for i, n in enumerate([10, 9, 9, 9, 9], start=1)]
-            }),
-            _json.dumps(self._five_scene_script(8)),     # attempt 2: 40 = [8,8,8,8,8] cap-valid (full regen)
-        ]
-
-        calls = [0]
-
-        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
-            idx = calls[0]
-            calls[0] += 1
-            return responses[idx]
-
-        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
-        monkeypatch.setattr(gs, "call_llm", mock_call)
-        out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Arcoíris",
-                                           "--duration", "30", "--output", str(out_path)])
-
-        exit_code = gs.main()
-        assert exit_code == 0
-        assert calls[0] == 3
-
-        meta = _json.loads(out_path.read_text())
-        assert meta["status"] == "REVIEW_REQUIRED"
-        dc = meta["durationContract"]
-        assert dc["bestAttempt"] == 1
-        assert dc["bestAttemptWordCount"] == 46
-        assert dc["lastAttemptDiscardedAsRegression"] is True
-        rh = dc["retryHistory"]
-        assert [e["wordCount"] for e in rh] == [60, 46, 40]
-        assert [e["becameBestCandidate"] for e in rh] == [True, True, False]
-        assert sum(1 for e in rh if e["acceptedAsBest"]) == 1
-        assert rh[1]["acceptedAsBest"] is True
-        # Persisted script is the 46-word candidate.
-        assert meta["durationContract"]["wordCount"] == 46
-        assert meta["script"]["scenes"][0]["voiceover"].startswith("nueva1_")
-
-    # T7 — never lose a PASS
-    def test_t7_does_not_lose_pass(self, monkeypatch, tmp_path):
-        responses = [self._five_scene_script(12), self._repair_payload(10)]  # 60 → 50
-
-        calls = [0]
-
-        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
-            calls[0] += 1
-            if calls[0] > 2:
-                raise AssertionError("third call should never happen after a PASS")
-            return _json.dumps(responses[calls[0] - 1])
-
-        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
-        monkeypatch.setattr(gs, "call_llm", mock_call)
-        out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Arcoíris",
-                                           "--duration", "30", "--output", str(out_path)])
-
-        exit_code = gs.main()
-        assert exit_code == 0
-        assert calls[0] == 2
-        meta = _json.loads(out_path.read_text())
-        assert meta["status"] == "SCRIPT_DRAFT"
-        assert meta["durationContract"]["status"] == "PASS"
-        assert meta["durationContract"]["wordCount"] == 50
-
-    # T8 — hostile payload (visualPlan/subtitle/title) is rejected, never applied
+    # T8 — hostile payload (visualPlan/subtitle/title) is rejected
     def test_t8_hostile_payload_rejected(self):
         base = _v2_script(scenes=[_v2_scene(i) for i in range(1, 5)])
         hostile = {
@@ -1776,40 +1627,6 @@ class TestDurationRetryConvergence:
         assert shape_errors
         # base untouched
         assert base["scenes"][0]["voiceover"].startswith("Escena")
-
-    def test_t8_hostile_integrated_never_applied(self, monkeypatch, tmp_path):
-        bad = self._five_scene_script(12)
-        hostile = {
-            "scenes": [
-                {"sceneNumber": 1, "voiceover": "nueva", "visualPlan": {"x": 1}},
-                {"sceneNumber": 2, "voiceover": "nueva 2", "subtitle": "hack"},
-                {"sceneNumber": 3, "voiceover": "nueva 3"},
-                {"sceneNumber": 4, "voiceover": "nueva 4"},
-                {"sceneNumber": 5, "voiceover": "nueva 5"},
-            ],
-            "title": "hack",
-        }
-        calls = [0]
-
-        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
-            calls[0] += 1
-            return _json.dumps(bad) if calls[0] == 1 else _json.dumps(hostile)
-
-        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
-        monkeypatch.setattr(gs, "call_llm", mock_call)
-        out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Arcoíris",
-                                           "--duration", "30", "--output", str(out_path)])
-
-        gs.main()
-        meta = _json.loads(out_path.read_text())
-        dc = meta["durationContract"]
-        # The hostile repair payload must be rejected, so the previous candidate
-        # (60 words) stays and no hostile visualPlan/subtitle ever lands in the script.
-        assert dc["retryHistory"][1]["repairPayloadValid"] is False
-        for scene in meta["script"]["scenes"]:
-            assert scene.get("visualPlan") is None or scene["visualPlan"].get("x") != 1
-            assert scene.get("subtitle", "").startswith("Subtitulo")
 
     # T2 — a globally valid repair is accepted even when scene targets are unmet
     def test_t2_global_pass_accepts_unmet_target(self):
@@ -1861,33 +1678,6 @@ class TestDurationRetryConvergence:
         assert any("VISUAL_PLAN_V2_INVALID" in r for r in meta.get("reviewReasons", []))
         assert meta["durationContract"]["bestAttempt"] is None
 
-    # T12 — exhaustion without structurally valid candidate invents nothing
-    def test_t12_no_valid_candidate_invents_nothing(self, monkeypatch, tmp_path):
-        bad_vp = _v2_scene_vp()
-        bad_script = _v2_script(scenes=[
-            _v2_scene(1, vp_overrides={"editorialRole": "context_map"}),
-            _v2_scene(2), _v2_scene(3), _v2_scene(4),
-        ])
-
-        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
-            return _json.dumps(bad_script)
-
-        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
-        monkeypatch.setattr(gs, "call_llm", mock_call)
-        out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
-                                           "--duration", "30", "--output", str(out_path)])
-
-        gs.main()
-        meta = _json.loads(out_path.read_text())
-        dc = meta["durationContract"]
-        assert dc["status"] == "FAIL"
-        assert dc["structureValid"] is False
-        assert dc["bestAttempt"] is None
-        assert dc["bestAttemptWordCount"] is None
-        assert dc["lastAttemptDiscardedAsRegression"] is False
-        assert any("VISUAL_PLAN_V2_INVALID" in r for r in meta.get("reviewReasons", []))
-
 
 class TestDurationReviewFixes:
     """Tests for the Slice 6B duration-retry review fixes (F1-F7)."""
@@ -1931,38 +1721,6 @@ class TestDurationReviewFixes:
         exit_code = gs.main()
         meta = _json.loads(out_path.read_text())
         return exit_code, calls[0], meta
-
-    # ── F1: compression uses a dedicated system prompt ─────────────
-    def test_f1_compression_uses_dedicated_system_prompt(self, monkeypatch, tmp_path):
-        pairs = []
-
-        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
-            pairs.append((system_prompt, prompt))
-            if len(pairs) == 1:
-                return _json.dumps(self._full_script_counts([12] * 5))       # 60 words
-            return _json.dumps(self._repair_counts([20, 8, 8, 8, 8]))          # over-cap -> rejected
-
-        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
-        monkeypatch.setattr(gs, "call_llm", mock_call)
-        out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Arcoíris",
-                                           "--duration", "30", "--output", str(out_path)])
-        gs.main()
-
-        compression_pair = pairs[1]  # first retry is compression (60 > max)
-        sys_prompt, user_prompt = compression_pair
-        assert sys_prompt == gs.VOICEOVER_COMPRESSION_SYSTEM_PROMPT
-        assert sys_prompt != gs.SYSTEM_PROMPT_V2
-        # The compression system prompt must not require a full script / visualPlan.
-        assert "visualPlan" not in sys_prompt or "No devuelvas" in sys_prompt
-        assert "sceneNumber" in sys_prompt
-        assert "voiceover" in sys_prompt
-        # The user prompt demands only sceneNumber + voiceover per scene.
-        assert '{"scenes": [{"sceneNumber": 1, "voiceover": "..."}]}' in user_prompt
-        assert "No devuelvas `visualPlan`" in user_prompt
-        # F2: expected scene numbers interpolated, not literal placeholder.
-        assert "{expected}" not in user_prompt
-        assert "[1, 2, 3, 4, 5]" in user_prompt
 
     # ── F2: expected sceneNumber sequence interpolated ─────────────
     def test_f2_expected_interpolated_five_scenes(self):
@@ -2035,128 +1793,6 @@ class TestDurationReviewFixes:
         assert merged is not None
         assert shape_errors == []
 
-    # ── F5: regression cases B/C/D ─────────────────────────────────
-    def test_f5_case_b_last_attempt_best(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._full_script_counts([12] * 5)),       # 60
-            _json.dumps(self._repair_counts([8] * 5)),              # 40 (cap-valid, below min)
-            _json.dumps(self._full_script_counts([10, 9, 9, 9, 9])),  # 46 (full, best)
-        ]
-        exit_code, n_calls, meta = self._run_main(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 3
-        dc = meta["durationContract"]
-        assert dc["bestAttempt"] == 2
-        assert dc["bestAttemptWordCount"] == 46
-        assert dc["lastAttemptDiscardedAsRegression"] is False
-        rh = dc["retryHistory"]
-        assert [e["wordCount"] for e in rh] == [60, 40, 46]
-        assert sum(1 for e in rh if e["acceptedAsBest"]) == 1
-        assert rh[2]["acceptedAsBest"] is True
-
-    def test_f5_case_c_tie(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._full_script_counts([12] * 5)),       # 60
-            _json.dumps(self._repair_counts([10, 9, 9, 9, 9])),     # 46 (best)
-            _json.dumps(self._full_script_counts([10, 9, 9, 9, 9])),  # 46 (tie -> not best)
-        ]
-        exit_code, n_calls, meta = self._run_main(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 3
-        dc = meta["durationContract"]
-        assert dc["bestAttempt"] == 1
-        assert dc["lastAttemptDiscardedAsRegression"] is False
-        rh = dc["retryHistory"]
-        assert [e["becameBestCandidate"] for e in rh] == [True, True, False]
-        assert sum(1 for e in rh if e["acceptedAsBest"]) == 1
-        assert rh[1]["acceptedAsBest"] is True
-
-    def test_f5_case_d_final_payload_rejected(self, monkeypatch, tmp_path):
-        # The best candidate (53) is over-max so the final retry is a compression
-        # whose shape-invalid payload is rejected before becoming a candidate.
-        bad_shape = {"scenes": [
-            {"sceneNumber": 1, "voiceover": "solo dos"},
-            {"sceneNumber": 2, "voiceover": "escenas presentes"},
-        ]}
-        responses = [
-            _json.dumps(self._full_script_counts([8] * 5)),         # 40 (below min)
-            _json.dumps(self._full_script_counts([11, 11, 11, 11, 9])),  # 53 (over max, best)
-            _json.dumps(bad_shape),                                   # shape-invalid -> rejected
-        ]
-        exit_code, n_calls, meta = self._run_main(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 3
-        dc = meta["durationContract"]
-        assert dc["bestAttempt"] == 1
-        assert dc["lastAttemptDiscardedAsRegression"] is False
-        rh = dc["retryHistory"]
-        assert rh[2]["candidateUpdated"] is False
-        assert rh[2]["repairPayloadEligible"] is False
-        assert rh[2]["repairPayloadValid"] is False
-        assert rh[2]["candidateReused"] is True
-        # A rejected (never a candidate) response is never called a regression.
-        assert sum(1 for e in rh if e["acceptedAsBest"]) == 1
-        assert rh[1]["acceptedAsBest"] is True
-
-    # ── F5 (F6): canonical representation persisted on exhaustion ──
-    def test_f6_canonical_persisted_on_exhaustion(self, monkeypatch, tmp_path):
-        def uppercase_scene(i):
-            return _v2_scene(
-                i,
-                vp_overrides={
-                    "visualIntent": "  EXPLAIN ",
-                    "subjects": ["  subject a ", " subject b "],
-                    "assetPreferences": [" DIAGRAM "],
-                    "visualSequence": [{
-                        "segmentIndex": 1, "assetPreference": "DIAGRAM",
-                        "durationFraction": 1.0, "transition": "CUT",
-                    }],
-                },
-                voiceover=" ".join(f"c{i}_{j}" for j in range(1, 13)),
-            )
-
-        full = _json.dumps(_v2_script(scenes=[uppercase_scene(i) for i in range(1, 6)]))
-        regression = _json.dumps(self._repair_counts([13, 13, 13, 13, 13]))  # 65 words, worse
-        responses = [full, regression, regression]  # 60 words, regressions rejected
-        exit_code, n_calls, meta = self._run_main(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 3
-        dc = meta["durationContract"]
-        assert dc["bestAttempt"] == 0
-        assert dc["structureValid"] is True
-        assert meta["status"] == "REVIEW_REQUIRED"
-        rh = dc["retryHistory"]
-        assert rh[1]["candidateUpdated"] is False
-        assert rh[1]["candidateReused"] is True
-        assert rh[1]["repairPayloadEligible"] is True
-        assert rh[1]["repairGlobalBudgetValid"] is False
-        scene = meta["script"]["scenes"][0]
-        vp = scene["visualPlan"]
-        assert vp["visualIntent"] == "explain"
-        assert vp["assetPreferences"] == ["diagram"]
-        assert vp["visualSequence"][0]["assetPreference"] == "diagram"
-        assert vp["visualSequence"][0]["transition"] == "cut"
-        assert vp.get("allowGeneratedImage") is False
-        assert vp["subjects"] == ["subject a", "subject b"]
-
-    # ── F7 (F6): telemetry for a rejected payload ──────────────────
-    def test_f7_rejected_payload_telemetry(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._full_script_counts([12] * 5)),       # 60
-            "not-json",                                             # rejected
-            "also-not-json",                                        # rejected
-        ]
-        exit_code, n_calls, meta = self._run_main(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 3
-        rh = meta["durationContract"]["retryHistory"]
-        for e in (rh[1], rh[2]):
-            assert e["candidateUpdated"] is False
-            assert e["candidateReused"] is True
-            assert e["repairPayloadValid"] is False
-            assert e["wordCountSource"] == "previous_candidate"
-            assert any(err["code"] == "REPAIR_NOT_JSON" for err in e["repairErrors"])
-
     # ── F8: acceptedAsBest unambiguous ─────────────────────────────
     def test_f8_accepted_as_best_single_when_best_exists(self, monkeypatch, tmp_path):
         responses = [
@@ -2193,104 +1829,6 @@ class TestDurationReviewFixes:
         assert "visualPlan" in sp  # present only as a negative prohibition
         assert "No devuelvas" in sp
 
-    # ── F8 (canonical follow-up): the active candidate is canonical ─
-    def _canonicalizable_scene(self, i, words=12):
-        return _v2_scene(
-            i,
-            vp_overrides={
-                "visualIntent": "  EXPLAIN ",
-                "subjects": ["  subject a ", " subject b "],
-                "assetPreferences": [" DIAGRAM "],
-                "visualSequence": [{
-                    "segmentIndex": 1, "assetPreference": "DIAGRAM",
-                    "durationFraction": 1.0, "transition": "CUT",
-                }],
-            },
-            voiceover=" ".join(f"p{i}_{j}" for j in range(1, words + 1)),
-        )
-
-    def _assert_canonical_vp(self, vp):
-        assert vp["visualIntent"] == "explain"
-        assert vp["assetPreferences"] == ["diagram"]
-        assert vp["visualSequence"][0]["assetPreference"] == "diagram"
-        assert vp["visualSequence"][0]["transition"] == "cut"
-        assert vp["subjects"] == ["subject a", "subject b"]
-        assert vp["allowGeneratedImage"] is False
-        assert vp["preferredProviders"] == []
-        assert vp.get("period") is None
-        assert vp.get("location") is None
-
-    # The compression prompt must receive the canonical candidate, never the
-    # raw response. If the code regresses to passing script_data, the raw
-    # values (uppercase/padded) fail these assertions.
-    def test_f8_canonical_flows_to_compression_prompt(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(_v2_script(scenes=[self._canonicalizable_scene(i) for i in range(1, 6)])),  # 60 words
-            _json.dumps(self._repair_counts([13, 13, 13, 13, 13])),   # 65 -> regression
-            _json.dumps(self._repair_counts([13, 13, 13, 13, 13])),   # 65 -> regression
-        ]
-
-        received = []
-        real_build = gs._build_voiceover_compression_prompt
-
-        def spy(canonical_script, budget, actual_word_count, scene_word_targets, *, allow_generated_images, compression_attempt=1):
-            received.append(canonical_script)
-            return real_build(canonical_script, budget, actual_word_count, scene_word_targets,
-                              allow_generated_images=allow_generated_images,
-                              compression_attempt=compression_attempt)
-
-        monkeypatch.setattr(gs, "_build_voiceover_compression_prompt", spy)
-        exit_code, n_calls, _ = self._run_main(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 3
-        assert received, "compression prompt must have been built"
-        for scene in received[0]["scenes"]:
-            self._assert_canonical_vp(scene["visualPlan"])
-
-    # The merge base must already be canonicalized before voiceovers are
-    # replaced; the result keeps the canonical representation, only the
-    # voiceover fields change, and the intercepted base is never mutated.
-    def test_f8_canonical_base_used_by_merge(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(_v2_script(scenes=[self._canonicalizable_scene(i) for i in range(1, 6)])),  # 60 words
-            _json.dumps(self._repair_counts([9, 9, 9, 9, 9])),   # 45 words cap-valid -> merge
-            _json.dumps(self._full_script_counts([9, 9, 9, 9, 9])),  # 45 words, not a merge
-        ]
-
-        captured = []
-        real_repair = gs._apply_voiceover_repair
-
-        def spy(base_script, repair_payload, *, expected_scene_numbers):
-            snapshot = _json.loads(_json.dumps(base_script))
-            merged, shape_errors = real_repair(
-                base_script, repair_payload,
-                expected_scene_numbers=expected_scene_numbers)
-            assert base_script == snapshot, "repair must not mutate its base"
-            captured.append({"base": snapshot, "merged": merged})
-            return merged, shape_errors
-
-        monkeypatch.setattr(gs, "_apply_voiceover_repair", spy)
-        exit_code, n_calls, _ = self._run_main(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 3
-        assert captured, "a merge must have run"
-        first = captured[0]
-        assert first["merged"] is not None
-        base = first["base"]
-        for scene in base["scenes"]:
-            self._assert_canonical_vp(scene["visualPlan"])
-        merged = first["merged"]
-        # visualPlan stays canonical (does not revert to the raw form) and only
-        # the voiceover fields change between base and merged.
-        for i in range(5):
-            base_scene = dict(base["scenes"][i])
-            merged_scene = dict(merged["scenes"][i])
-            assert base_scene["voiceover"] != merged_scene["voiceover"]
-            base_scene.pop("voiceover")
-            merged_scene.pop("voiceover")
-            assert base_scene == merged_scene
-        assert merged["scenes"][0]["voiceover"].startswith("r1_")
-
     # ── F2 extension: six-scene interpolation ──────────────────────
     def test_f2_expected_interpolated_six_scenes(self):
         script = _v2_script(scenes=[_v2_scene(i) for i in range(1, 7)])
@@ -2303,229 +1841,36 @@ class TestDurationReviewFixes:
         assert "[1, 2, 3, 4, 5, 6]" in prompt
 
 
-# ── Slice 6B duration-policy fix: targets as guidance + monotonic convergence ─
+# ── Printed duration contract status (CLI telemetry) ────────────────────────
 
 
-class TestDurationPolicyFix:
-    """Mandatory T1-T10 coverage for the duration-policy fix.
-
-    Targets per scene are guidance; the global word budget is the only hard
-    duration contract. Candidates converge monotonically and regression is
-    prevented without extra attempts.
-    """
-
-    def _budget(self):
-        return {
-            "targetSec": 30, "minSec": 27, "maxSec": 30,
-            "minimumWords": 47, "preferredWords": 52, "maximumWords": 52,
-            "sceneCount": 5, "pauseSec": 1.4,
-            "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
-        }
-
-    def _five_scene_script(self, words_per_scene):
-        return _v2_script(scenes=[
-            _v2_scene(i, voiceover=" ".join(f"p{i}_{j}" for j in range(1, words_per_scene + 1)))
+class TestPrintedDurationContractStatus:
+    def test_printed_status_matches_persisted_bootstrap_contract(self, monkeypatch, tmp_path, capsys):
+        """The CLI summary must report the bootstrap duration contract status,
+        not the structural-validity pass. Both stay non-blocking telemetry."""
+        script = _v2_script(scenes=[
+            _v2_scene(i, voiceover=" ".join(f"w{i}_{j}" for j in range(1, 13)))
             for i in range(1, 6)
         ])
 
-    def _full_counts(self, counts):
-        return _v2_script(scenes=[
-            _v2_scene(i, voiceover=" ".join(f"f{i}_{j}" for j in range(1, counts[i - 1] + 1)))
-            for i in range(1, len(counts) + 1)
-        ])
-
-    def _repair_counts(self, counts):
-        return {
-            "scenes": [
-                {"sceneNumber": i, "voiceover": " ".join(f"r{i}_{j}" for j in range(1, counts[i - 1] + 1))}
-                for i in range(1, len(counts) + 1)
-            ]
-        }
-
-    def _run(self, responses, monkeypatch, tmp_path):
-        calls = [0]
-        prompts = []
-
-        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
-            idx = calls[0]
-            calls[0] += 1
-            prompts.append((system_prompt, prompt))
-            return responses[idx]
-
         monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
-        monkeypatch.setattr(gs, "call_llm", mock_call)
+        monkeypatch.setattr(gs, "call_llm",
+                            lambda prompt, api_key, model, provider="openai", system_prompt=None: _json.dumps(script))
         out_path = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Arcoíris",
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
                                            "--duration", "30", "--output", str(out_path)])
-        exit_code = gs.main()
+
+        gs.main()
         meta = _json.loads(out_path.read_text())
-        return exit_code, calls[0], prompts, meta
+        summary = _json.loads(capsys.readouterr().out.strip().splitlines()[-1])
 
-    # T2 — a globally valid repair reaches PASS even when a scene target is unmet
-    def test_policy_t2_global_pass_with_unmet_target(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._five_scene_script(12)),          # 60 (over max)
-            _json.dumps(self._repair_counts([14, 11, 9, 7, 11])),  # 52 global PASS, scene1 unmet
-        ]
-        exit_code, n_calls, _, meta = self._run(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 2
+        # 60 words exceed the 52-word budget -> bootstrap FAIL, persisted as such.
+        assert summary["durationContractStatus"] == meta["durationContract"]["status"]
+        assert summary["durationContractStatus"] == "FAIL"
+        # Structural validity still passes; bootstrap is non-blocking telemetry.
         assert meta["status"] == "SCRIPT_DRAFT"
-        dc = meta["durationContract"]
-        assert dc["status"] == "PASS"
-        assert dc["wordCount"] == 52
-        e = dc["retryHistory"][1]
-        assert e["strategy"] == "compression"
-        assert e["candidateUpdated"] is True
-        assert e["repairPayloadEligible"] is True
-        assert e["repairGlobalBudgetValid"] is True
-        assert e["repairSceneTargetsMet"] is False
-        assert e["repairProposedWordCount"] == 52
-
-    # T3 — progressive convergence 56 -> 54 -> 52; the second retry receives 54
-    def test_policy_t3_progressive_56_54_52(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._full_counts([12, 11, 11, 11, 11])),  # 56
-            _json.dumps(self._repair_counts([11, 11, 11, 11, 10])),   # 54 improves
-            _json.dumps(self._repair_counts([11, 10, 11, 10, 10])),   # 52 PASS
-        ]
-        exit_code, n_calls, prompts, meta = self._run(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 3
-        assert meta["status"] == "SCRIPT_DRAFT"
-        dc = meta["durationContract"]
-        assert dc["status"] == "PASS"
-        assert dc["wordCount"] == 52
-        rh = dc["retryHistory"]
-        assert [e["wordCount"] for e in rh] == [56, 54, 52]
-        # attempt 1 accepted the 54 candidate
-        assert rh[1]["candidateUpdated"] is True
-        assert rh[1]["repairGlobalBudgetValid"] is False
-        # the second compression prompt must be based on the 54 candidate (r1_*)
-        compression_prompts = [p for sp, p in prompts if sp == gs.VOICEOVER_COMPRESSION_SYSTEM_PROMPT]
-        assert len(compression_prompts) >= 2
-        assert "r1_" in compression_prompts[-1]
-
-    # T4 — no active regression: 56 -> 58 -> 52
-    def test_policy_t4_non_regression_56_58_52(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._full_counts([12, 11, 11, 11, 11])),  # 56
-            _json.dumps(self._repair_counts([12, 12, 12, 12, 10])),   # 58 regression
-            _json.dumps(self._repair_counts([11, 10, 11, 10, 10])),   # 52 PASS
-        ]
-        exit_code, n_calls, prompts, meta = self._run(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 3
-        assert meta["status"] == "SCRIPT_DRAFT"
-        dc = meta["durationContract"]
-        assert dc["status"] == "PASS"
-        rh = dc["retryHistory"]
-        assert [e["wordCount"] for e in rh] == [56, 56, 52]
-        # 58 did not replace 56
-        assert rh[1]["candidateUpdated"] is False
-        assert rh[1]["candidateReused"] is True
-        assert rh[1]["repairPayloadEligible"] is True
-        assert rh[1]["repairGlobalBudgetValid"] is False
-        assert rh[1]["repairProposedWordCount"] == 58
-        # second compression prompt is based on 56, not 58
-        compression_prompts = [p for sp, p in prompts if sp == gs.VOICEOVER_COMPRESSION_SYSTEM_PROMPT]
-        assert len(compression_prompts) >= 2
-        # 56-candidate voiceovers (12,11,11,11,11) are carried into the last prompt
-        assert "currentWordCount" in compression_prompts[-1]
-
-    # T6 — a six-word scene is valid when shape and global budget hold
-    def test_policy_t6_six_word_scene_pass(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._five_scene_script(12)),                 # 60 (over max)
-            _json.dumps(self._repair_counts([13, 12, 11, 6, 10])),    # 52 PASS, scene4=6 words
-        ]
-        exit_code, n_calls, _, meta = self._run(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 2
-        assert meta["status"] == "SCRIPT_DRAFT"
-        dc = meta["durationContract"]
-        assert dc["status"] == "PASS"
-        assert dc["wordCount"] == 52
-        assert dc["retryHistory"][1]["repairGlobalBudgetValid"] is True
-        assert dc["retryHistory"][1]["repairShapeValid"] is True
-
-    # T8 — best attempt persists 54 on 56 -> 54 -> 55
-    def test_policy_t8_best_attempt_56_54_55(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._full_counts([12, 11, 11, 11, 11])),  # 56
-            _json.dumps(self._repair_counts([11, 11, 11, 11, 10])),   # 54 improves -> best
-            _json.dumps(self._repair_counts([11, 11, 11, 11, 11])),   # 55 regression
-        ]
-        exit_code, n_calls, _, meta = self._run(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n_calls == 3
-        assert meta["status"] == "REVIEW_REQUIRED"
-        dc = meta["durationContract"]
-        assert dc["status"] == "FAIL"
-        assert dc["bestAttempt"] == 1
-        assert dc["bestAttemptWordCount"] == 54
-        assert dc["lastAttemptDiscardedAsRegression"] is True
-        # persisted script contains the 54-word candidate
-        assert meta["script"]["scenes"][0]["voiceover"].startswith("r1_")
-        rh = dc["retryHistory"]
-        assert [e["wordCount"] for e in rh] == [56, 54, 54]
-        assert sum(1 for e in rh if e["acceptedAsBest"]) == 1
-        assert rh[1]["acceptedAsBest"] is True
-
-    # T9 — telemetry distinguishes repair outcomes and aliases
-    def test_policy_t9_telemetry_aliases(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._five_scene_script(12)),          # 60 (initial)
-            _json.dumps(self._repair_counts([14, 11, 9, 7, 11])),  # 52 global PASS, scene1 unmet
-        ]
-        exit_code, _, _, meta = self._run(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        rh = meta["durationContract"]["retryHistory"]
-        # non-repair (initial) strategy: repair telemetry is null
-        initial = rh[0]
-        assert initial["strategy"] == "initial"
-        assert initial["repairShapeValid"] is None
-        assert initial["repairPayloadEligible"] is None
-        assert initial["repairGlobalBudgetValid"] is None
-        assert initial["repairSceneTargetsMet"] is None
-        assert initial["repairPayloadValid"] is None
-        assert initial["repairBudgetValid"] is None
-        assert initial["sceneWordTargets"] is None
-        assert initial["sceneWordCaps"] is None
-        # compression PASS: aliases align with the new fields
-        comp = rh[1]
-        assert comp["strategy"] == "compression"
-        assert comp["repairGlobalBudgetValid"] is True
-        assert comp["repairSceneTargetsMet"] is False
-        assert comp["repairSceneTargetDeviations"], "scene 1 must be reported as a deviation"
-        assert comp["repairPayloadValid"] is comp["repairPayloadEligible"]
-        assert comp["repairBudgetValid"] is comp["repairGlobalBudgetValid"]
-        assert comp["sceneWordCaps"] == comp["sceneWordTargets"]
-        assert comp["sceneWordCapsEnforced"] is False
-        assert comp["sceneWordCapsDeprecated"] is True
-        assert comp["repairProposedWordCount"] == 52
-        assert comp["repairProposedCandidateRank"] == [0, 0]
-
-    # T9 — shape-invalid payload: eligible=false, no proposed candidate, no errors merged
-    def test_policy_t9_shape_invalid_telemetry(self, monkeypatch, tmp_path):
-        bad_shape = {"scenes": [{"sceneNumber": 1, "voiceover": "solo"}]}  # missing scenes
-        responses = [
-            _json.dumps(self._five_scene_script(12)),   # 60 (over max)
-            _json.dumps(bad_shape),
-            _json.dumps(bad_shape),
-        ]
-        exit_code, _, _, meta = self._run(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        rh = meta["durationContract"]["retryHistory"]
-        comp = rh[1]
-        assert comp["strategy"] == "compression"
-        assert comp["repairShapeValid"] is False
-        assert comp["repairPayloadEligible"] is False
-        assert comp["repairGlobalBudgetValid"] is False
-        assert comp["repairProposedWordCount"] is None
-        assert comp["repairErrors"], "hard shape errors must be reported"
-        assert comp["candidateUpdated"] is False
-        assert comp["candidateReused"] is True
+        assert meta["durationContract"]["structureValid"] is True
+        assert meta["durationContract"]["blocking"] is False
 
 
 # ── Slice 6B length-control hardening (compression control audit) ─────────────
@@ -2705,91 +2050,3 @@ class TestCompressionPromptAttempts:
         p = gs._build_duration_prompt_instruction_v2(self._budget(), "balanced")
         for ph in ("{min_w}", "{max_w}", "{expected}"):
             assert ph not in p
-
-
-class TestLengthControlHardeningIntegration:
-    """C9 / C10 — convergence and anti-regression through the real loop."""
-
-    def _run(self, responses, monkeypatch, tmp_path):
-        calls = [0]
-        prompts = []
-
-        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
-            calls[0] += 1
-            prompts.append((system_prompt, prompt))
-            return responses[calls[0] - 1]
-
-        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
-        monkeypatch.setattr(gs, "call_llm", mock_call)
-        out = tmp_path / "metadata.json"
-        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Arcoíris",
-                                           "--duration", "30", "--output", str(out)])
-        exit_code = gs.main()
-        meta = _json.loads(out.read_text())
-        return exit_code, calls[0], prompts, meta
-
-    def _full_counts(self, counts):
-        return _v2_script(scenes=[
-            _v2_scene(i, voiceover=" ".join(f"f{i}_{j}" for j in range(1, counts[i - 1] + 1)))
-            for i in range(1, len(counts) + 1)
-        ])
-
-    def _repair_counts(self, counts):
-        return {"scenes": [
-            {"sceneNumber": i, "voiceover": " ".join(f"r{i}_{j}" for j in range(1, counts[i - 1] + 1))}
-            for i in range(1, len(counts) + 1)
-        ]}
-
-    def test_c9_convergence_69_63_52(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._full_counts([14, 14, 14, 14, 13])),   # 69
-            _json.dumps(self._repair_counts([13, 13, 9, 14, 14])),  # 63 improves
-            _json.dumps(self._repair_counts([10, 10, 11, 10, 11])), # 52 PASS
-        ]
-        exit_code, n, prompts, meta = self._run(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        assert n == 3
-        dc = meta["durationContract"]
-        assert dc["status"] == "PASS"
-        assert dc["wordCount"] == 52
-        rh = dc["retryHistory"]
-        assert [e["wordCount"] for e in rh] == [69, 63, 52]
-        assert rh[1]["candidateUpdated"] is True
-        assert rh[2]["candidateUpdated"] is True
-        comp = [p for sp, p in prompts if sp == gs.VOICEOVER_COMPRESSION_SYSTEM_PROMPT]
-        assert len(comp) == 2
-        # second compression prompt built from the canonical 63 candidate (r1_)
-        assert "r1_" in comp[1]
-        assert "SEGUNDO INTENTO DE COMPRESIÓN" in comp[1]
-        assert "SEGUNDO INTENTO DE COMPRESIÓN" not in comp[0]
-
-    def test_c10_anti_regression_69_70_52(self, monkeypatch, tmp_path):
-        responses = [
-            _json.dumps(self._full_counts([14, 14, 14, 14, 13])),   # 69
-            _json.dumps(self._repair_counts([14, 14, 14, 14, 14])), # 70 regression
-            _json.dumps(self._repair_counts([10, 10, 11, 10, 11])), # 52 PASS
-        ]
-        exit_code, _, _, meta = self._run(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        dc = meta["durationContract"]
-        assert dc["status"] == "PASS"
-        assert dc["wordCount"] == 52
-        rh = dc["retryHistory"]
-        assert [e["wordCount"] for e in rh] == [69, 69, 52]
-        assert rh[1]["candidateUpdated"] is False
-        assert rh[1]["candidateReused"] is True
-
-    def test_c11_contract_invariants(self, monkeypatch, tmp_path):
-        assert gs.MAX_SCRIPT_ATTEMPTS == 3
-        # global PASS with an unmet per-scene target still passes (repair is
-        # shape-only; the global budget is the only hard duration contract).
-        responses = [
-            _json.dumps(self._full_counts([14, 14, 14, 14, 13])),  # 69
-            _json.dumps(self._repair_counts([14, 11, 9, 7, 11])),  # 52 global PASS, scene1 unmet
-        ]
-        exit_code, _, _, meta = self._run(responses, monkeypatch, tmp_path)
-        assert exit_code == 0
-        dc = meta["durationContract"]
-        assert dc["status"] == "PASS"
-        assert dc["retryHistory"][1]["repairGlobalBudgetValid"] is True
-        assert dc["retryHistory"][1]["repairSceneTargetsMet"] is False

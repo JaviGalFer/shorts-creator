@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from shorts_creator.validation import asset as asset_validation
+from shorts_creator.contracts.duration import evaluate_requested_duration_compliance
 
 FPS = 25
 MAX_SEGMENT_DURATION = 20.0
@@ -1243,8 +1244,26 @@ def render_job(
 
         pacing_status = (pacing_result or {}).get("status", "N/A") if pacing_result else "NOT_APPLICABLE"
 
+        request_duration = data.get("request", {}).get("duration", {})
+        required_duration_fields = ("targetSec", "minSec", "maxSec")
+        if isinstance(request_duration, dict) and all(k in request_duration for k in required_duration_fields):
+            try:
+                requested_compliance = evaluate_requested_duration_compliance(
+                    actual_video_duration_sec=post["actualVideoDurationSec"],
+                    target_sec=request_duration["targetSec"],
+                    min_sec=request_duration["minSec"],
+                    max_sec=request_duration["maxSec"],
+                )
+            except (TypeError, ValueError):
+                requested_compliance = {"status": "NOT_APPLICABLE"}
+        else:
+            requested_compliance = {"status": "NOT_APPLICABLE"}
+        validation_result["requestedDurationCompliance"] = requested_compliance
+
         gates = {
             "technicalValidation": "PASS" if technical_pass else "FAIL",
+            "renderDurationIntegrity": "PASS" if post["durationOk"] else "FAIL",
+            "requestedDurationCompliance": requested_compliance["status"],
             "subtitleCoverageValidation": coverage_status,
             "assetValidation": asset_status if asset_status != "N/A" else "NOT_APPLICABLE",
             "pacingValidation": pacing_status,
@@ -1258,7 +1277,13 @@ def render_job(
         data["validation"] = validation_result
         data["validation"]["gates"] = gates
 
-        if not technical_pass:
+        if requested_compliance["status"] == "FAIL":
+            data.setdefault("reviewReasons", [])
+            reason = "REQUESTED_DURATION_OUT_OF_RANGE"
+            if reason not in data["reviewReasons"]:
+                data["reviewReasons"].append(reason)
+            data["status"] = "RENDERED_WITH_WARNINGS"
+        elif not technical_pass:
             data["status"] = "RENDERED_WITH_WARNINGS"
         elif has_asset_issues:
             data["status"] = "RENDERED_WITH_ASSET_WARNINGS"
@@ -1292,6 +1317,8 @@ def render_job(
         data["validation"] = validation_result
         data["validation"]["gates"] = {
             "technicalValidation": "NOT_APPLICABLE",
+            "renderDurationIntegrity": "NOT_APPLICABLE",
+            "requestedDurationCompliance": "NOT_APPLICABLE",
             "subtitleCoverageValidation": "NOT_APPLICABLE",
             "assetValidation": "NOT_APPLICABLE",
             "qualityGate": "NOT_APPLICABLE",
@@ -1365,6 +1392,7 @@ def render_job(
             "format": "shorts-9x16",
             "fps": FPS,
         },
+        "scenePlan": req.get("scenePlan"),
     }
     audio_pacing = data.get("audioPacing", {})
     if isinstance(audio_pacing, dict) and audio_pacing:
@@ -1488,6 +1516,7 @@ def render_job(
             "blackFrameWarnings": len(black_warnings),
             "freezeFrameWarnings": len(freeze_warnings),
             "coverageStatus": (coverage_result or {}).get("status", "N/A"),
+            "requestedDurationCompliance": validation_result.get("requestedDurationCompliance", {"status": "NOT_APPLICABLE"}),
             "gates": validation_result.get("gates", {}),
         }
         import json as _json
