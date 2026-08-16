@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from shorts_creator.contracts.duration import calculate_word_budget, resolve_requested_duration
+from shorts_creator.contracts.duration import calculate_word_budget, resolve_requested_duration, resolve_scene_plan
 from shorts_creator.contracts.visual import ALLOWED_ASSET_PREFERENCES, canonicalize_visual_plan_v2
 from shorts_creator.infrastructure.metadata_store import save_metadata
 
@@ -28,13 +28,6 @@ SPOKEN_WORDS_PER_SECOND = SPOKEN_WORDS_PER_MINUTE / 60.0
 # Inter-scene pause added by Edge TTS between narration units.
 # Each scene transition adds this pause to total duration.
 ESTIMATED_SCENE_PAUSE_MS = 350
-
-# For under-30 Shorts: 4-6 scenes, not 10.
-# 10 micro-scenes inflate effective duration via cumulative pauses.
-# With 5 transitions (6 scenes): 5 * 350ms = 1.75s pause overhead.
-# With 9 transitions (10 scenes): 9 * 350ms = 3.15s pause overhead.
-MAX_SCENES = 6
-
 
 def _build_asset_preferences_section() -> str:
     """Build the AssetPreferences enum section of the prompt from the contractual source.
@@ -78,7 +71,7 @@ SYSTEM_PROMPT_V2 = """Eres un guionista senior especializado en Shorts/TikTok/Re
 Devuelve SOLO JSON válido, sin markdown, sin explicaciones.
 
 ## Reglas de ritmo
-- Máximo 6 escenas (normalmente 4-6). Prefiere 5 escenas.
+- Respeta el rango dinámico de escenas suministrado en las instrucciones.
 - La duración total, palabras totales y palabras por escena se especifican en las instrucciones dinámicas. Respeta esos valores.
 - Mínimo 7 palabras por escena
 - Frases contundentes, sin relleno
@@ -88,7 +81,7 @@ Devuelve SOLO JSON válido, sin markdown, sin explicaciones.
 ## Reglas de narración (voiceover)
 - En español de España (no latinoamericano)
 - Mínimo 7 palabras por escena
-- DEBEN SER ENTRE 4 Y 6 ESCENAS. Mínimo 4, máximo 6. Prefiere 5.
+- Respeta el rango dinámico de escenas suministrado en las instrucciones.
 - Tono divulgativo y preciso
 - No inventar datos factuales
 - Priorizar datos concretos cuando apliquen: fechas, cifras, nombres propios
@@ -410,7 +403,10 @@ def _build_duration_prompt_instruction_v2(budget: dict, strictness: str) -> str:
         f"- El total de palabras habladas debe estar entre {min_w} y {max_w} "
         f"(preferredWords del perfil: {pref_w}; pausas entre escenas de ~{pause_ms}ms cada una)"
     )
-    lines.append(f"- Escenas: entre 4 y 6. Prefiere 5 escenas.")
+    lines.append(
+        f"- Escenas: entre {budget.get('minSceneCount', 4)} y {budget.get('maxSceneCount', 6)}. "
+        f"Prefiere {budget.get('preferredSceneCount', 5)} escenas (~{budget.get('targetSceneDurationSec', 6)}s por escena)."
+    )
     lines.append(f"- Mínimo 7 palabras por escena. Aproximadamente {per_scene_low}-{per_scene_high} palabras por escena.")
     lines.append(f"- El CTA debe incluirse dentro de la voz en off de la última escena, no como escena separada.")
     lines.append(f"- NO uses frases de relleno, CTA repetido, oraciones duplicadas ni pausas dramáticas falsas.")
@@ -426,8 +422,6 @@ def _build_duration_prompt_instruction_v2(budget: dict, strictness: str) -> str:
     return "\n".join(lines)
 
 
-PROVISIONAL_SCENE_COUNT = 5
-MIN_SCENE_COUNT = 4
 MAX_SCRIPT_ATTEMPTS = 3  # initial generation + up to 2 corrective retries
 
 
@@ -474,6 +468,7 @@ def _validate_and_canonicalize_script_v2(
     script_data: dict,
     *,
     allow_generated_images: bool,
+    scene_plan: dict | None = None,
 ) -> tuple[dict | None, list[dict], list[dict]]:
     """Validate and canonicalize a v2 script.
 
@@ -492,12 +487,14 @@ def _validate_and_canonicalize_script_v2(
 
     # ── Scene count ──────────────────────────────────────────────────
     scene_count = len(scenes)
-    if scene_count < 4:
+    min_scenes = (scene_plan or {}).get("minSceneCount", 4)
+    max_scenes = (scene_plan or {}).get("maxSceneCount", 6)
+    if scene_count < min_scenes:
         errors.append({"sceneNumber": None, "code": "INSUFFICIENT_SCENE_COUNT",
-                       "path": "scenes", "message": f"got {scene_count} scenes, need at least 4"})
-    elif scene_count > 6:
+                        "path": "scenes", "message": f"got {scene_count} scenes, need at least {min_scenes}"})
+    elif scene_count > max_scenes:
         errors.append({"sceneNumber": None, "code": "EXCESSIVE_SCENE_COUNT",
-                       "path": "scenes", "message": f"got {scene_count} scenes, max 6 allowed"})
+                        "path": "scenes", "message": f"got {scene_count} scenes, max {max_scenes} allowed"})
 
     # ── Per-scene basic structural checks + sceneNumber validation ────
     scene_nums_raw: list = []
@@ -1358,6 +1355,7 @@ def generate_script(
     strictness = resolved["strictness"]
     requested_sec = resolved.get("requestedSec")
     requested_profile = resolved.get("requestedProfile")
+    scene_plan = resolve_scene_plan(target_dur)
 
     # ── Provisional word budget ────────────────────────────────────────
     provisional_budget = calculate_word_budget(
@@ -1365,9 +1363,10 @@ def generate_script(
         min_sec=min_sec,
         max_sec=max_sec,
         spoken_words_per_minute=SPOKEN_WORDS_PER_MINUTE,
-        scene_count=PROVISIONAL_SCENE_COUNT,
+        scene_count=scene_plan["preferredSceneCount"],
         estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
     )
+    provisional_budget.update(scene_plan)
 
     active_system_prompt = SYSTEM_PROMPT_V2
 
@@ -1426,7 +1425,7 @@ def generate_script(
         if retries > 0:
             # V2 structural validation
             canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
-                script_data, allow_generated_images=allow_generated_images,
+                script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
             )
             v2_structural_issues = v2_errs
             v2_valid = canonical is not None
@@ -1444,9 +1443,10 @@ def generate_script(
                 min_sec=min_sec,
                 max_sec=max_sec,
                 spoken_words_per_minute=SPOKEN_WORDS_PER_MINUTE,
-                scene_count=scene_count if scene_count >= MIN_SCENE_COUNT else PROVISIONAL_SCENE_COUNT,
+                scene_count=scene_count if scene_count >= scene_plan["minSceneCount"] else scene_plan["preferredSceneCount"],
                 estimated_scene_pause_ms=ESTIMATED_SCENE_PAUSE_MS,
             )
+            retry_budget.update(scene_plan)
 
             if not v2_valid:
                 # Case A — invalid structure: keep the full contractual regeneration.
@@ -1546,7 +1546,7 @@ def generate_script(
                 else:
                     repair_payload_eligible = True
                     proposed_canonical, proposed_v2_errs, _ = _validate_and_canonicalize_script_v2(
-                        repaired, allow_generated_images=allow_generated_images,
+                        repaired, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
                     )
                     if proposed_canonical is None:
                         # canonicalization failed: reject the payload, keep active
@@ -1629,7 +1629,7 @@ def generate_script(
 
         # ── V2 validation ───────────────────────────────────────
         canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
-            script_data, allow_generated_images=allow_generated_images,
+            script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
         )
         v2_structural_issues = v2_errs
         v2_valid = canonical is not None
@@ -1819,6 +1819,7 @@ def generate_script(
         "language": "es-ES",
         "format": "shorts-9x16",
         "durationProfile": duration_profile_name,
+        "scenePlan": scene_plan,
         "duration": duration_dict,
         "voice": {
             "provider": "edge_tts",
@@ -1881,7 +1882,7 @@ def generate_script(
     structure_issue_codes: list[str] = []
 
     canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
-        script_data, allow_generated_images=allow_generated_images,
+        script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
     )
     v2_valid = canonical is not None
     if not v2_valid:
@@ -1910,13 +1911,14 @@ def generate_script(
             "estimatedScenePauseMs": ESTIMATED_SCENE_PAUSE_MS,
         },
         "durationProfile": duration_profile_name,
+        "scenePlan": scene_plan,
     }
 
     # Use canonical script whenever the structure is valid (canonical is the
     # contract representation; it must be persisted even when duration fails).
     script_to_persist = script_data
     canonical_final, _, _ = _validate_and_canonicalize_script_v2(
-        script_data, allow_generated_images=allow_generated_images,
+        script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
     )
     if canonical_final is not None:
         script_to_persist = canonical_final
