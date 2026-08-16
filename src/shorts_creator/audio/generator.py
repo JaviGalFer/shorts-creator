@@ -56,13 +56,17 @@ def _get_mp3_duration(audio_path: Path) -> "tuple[float, str] | tuple[None, None
 
     docker_env = {**os.environ, "DOCKER_API_VERSION": "1.43"}
     try:
+        ws_path = audio_path.relative_to(PROJECT_ROOT)
+    except ValueError:
+        ws_path = audio_path.relative_to(audio_path.parents[3])
+    try:
         r = subprocess.run(
             ["docker", "run", "--rm",
-             "-v", f"{audio_path.parents[3]}:/workspace",
+             "-v", f"{PROJECT_ROOT}:/workspace",
              "--entrypoint", "ffprobe",
              "linuxserver/ffmpeg:latest",
              "-v", "quiet", "-print_format", "json", "-show_format",
-             f"/workspace/{audio_path.relative_to(audio_path.parents[3])}"],
+             f"/workspace/{ws_path}"],
             capture_output=True, text=True, timeout=30,
             env=docker_env,
         )
