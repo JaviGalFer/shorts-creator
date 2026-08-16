@@ -9,7 +9,8 @@ Fit duration generically across provider, voice, language, and future TTS implem
 ## Scope
 - Slice 1: post-TTS PASS/EXPAND/COMPRESS contract, 0.70-1.50 ratio policy, per-scene distribution, generic repair. **Completed.**
 - Slice 2: projected-duration loop, maximum two repairs, forced TTS regeneration, retained assets. **Completed; focal simulated tests passed.**
-- Slice 3: MP4 `requestedDurationCompliance`, separate from render integrity, manifest/status gates. **Pending.**
+- Slice 2 runtime hardening: script `.env` LLM reuse and preservation of audio provider/voice/timing configuration. **Completed.**
+- Slice 3: MP4 `requestedDurationCompliance`, separate from render integrity, manifest/status gates. **Completed; full suite passed.**
 
 ## Out of scope
-Provider calibration history, perceptual pacing, asset semantics, music, UI, n8n, and final MP4 product-duration gating.
+Provider calibration history, perceptual pacing, asset semantics, music, UI, n8n, and a real E2E validation of the completed fitting loop.
