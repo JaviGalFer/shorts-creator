@@ -1025,6 +1025,123 @@ def _build_voiceover_compression_prompt(
     return "\n".join(lines)
 
 
+def _build_voiceover_repair_prompt(
+    canonical_script: dict,
+    *,
+    direction: str,
+    current_word_count: int,
+    target_total_words: int,
+    minimum_words: int,
+    maximum_words: int,
+    scene_word_targets: list[int],
+    allow_generated_images: bool = False,
+) -> str:
+    """Build a generic voiceover-only repair prompt (EXPAND or COMPRESS).
+
+    Direction-agnostic replacement for the compression-only builder. It asks
+    the LLM for NEW voiceovers only, preserving every structural field and the
+    exact sceneNumber sequence. The global word total must land on
+    target_total_words and stay within [minimum_words, maximum_words].
+
+    The repair payload contract is identical to
+    _apply_voiceover_repair(): {"scenes": [{"sceneNumber", "voiceover"}]}.
+    """
+    direction = direction.upper()
+    if direction not in ("EXPAND", "COMPRESS"):
+        raise ValueError(f"direction must be EXPAND or COMPRESS, got {direction!r}")
+
+    scenes = canonical_script.get("scenes", [])
+    if len(scenes) != len(scene_word_targets):
+        raise ValueError(
+            "scene_word_targets length must match number of scenes "
+            f"({len(scene_word_targets)} != {len(scenes)})"
+        )
+    expected = list(range(1, len(scenes) + 1))
+
+    verb = "ampliar" if direction == "EXPAND" else "comprimir"
+    noun = "expansión" if direction == "EXPAND" else "compresión"
+
+    lines = [
+        f"## CONTRATO DE {noun.upper()} DE VOZ EN OFF — PRIORIDAD MÁXIMA",
+        "",
+        f"Candidato actual: {current_word_count} palabras.",
+        f"Objetivo global: {target_total_words} palabras (mínimo aceptado {minimum_words}, "
+        f"máximo aceptado {maximum_words}).",
+        "",
+        f"Debes {verb} EXCLUSIVAMENTE los voiceovers que se proporcionan a continuación.",
+        "No añadas ni elimines escenas. Conserva exactamente los `sceneNumber` y su orden.",
+        "No regeneres ni modifiques el plan visual ni ningún otro campo estructural.",
+        "",
+        "## Voiceovers a reparar",
+        "",
+        "```json",
+        json.dumps({
+            "direction": direction,
+            "currentWordCount": current_word_count,
+            "targetTotalWords": target_total_words,
+            "minimumWords": minimum_words,
+            "maximumWords": maximum_words,
+            "scenes": [
+                {
+                    "sceneNumber": scenes[i]["sceneNumber"],
+                    "currentVoiceover": scenes[i].get("voiceover", ""),
+                    "currentWords": len((scenes[i].get("voiceover") or "").split()),
+                    "recommendedTargetWords": scene_word_targets[i],
+                }
+                for i in range(len(scenes))
+            ]
+        }, ensure_ascii=False, indent=2),
+        "```",
+        "",
+        "## Restricciones obligatorias",
+        "",
+        "- Devuelve solo JSON válido, sin markdown ni explicaciones.",
+        "- El objeto debe contener únicamente `scenes`.",
+        "- Cada escena debe contener únicamente `sceneNumber` y `voiceover`.",
+        "- Conserva la secuencia completa y exacta de `sceneNumber`.",
+        "- Cada voiceover debe ser un string no vacío.",
+        f"- El total final DEBE quedar en {target_total_words} palabras "
+        f"y entre {minimum_words} y {maximum_words}.",
+        "- Conserva el significado principal de cada escena.",
+        "- No modifiques ningún campo visual ni estructural.",
+        "",
+        "## Objetivos recomendados (guidance)",
+        "",
+        "- Los targets por escena son recomendaciones (suman el objetivo global).",
+        "- El total global es obligatorio.",
+        "- Reparte cambios de forma equilibrada entre escenas.",
+        "",
+        "## Cómo se cuenta una palabra",
+        "",
+        "- Una palabra es cada token separado por espacios mediante Python `str.split()`.",
+        "- La puntuación unida a una palabra NO crea una palabra adicional.",
+        "",
+        "## Formato de respuesta",
+        "",
+        "Devuelve SOLO JSON válido, sin markdown ni explicaciones, con este formato exacto:",
+        "",
+        "```json",
+        '{"scenes": [{"sceneNumber": 1, "voiceover": "..."}]}',
+        "```",
+        "",
+        "- Únicamente los campos `sceneNumber` y `voiceover` por escena.",
+        "- El resto de campos se preservarán localmente; no los repitas.",
+        "",
+        "## Autocomprobación final",
+        "",
+        f"- Revisa que el total final sea {target_total_words} palabras.",
+        f"- Revisa que los `sceneNumber` sean {expected}.",
+        "- Las restricciones visuales no son editables durante esta reparación.",
+    ]
+
+    if allow_generated_images:
+        lines.append("- El gate de imágenes generadas NO se modifica en esta reparación.")
+    else:
+        lines.append("- El gate de imágenes generadas (desactivado) NO se modifica en esta reparación.")
+
+    return "\n".join(lines)
+
+
 def _apply_voiceover_repair(
     base_script: dict,
     repair_payload: dict,

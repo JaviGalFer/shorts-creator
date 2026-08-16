@@ -236,3 +236,173 @@ def resolve_duration_config(
         resolved["strictness"] = strictness
 
     return profile_name, resolved
+
+
+# ── Post-TTS duration fitting (generic) ────────────────────────────────────
+# These helpers decide PASS / EXPAND / COMPRESS from a *measured* (projected)
+# duration and a *generic* per-attempt ratio policy. They intentionally know
+# nothing about TTS providers, voices, or languages. spokenWordsPerMinute is
+# left to calculate_word_budget() as pure bootstrap only.
+
+
+DEFAULT_FITTING_RATIO_MIN = 0.70
+DEFAULT_FITTING_RATIO_MAX = 1.50
+
+
+def _validate_positive_number(value, label: str) -> float:
+    """Return a finite positive float or raise ValueError.
+
+    Booleans are rejected explicitly.
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"{label} must not be bool")
+    if not isinstance(value, (int, float)):
+        raise ValueError(f"{label} must be a number, got {type(value).__name__}")
+    import math
+    if not math.isfinite(value):
+        raise ValueError(f"{label} must be finite, got {value}")
+    if value <= 0:
+        raise ValueError(f"{label} must be positive, got {value}")
+    return float(value)
+
+
+def _validate_positive_int(value, label: str) -> int:
+    """Return a positive int or raise ValueError (bool rejected)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{label} must be a positive int, got {value!r}")
+    if value <= 0:
+        raise ValueError(f"{label} must be positive, got {value}")
+    return value
+
+
+def evaluate_duration_fitting(
+    *,
+    current_word_count: int,
+    projected_duration_sec: float,
+    target_sec: int,
+    min_sec: int,
+    max_sec: int,
+    ratio_min: float = DEFAULT_FITTING_RATIO_MIN,
+    ratio_max: float = DEFAULT_FITTING_RATIO_MAX,
+) -> dict:
+    """Evaluate a real (projected) duration against the requested window.
+
+    Supports PASS / EXPAND / COMPRESS purely, with a generic bounded ratio.
+
+    Returns:
+        decision           PASS | EXPAND | COMPRESS
+        currentWords       int
+        proposedWords      int (scaled by boundedRatio; equals current on PASS)
+        projectedDurationSec float
+        targetSec / minSec / maxSec  int
+        rawRatio           float (desired / projected)
+        boundedRatio       float (rawRatio clamped to [ratio_min, ratio_max])
+        ratioPolicyMin     float
+        ratioPolicyMax     float
+        deltaToRangeSec    float (shortfall or overshoot vs the window; 0 on PASS)
+    """
+    cur = _validate_positive_int(current_word_count, "current_word_count")
+    projected = _validate_positive_number(projected_duration_sec, "projected_duration_sec")
+    target = _validate_positive_int(target_sec, "target_sec")
+    min_sec_i = _validate_positive_int(min_sec, "min_sec")
+    max_sec_i = _validate_positive_int(max_sec, "max_sec")
+
+    if min_sec_i > target or target > max_sec_i:
+        raise ValueError(
+            f"Invalid duration window: minSec={min_sec_i}, "
+            f"targetSec={target}, maxSec={max_sec_i}"
+        )
+    ratio_min_f = _validate_positive_number(ratio_min, "ratio_min")
+    ratio_max_f = _validate_positive_number(ratio_max, "ratio_max")
+    if ratio_min_f > ratio_max_f:
+        raise ValueError(
+            f"ratio_min={ratio_min_f} must not exceed ratio_max={ratio_max_f}"
+        )
+
+    if min_sec_i <= projected <= max_sec_i:
+        decision = "PASS"
+        proposed = cur
+        delta = 0.0
+    elif projected < min_sec_i:
+        decision = "EXPAND"
+        delta = min_sec_i - projected
+    else:
+        decision = "COMPRESS"
+        delta = projected - max_sec_i
+
+    # Desired duration derived from target, clamped to the window.
+    desired = min(max(float(target), float(min_sec_i)), float(max_sec_i))
+    raw_ratio = desired / projected
+    bounded_ratio = min(max(raw_ratio, ratio_min_f), ratio_max_f)
+
+    if decision != "PASS":
+        proposed = int(round(cur * bounded_ratio))
+
+    return {
+        "decision": decision,
+        "currentWords": cur,
+        "proposedWords": proposed,
+        "projectedDurationSec": round(projected, 3),
+        "targetSec": target,
+        "minSec": min_sec_i,
+        "maxSec": max_sec_i,
+        "rawRatio": raw_ratio,
+        "boundedRatio": bounded_ratio,
+        "ratioPolicyMin": ratio_min_f,
+        "ratioPolicyMax": ratio_max_f,
+        "deltaToRangeSec": round(delta, 3),
+    }
+
+
+def distribute_words(
+    *,
+    current_counts: list[int],
+    target_total: int,
+) -> list[int]:
+    """Deterministically distribute a new word total across scenes.
+
+    - sum(result) == target_total
+    - each scene target >= 1
+    - roughly proportional to current_counts
+    - remainder fixed by rounding (largest fractional part, index tie-break)
+    - independent of provider/voice/language
+
+    Raises ValueError on invalid input.
+    """
+    if not isinstance(current_counts, list) or not current_counts:
+        raise ValueError("current_counts must be a non-empty list")
+    if any(isinstance(c, bool) or not isinstance(c, int) for c in current_counts):
+        raise ValueError("current_counts must contain only integers")
+    if any(c < 1 for c in current_counts):
+        raise ValueError("current_counts must contain only positive integers")
+    if isinstance(target_total, bool) or not isinstance(target_total, int):
+        raise ValueError("target_total must be an int")
+    if target_total <= 0:
+        raise ValueError("target_total must be positive")
+
+    n = len(current_counts)
+    if target_total < n:
+        raise ValueError("target_total must be >= number of scenes")
+
+    total = sum(current_counts)
+    raw = [count / total * target_total for count in current_counts]
+    floors = [int(f) for f in raw]
+    fracs = [f - int(f) for f in raw]
+    remaining = target_total - sum(floors)
+
+    # Distribute the remainder: largest fractional part first, index tie-break.
+    order = sorted(range(n), key=lambda i: (-fracs[i], i))
+    for idx in order[:remaining]:
+        floors[idx] += 1
+
+    # Guarantee every scene has at least one word.
+    for i in range(n):
+        if floors[i] < 1:
+            deficit = 1 - floors[i]
+            floors[i] = 1
+            for _ in range(deficit):
+                j = max(range(n), key=lambda k: floors[k] if k != i else -1)
+                floors[j] -= 1
+
+    assert sum(floors) == target_total
+    return floors
