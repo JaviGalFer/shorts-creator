@@ -207,7 +207,7 @@ n8n no es el orquestador canónico del pipeline V2.
 
 - `ffprobe` no está instalado en el host; la medición de duración de audio usa Docker como fallback.
 - La aceleración GPU no está implementada; el render usa CPU.
-- Falta repetir el E2E real del duration fitting; la integridad del render y el cumplimiento de producto ya se tratan por separado.
+- La estimación bootstrap WPM es telemetría no bloqueante; la duración real del audio TTS y el fitting post-TTS son autoritativos. El fitting se validó en E2E reales (`quick_30` y `deep_60`).
 - No hay publicación automática ni integración con redes sociales.
 
 ## Documentación adicional
