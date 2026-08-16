@@ -1,7 +1,8 @@
 import pytest
 
 from shorts_creator.contracts.duration import calculate_word_budget, resolve_scene_plan
-from shorts_creator.script.generator import _build_duration_prompt_instruction_v2, _validate_and_canonicalize_script_v2
+from shorts_creator.script import generator as script_generator
+from shorts_creator.script.generator import _build_duration_prompt_instruction_v2, _build_retry_instruction_v2, _validate_and_canonicalize_script_v2
 
 
 @pytest.mark.parametrize("target,preferred,minimum,maximum", [
@@ -46,3 +47,31 @@ def test_dynamic_prompt_and_budget_use_preferred_scene_count():
     assert "entre 9 y 11" in prompt and "Prefiere 10 escenas" in prompt
     assert "~6s por escena" in prompt
     assert budget["sceneCount"] == 10
+
+
+@pytest.mark.parametrize("target,required,forbidden", [(60, "ENTRE 9 Y 11", "ENTRE 4 Y 6"), (30, "ENTRE 4 Y 6", "ENTRE 9 Y 11")])
+def test_retry_prompt_uses_dynamic_scene_plan(target, required, forbidden):
+    plan = resolve_scene_plan(target)
+    budget = calculate_word_budget(target_sec=target, min_sec=target - 3, max_sec=target + 3, scene_count=plan["preferredSceneCount"])
+    budget.update(plan)
+    prompt = _build_retry_instruction_v2(budget, 10, plan["preferredSceneCount"], 10.0, [], False)
+    assert required in prompt
+    assert forbidden not in prompt
+
+
+def test_deep_60_repair_preserves_ten_scene_plan(monkeypatch):
+    source = _script(10)
+    payload = {"scenes": [{"sceneNumber": i, "voiceover": "nueva voz con siete palabras para escena"} for i in range(1, 11)]}
+    monkeypatch.setattr(script_generator, "call_llm", lambda *args, **kwargs: __import__("json").dumps(payload))
+    repaired, errors = script_generator.repair_voiceover_duration(
+        source, direction="EXPAND", target_total_words=80, scene_word_targets=[8] * 10,
+        api_key="test", model="test", scene_plan=resolve_scene_plan(60),
+    )
+    assert errors == []
+    assert [scene["sceneNumber"] for scene in repaired["scenes"]] == list(range(1, 11))
+
+
+def test_minimum_supported_scene_plan_is_coherent():
+    plan = resolve_scene_plan(20)
+    assert plan["preferredSceneCount"] >= plan["minSceneCount"]
+    assert plan == {"targetSceneDurationSec": 6, "preferredSceneCount": 4, "minSceneCount": 4, "maxSceneCount": 5}

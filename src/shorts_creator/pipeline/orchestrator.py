@@ -263,6 +263,10 @@ def _run_duration_fitting(metadata_path: str, *, verbose: bool) -> tuple[bool, s
                 minimum_words_per_scene=MINIMUM_WORDS_PER_SCENE,
             )
             request_visuals = data.get("request", {}).get("visuals", {})
+            scene_plan = (
+                data.get("resolvedConfig", {}).get("scenePlan")
+                or data.get("request", {}).get("scenePlan")
+            )
             llm_config = resolve_llm_config()
             repaired, errors = repair_voiceover_duration(
                 data["script"], direction=decision["decision"],
@@ -271,6 +275,7 @@ def _run_duration_fitting(metadata_path: str, *, verbose: bool) -> tuple[bool, s
                 model=llm_config["model"],
                 provider=llm_config["provider"],
                 allow_generated_images=bool(request_visuals.get("allowGeneratedImages", False)),
+                scene_plan=scene_plan,
             )
         except Exception as exc:
             repaired, errors = None, [{"code": "DURATION_REPAIR_FAILED", "message": str(exc)}]

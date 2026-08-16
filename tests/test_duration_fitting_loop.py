@@ -155,3 +155,17 @@ def test_audio_regeneration_uses_request_config_when_old_audio_metadata_lacks_it
     assert "voice-B" in cmd
     assert cmd[cmd.index("--tts-provider") + 1] == "edge_tts"
     assert cmd[cmd.index("--subtitle-timing-provider") + 1] == "estimated"
+
+
+def test_fitting_passes_persisted_scene_plan_to_repair(tmp_path, monkeypatch):
+    path = _metadata(tmp_path)
+    data = json.loads(path.read_text())
+    plan = {"targetSceneDurationSec": 6, "preferredSceneCount": 10, "minSceneCount": 9, "maxSceneCount": 11}
+    data["resolvedConfig"] = {"scenePlan": plan}
+    path.write_text(json.dumps(data))
+    captured = {}
+    monkeypatch.setattr(orchestrator, "resolve_llm_config", lambda: {"api_key": "x", "model": "x", "provider": "x"})
+    monkeypatch.setattr(orchestrator, "repair_voiceover_duration", lambda script, **kwargs: (captured.update(kwargs) or None, [{"code": "stop"}]))
+    ok, reason = orchestrator._run_duration_fitting(str(path), verbose=False)
+    assert not ok and reason == "DURATION_FITTING_REPAIR_FAILED"
+    assert captured["scene_plan"] == plan

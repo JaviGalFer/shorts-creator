@@ -13,7 +13,8 @@ def resolve_scene_plan(target_sec: int) -> dict:
     """Resolve a duration-derived scene plan with deterministic half-up rounding."""
     if isinstance(target_sec, bool) or not isinstance(target_sec, int) or target_sec <= 0:
         raise ValueError("target_sec must be a positive integer")
-    preferred = (target_sec + TARGET_SCENE_DURATION_SEC // 2) // TARGET_SCENE_DURATION_SEC
+    raw_preferred = (target_sec + TARGET_SCENE_DURATION_SEC // 2) // TARGET_SCENE_DURATION_SEC
+    preferred = max(4, raw_preferred)
     return {
         "targetSceneDurationSec": TARGET_SCENE_DURATION_SEC,
         "preferredSceneCount": preferred,

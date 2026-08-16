@@ -390,6 +390,10 @@ def _build_duration_prompt_instruction_v2(budget: dict, strictness: str) -> str:
     max_w = budget.get("maximumWords", 0)
     operational = _compute_operational_word_target(budget)
     pause_ms = budget.get("estimatedScenePauseMs", 350)
+    min_scenes = budget.get("minSceneCount", 4)
+    preferred_scenes = budget.get("preferredSceneCount", 5)
+    max_scenes = budget.get("maxSceneCount", 6)
+    scene_seconds = budget.get("targetSceneDurationSec", 6)
     per_scene_low = max(1, min_w // budget.get("sceneCount", 5)) if budget.get("sceneCount", 5) else 7
     per_scene_high = max(per_scene_low + 2, 7)
     lines = [
@@ -691,6 +695,10 @@ def _build_retry_instruction_v2(
     dur_min = budget.get("minSec", 0)
     dur_max = budget.get("maxSec", 0)
     pause_ms = budget.get("estimatedScenePauseMs", 350)
+    min_scenes = budget.get("minSceneCount", 4)
+    preferred_scenes = budget.get("preferredSceneCount", 5)
+    max_scenes = budget.get("maxSceneCount", 6)
+    scene_seconds = budget.get("targetSceneDurationSec", 6)
 
     lines = [
         "## Corrección de guion — intento anterior insuficiente",
@@ -776,7 +784,10 @@ def _build_retry_instruction_v2(
 
     lines.append("")
     lines.append("### Reglas obligatorias:")
-    lines.append("- DEBEN SER ENTRE 4 Y 6 ESCENAS. Mínimo 4, máximo 6. Prefiere 5.")
+    lines.append(
+        f"- DEBEN SER ENTRE {min_scenes} Y {max_scenes} ESCENAS. "
+        f"Mínimo {min_scenes}, máximo {max_scenes}. Prefiere {preferred_scenes} (~{scene_seconds}s por escena)."
+    )
     lines.append("- El CTA debe estar DENTRO de la última escena, nunca como escena aparte.")
     lines.append("- Cada escena debe tener al menos 7 palabras de voiceover.")
     lines.append("- Cada escena DEBE tener visualPlan v2 completo con _schemaVersion=2.")
@@ -1179,6 +1190,7 @@ def repair_voiceover_duration(
     model: str,
     provider: str = "openai",
     allow_generated_images: bool = False,
+    scene_plan: dict | None = None,
 ) -> tuple[dict | None, list[dict]]:
     """Repair only scene voiceovers for a post-TTS duration adjustment."""
     scenes = script.get("scenes", [])
@@ -1205,7 +1217,7 @@ def repair_voiceover_duration(
     if errors or repaired is None:
         return None, errors
     canonical, validation_errors, _ = _validate_and_canonicalize_script_v2(
-        repaired, allow_generated_images=allow_generated_images,
+        repaired, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
     )
     if validation_errors or canonical is None:
         return None, [{"code": "DURATION_REPAIR_V2_INVALID", "message": str(validation_errors)}]
