@@ -12,7 +12,7 @@ sys.path.insert(0, str(PROJECT / "bin"))
 import pytest
 
 from generate_script import main as gs_main
-from run_job import build_script_command
+from shorts_creator.pipeline.orchestrator import build_script_command
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

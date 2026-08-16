@@ -6,7 +6,7 @@ from pathlib import Path
 PROJECT = Path("/home/javi/projects/shorts-creator")
 sys.path.insert(0, str(PROJECT / "bin"))
 
-import run_job
+import shorts_creator.pipeline.orchestrator
 from shorts_creator.infrastructure import metadata_store
 
 
@@ -28,5 +28,5 @@ def test_metadata_store_preserves_json_formatting_and_unicode(tmp_path):
 
 
 def test_run_job_reexports_canonical_metadata_store_functions():
-    assert run_job.load_metadata is metadata_store.load_metadata
-    assert run_job.save_metadata is metadata_store.save_metadata
+    assert shorts_creator.pipeline.orchestrator.load_metadata is metadata_store.load_metadata
+    assert shorts_creator.pipeline.orchestrator.save_metadata is metadata_store.save_metadata

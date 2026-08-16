@@ -708,7 +708,7 @@ class TestV2Compatibility:
 
     def test_run_job_modules_unchanged(self):
         """run_job.py still handles v2 dispatch correctly."""
-        from run_job import _classify_visual_schema, build_stage_command
+        from shorts_creator.pipeline.orchestrator import _classify_visual_schema, build_stage_command
         v2_meta = {
             "script": {
                 "scenes": [

@@ -40,7 +40,7 @@
 4. [x] Audio.
 5. [x] Assets.
 6. [x] Rendering + validation.
-7. [ ] Pipeline + `bin/` adapter reduction.
+7. [x] Pipeline + `bin/` adapter reduction.
 8. [ ] Stabilization and final review.
 
 Additional infrastructure is extracted only when required by a migrating domain, not as an independent campaign. Job/state/result contracts remain deferred until concrete consumers establish their boundaries.
@@ -69,3 +69,12 @@ Additional infrastructure is extracted only when required by a migrating domain,
 - [x] Move Whisper subtitle alignment to `audio/whisper.py` and remove the remaining Audio dependency on `bin/`.
 - [x] Verify no package source imports migrated `bin/` runtimes, focal consumers (`486 passed`), CLI smokes, and full suite (`1210 passed`).
 - [x] Preserve `AUDIO_DURATION_MISSING`, rendering commands, metadata, gates, statuses, and exit-code behavior unchanged.
+
+## Pipeline + bin adapter reduction
+- [x] Move stage ordering, subprocess dispatch, contracts, status transitions, failure handling, V2 rejection, and orchestration history to `pipeline/orchestrator.py`.
+- [x] Replace `bin/run_job.py` with an explicit CLI adapter while preserving process isolation, 600-second timeout, output capture, return-code handling, and metadata reloads.
+- [x] Consume duration and metadata persistence directly from canonical contracts/infrastructure.
+- [x] Move narration trimming runtime to `audio/trimming.py` and replace its `bin/` script with a CLI adapter.
+- [x] Migrate orchestration helpers, monkeypatches, and trimming ownership checks to package modules without private reexports.
+- [x] Verify package sources do not import top-level `bin/` modules, focal consumers (`320 passed`), eight CLI smokes, and full suite (`1215 passed`).
+- [x] Preserve `AUDIO_DURATION_MISSING`, stage order/contracts, V2-only defensive rejection, metadata, statuses, and exit-code behavior unchanged.
