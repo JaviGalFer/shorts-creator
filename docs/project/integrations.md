@@ -29,10 +29,11 @@ Cada integración tiene un estado de validación: `VALIDADO`, `PENDIENTE_DE_VALI
 
 ## ElevenLabs (narración, alternativa opcional)
 
-- **Estado**: `VALIDADO` (implementado como alternativa)
-- **Método**: API REST
+- **Estado**: `VALIDADO` para el runtime TTS per-scene. Timing nativo `/with-timestamps` con normalización de alineamiento char→word; smoke real PASSED (`ELEVENLABS_REAL_SMOKE_OK`, voz `Xb7hH8MSUJpSbSDYk0k2`, 3.84s); E2E canónico `cmo-2026-08-17-145309` VALIDADO (28.20s, `elevenlabs_normalized_alignment`). El modo continuo NO es compatible con ElevenLabs. No es el TTS canónico.
+- **Método**: API REST; `POST /v1/text-to-speech/{voice_id}/with-timestamps` con normalización char→word a `word_boundaries` canónicas.
 - **Credenciales**: `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` en `.env`
-- **Pipeline vigente**: solo se usa cuando `TTS_PROVIDER=elevenlabs` en `bin/generate_audio.py` (`bin/tts_provider.py`). No es el TTS canónico.
+- **Pipeline vigente**: solo se usa cuando `TTS_PROVIDER=elevenlabs` vía `bin/generate_audio.py` (`src/shorts_creator/audio/tts_provider.py`). No es el TTS canónico.
+- **Config runtime**: la resolución efectiva (provider, voz, modelo, credenciales) está en `src/shorts_creator/audio/generator.py`. Precedencia de voz: `--voice`/request → `ELEVENLABS_VOICE_ID` (para `elevenlabs`) → `TTS_VOICE` (genérico) → default del provider. `ELEVENLABS_VOICE_ID` gana sobre la voz por defecto de Edge (`es-ES-AlvaroNeural`) cuando el provider es `elevenlabs`; el API key nunca se persiste en metadata.
 - **Nota**: plan gratuito con voces españolas limitadas.
 
 ## n8n self-hosted (infraestructura legacy o alternativa)

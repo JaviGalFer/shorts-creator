@@ -2,11 +2,13 @@
 
 ## Runtime
 - Modular V2 architecture is complete: `bin/run_job.py` orchestrates `script -> assets -> audio -> prepare -> render -> validate`; `bin/` are CLI adapters over `src/shorts_creator/` domains.
+- Per-scene TTS runtime is provider-generic (`generic-tts-provider-runtime`, CLOSED): `generate_audio_with_timestamps()` takes `tts_provider`; Edge remains default/validated. ElevenLabs native `/with-timestamps` timing implemented with character-to-word normalization. Runtime config hardening resolves provider voice/secrets/model from project `.env` then process env, computes it once in `generate_audio()`, and applies it consistently to availability and synthesis; provider voice wins over the implicit Edge default; the API key never persists. Continuous mode is Edge-only (`CONTINUOUS_TTS_PROVIDER_UNSUPPORTED` for non-Edge).
+- Job-level TTS config plumbing (Slice 3): `bin/run_job.py` exposes `--tts-provider --voice --subtitle-timing-provider`; the orchestrator resolves the effective config once (`resolve_audio_job_config` in the audio domain) and threads it to the `script` stage (persisted into `request.voice`/`request.subtitles`) and the initial `audio` stage, preserved across fitting regenerations. `--voice` wins over env; the API key never lives in commands/metadata. ElevenLabs validated for per-scene TTS: real smoke PASSED (`ELEVENLABS_REAL_SMOKE_OK`, voice `Xb7hH8MSUJpSbSDYk0k2`, 3.84s) and canonical full real E2E `cmo-2026-08-17-145309` VALIDATED (28.20s, native `elevenlabs_normalized_alignment` timing, 2 fitting repairs). `cmo-2026-08-17-142952` was an Edge regression E2E, not ElevenLabs validation. ElevenLabs continuous mode is NOT supported.
 - n8n is legacy/alternative infrastructure, not the canonical orchestrator.
 - TTS and visual providers are replaceable; Edge TTS is currently the default and Wikimedia/Pixabay are current visual providers.
 
 ## Verified State
-- `main` base: `66ae15e`; active branch: `change/generic-duration-fitting`.
+- `main` base: `05aef83` (generic-duration-fitting merged). `generic-tts-provider-runtime`: COMPLETED / VERIFIED / CLOSED on `change/generic-tts-provider-runtime`.
 - `modular-v2-migration`: closed. `AUDIO_DURATION_MISSING`: resolved. Host `ffprobe` remains absent; Docker fallback is used.
 - First complete technical E2E: `cmo-2026-08-16-172847`, through `VALIDATED`; request 30s, range 27-30, timeline 20.813s, MP4 approximately 20.88s.
 - Real E2E attempt `cmo-2026-08-16-184819` was blocked at script: a legacy bootstrap WPM hard gate rejected a V2-valid 67-word candidate (37.9s estimate) before TTS. The gate is now non-blocking; WPM remains bootstrap telemetry only.
@@ -19,3 +21,4 @@
 - Branch full suite after adaptive runtime hardening: `1213 passed, 51 skipped, 0 failed`. The skips were legacy bootstrap-compression convergence tests.
 - Canonical deep_60 E2E `cmo-2026-08-16-203059`: 60.37s MP4, 9 scenes (adaptive plan 9-11, prefer 10), 2 voiceover repairs, requested-duration PASS, `VALIDATED`. The failed 5-scene `cmo-2026-08-16-194540` stays as historical context for adaptive scene planning.
 - generic-duration-fitting: COMPLETED / VERIFIED / CLOSED. Obsolete bootstrap-compression tests retired (23 deleted, 28 unskipped); `resolvedConfig.scenePlan` is preserved from the request; the CLI `durationContractStatus` line now reports the persisted bootstrap contract. Full suite on close: `1243 passed, 0 skipped, 0 failed`.
+- generic-tts-provider-runtime: COMPLETED / VERIFIED / CLOSED on `change/generic-tts-provider-runtime`. Supporting docs: full suite `1306 passed, 0 failed, 0 skipped` (all implementation commits pre-dating a test-only isolation fix). `test_generate_with_timestamps_uses_selected_provider` writes its artifact into `tmp_path` (no repo-root `out.mp3`).

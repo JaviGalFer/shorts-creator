@@ -10,6 +10,8 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import base64
+import math
 import os
 import re
 import subprocess
@@ -148,7 +150,7 @@ class EdgeTTSProvider(TTSProvider):
             voice_id=self._voice,
             voice_name="Alvaro Neural",
             language="es-ES",
-            timing_support="sentence",
+            timing_support="word",
             cost_per_1k_chars_usd=0.0,
             monthly_quota_chars=0,
             commercial_usage_status="allowed",
@@ -244,11 +246,11 @@ class EdgeTTSProvider(TTSProvider):
 
 class ElevenLabsProvider(TTSProvider):
     def __init__(self, api_key: str | None = None,
-                 voice_id: str = "Xb7hH8MSUJpSbSDYk0k2",
-                 model_id: str = "eleven_multilingual_v2"):
-        self._api_key = api_key or os.getenv("ELEVENLABS_API_KEY", "")
-        self._voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID", "Xb7hH8MSUJpSbSDYk0k2")
-        self._model_id = model_id or os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
+                 voice_id: str | None = None,
+                 model_id: str | None = None):
+        self._api_key = api_key if api_key is not None else os.getenv("ELEVENLABS_API_KEY", "")
+        self._voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID") or "Xb7hH8MSUJpSbSDYk0k2"
+        self._model_id = model_id or os.getenv("ELEVENLABS_MODEL_ID") or "eleven_multilingual_v2"
 
     @property
     def metadata(self) -> ProviderMetadata:
@@ -270,17 +272,15 @@ class ElevenLabsProvider(TTSProvider):
     def is_available(self) -> bool:
         return bool(self._api_key)
 
-    def synthesize(self, text: str, output_path: str, options: TTSOptions) -> TTSResult:
-        import requests
-        if not output_path.endswith(".mp3"):
-            output_path += ".mp3"
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{self._voice_id}"
-        headers = {
+    def _request_headers(self) -> dict:
+        return {
             "Accept": "audio/mpeg",
             "Content-Type": "application/json",
             "xi-api-key": self._api_key,
         }
-        payload = {
+
+    def _request_payload(self, text: str) -> dict:
+        return {
             "text": text,
             "model_id": self._model_id,
             "voice_settings": {
@@ -288,13 +288,150 @@ class ElevenLabsProvider(TTSProvider):
                 "similarity_boost": 0.75,
             },
         }
-        r = requests.post(url, json=payload, headers=headers, timeout=120)
+
+    def synthesize(self, text: str, output_path: str, options: TTSOptions) -> TTSResult:
+        import requests
+        if not output_path.endswith(".mp3"):
+            output_path += ".mp3"
+        voice = options.voice or self._voice_id
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}"
+        r = requests.post(url, json=self._request_payload(text),
+                          headers=self._request_headers(), timeout=120)
         r.raise_for_status()
         with open(output_path, "wb") as f:
             f.write(r.content)
+        return _measure_audio(output_path, "elevenlabs", voice)
 
-        result = _measure_audio(output_path, "elevenlabs", self._voice_id)
+    def synthesize_with_timing(self, text: str, output_path: str,
+                                options: TTSOptions) -> TTSResult:
+        try:
+            asyncio.get_running_loop()
+            in_async = True
+        except RuntimeError:
+            in_async = False
+        if in_async:
+            raise RuntimeError(
+                "synthesize_with_timing() called from async context. "
+                "Use await provider.synthesize_with_timing_async() instead."
+            )
+        return asyncio.run(self.synthesize_with_timing_async(text, output_path, options))
+
+    def _timed_request(self, text: str, output_path: str, options: TTSOptions):
+        """Run the blocking /with-timestamps POST in a worker thread."""
+        import requests
+        if not output_path.endswith(".mp3"):
+            output_path += ".mp3"
+        voice = options.voice or self._voice_id
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}/with-timestamps"
+        r = requests.post(url, json=self._request_payload(text),
+                          headers=self._request_headers(), timeout=120)
+        r.raise_for_status()
+        return r.json(), voice, output_path
+
+    async def synthesize_with_timing_async(self, text: str, output_path: str,
+                                            options: TTSOptions) -> TTSResult:
+        body, voice, output_path = await asyncio.to_thread(
+            self._timed_request, text, output_path, options
+        )
+        audio_b64 = body.get("audio_base64") if isinstance(body, dict) else None
+        if not audio_b64:
+            raise RuntimeError("ElevenLabs timed synthesis: missing audio_base64")
+        try:
+            audio_bytes = base64.b64decode(audio_b64, validate=True)
+        except Exception as exc:
+            raise RuntimeError("ElevenLabs timed synthesis: invalid audio_base64") from exc
+        with open(output_path, "wb") as f:
+            f.write(audio_bytes)
+        result = _measure_audio(output_path, "elevenlabs", voice)
+
+        normalized = body.get("normalized_alignment") if isinstance(body, dict) else None
+        alignment = body.get("alignment") if isinstance(body, dict) else None
+        if _is_valid_alignment(normalized):
+            result.timing_data = {
+                "word_boundaries": _normalize_character_alignment_to_words(normalized),
+                "sentence_boundaries": [],
+                "timing_source": "elevenlabs_normalized_alignment",
+            }
+        elif _is_valid_alignment(alignment):
+            result.timing_data = {
+                "word_boundaries": _normalize_character_alignment_to_words(alignment),
+                "sentence_boundaries": [],
+                "timing_source": "elevenlabs_alignment",
+            }
         return result
+
+
+def _is_valid_alignment(alignment) -> bool:
+    """Validate the ElevenLabs character-alignment payload structure."""
+    if not isinstance(alignment, dict):
+        return False
+    chars = alignment.get("characters")
+    starts = alignment.get("character_start_times_seconds")
+    ends = alignment.get("character_end_times_seconds")
+    if not (isinstance(chars, list) and isinstance(starts, list) and isinstance(ends, list)):
+        return False
+    if not (len(chars) == len(starts) == len(ends)):
+        return False
+    if not all(isinstance(c, str) for c in chars):
+        return False
+    prev_start = -1.0
+    prev_end = -1.0
+    for st, en in zip(starts, ends):
+        if isinstance(st, bool) or isinstance(en, bool):
+            return False
+        if not isinstance(st, (int, float)) or not isinstance(en, (int, float)):
+            return False
+        if not math.isfinite(st) or not math.isfinite(en):
+            return False
+        if st < 0 or en < 0 or en < st:
+            return False
+        if st < prev_start or en < prev_end:
+            return False
+        prev_start = st
+        prev_end = en
+    return True
+
+
+def _normalize_character_alignment_to_words(alignment) -> list[dict]:
+    """Convert ElevenLabs character-level alignment into canonical word boundaries.
+
+    Groups contiguous non-whitespace characters into words, preserving order,
+    punctuation, and Unicode. Returns [] for malformed alignment.
+    """
+    if not _is_valid_alignment(alignment):
+        return []
+    chars = alignment["characters"]
+    starts = alignment["character_start_times_seconds"]
+    ends = alignment["character_end_times_seconds"]
+    words: list[dict] = []
+    buf: list[str] = []
+    buf_start: Optional[float] = None
+    buf_end: Optional[float] = None
+    for ch, st, en in zip(chars, starts, ends):
+        if ch is None:
+            continue
+        if ch.isspace():
+            if buf:
+                words.append({
+                    "text": "".join(buf),
+                    "startSec": float(buf_start),
+                    "endSec": float(buf_end),
+                })
+                buf = []
+                buf_start = None
+                buf_end = None
+        else:
+            if not buf:
+                buf_start = st
+            buf.append(ch)
+            buf_end = en
+    if buf:
+        words.append({
+            "text": "".join(buf),
+            "startSec": float(buf_start),
+            "endSec": float(buf_end),
+        })
+    return words
 
 
 # ──────────────────────────────────────────────

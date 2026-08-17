@@ -4,7 +4,7 @@
 
 ![stack](https://img.shields.io/badge/stack-Python%20%2B%20FFmpeg%20%2B%20Docker-1f6feb?style=for-the-badge)
 ![mode](https://img.shields.io/badge/mode-local%20%7C%20Docker-0e8a16?style=for-the-badge)
-![tts](https://img.shields.io/badge/TTS-Edge%20voz%20natural-2ea44f?style=for-the-badge)
+![tts](https://img.shields.io/badge/TTS-Edge%20default%20%7C%20ElevenLabs-2ea44f?style=for-the-badge)
 ![llm](https://img.shields.io/badge/LLM-OpenAI--compatible-f0883e?style=for-the-badge)
 
 </div>
@@ -21,7 +21,7 @@ Visual Plan V2 es el único contrato visual canónico. La arquitectura modular V
 
 Pipeline V2 funcional y E2E técnico demostrado. Docker se utiliza para render y servicios auxiliares; `bin/run_job.py` es el orquestador canónico.
 
-El fitting post-TTS y la validación de cumplimiento de duración del MP4 están implementados y validados por E2E reales. quick_30 y deep_60 son la evidencia canónica exitosa. Suite completa: **`1243 passed, 0 skipped, 0 failed`**.
+El fitting post-TTS y la validación de cumplimiento de duración del MP4 están implementados y validados por E2E reales. quick_30 y deep_60 son la evidencia canónica exitosa. Suite completa: **`1306 passed, 0 skipped, 0 failed`**.
 
 Referencias:
 - `docs/project/current-state.md` — estado detallado
@@ -36,8 +36,8 @@ Referencias:
 | Tema o instrucción | `--topic` | Tema del vídeo |
 | Duración | `--duration`, `--duration-profile`, `--duration-target`, `--duration-min`, `--duration-max`, `--strictness` | Duración exacta, perfil predefinido o rango con nivel de tolerancia |
 | Modelo LLM | `--model` | Modelo del proveedor LLM (OpenAI-compatible) |
-| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | Edge TTS es el provider canónico operativo; el registry contempla alternativas, pero ElevenLabs no está confirmado como path E2E per-scene |
-| Voz | `--voice`, `TTS_VOICE` | Voz para la narración (default: `es-ES-AlvaroNeural`) |
+| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | Edge TTS es el provider canónico operativo, validado y por defecto. ElevenLabs es un provider per-scene opcional validado, con timing nativo real (`/with-timestamps`) y E2E `quick_30` validado; el modo continuo NO es compatible con ElevenLabs. |
+| Voz | `--voice`, `voiceId`, `TTS_VOICE` | Voz de la narración. Para `elevenlabs` se usa `ELEVENLABS_VOICE_ID` (o `--voice`) en lugar de la voz por defecto de Edge |
 | Timing de subtítulos | `--subtitle-timing-provider`, `SUBTITLE_TIMING_PROVIDER` | `auto`, `edge_tts`, `whisper` o `estimated` |
 | Estilo de subtítulos | `--subtitle-style` | `documentary_safe`, `shorts_dynamic`, `shorts_upper_dynamic` |
 | Providers visuales | Wikimedia Commons, Pixabay | Imágenes de Wikimedia (sin API key) y Pixabay (requiere `PIXABAY_API_KEY`) |
@@ -117,6 +117,17 @@ Ejecutar solo hasta una etapa:
 ```bash
 python bin/run_job.py --topic "Prueba" --duration 35 --stop-after script
 ```
+
+TTS con proveedor/voz/timing explícitos (p. ej. ElevenLabs):
+
+```bash
+python bin/run_job.py --topic "Cómo se forma un arcoíris" --duration-preset quick_30 \
+  --tts-provider elevenlabs --voice Xb7hH8MSUJpSbSDYk0k2 --subtitle-timing-provider auto
+```
+
+La configuración resuelta se persiste en `request.voice` / `request.subtitles` del metadata y se
+propaga a la etapa de audio y a las regeneraciones de fitting; `--voice` gana sobre el entorno y
+la API key nunca se escribe en comandos ni metadata.
 
 ### Perfiles de duración
 
