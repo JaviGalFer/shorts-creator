@@ -2134,9 +2134,12 @@ class TestVisualQuerySpecificity:
         assert "Siguen estando en inglés" in SYSTEM_PROMPT_V2
 
     def test_prompt_does_not_blanket_ban_x_of_y(self):
-        # Named retrievable "X of Y" entities are explicitly allowed.
+        # "X of Y" is valid when it names OR concretely describes a retrievable
+        # subject — there is no blanket proper-name-only restriction.
         assert "Statue of Liberty" in SYSTEM_PROMPT_V2
-        assert "Library of Congress" in SYSTEM_PROMPT_V2
+        assert "map of Spain" in SYSTEM_PROMPT_V2
+        assert "portrait of Marie Curie" in SYSTEM_PROMPT_V2
+        assert "diagram of human heart" in SYSTEM_PROMPT_V2
         assert "es válido" in SYSTEM_PROMPT_V2
         # The ban targets abstract editorial scaffolding, not the construction.
         assert '"future of X"' in SYSTEM_PROMPT_V2
@@ -2268,3 +2271,25 @@ class TestVisualQuerySpecificity:
             allow_generated_images=False,
         )
         assert "Especificidad visual insuficiente" not in inst
+
+    def test_retry_remediation_no_proper_name_only_x_of_y(self):
+        """'X of Y' guidance has no blanket proper-name-only restriction."""
+        budget = self._budget()
+        issues = [
+            {
+                "sceneNumber": 1,
+                "code": "QUERY_NOT_SPECIFIC",
+                "path": "scenes[1].visualPlan.searchQueries[0]",
+                "message": "scene 1: visual query 'future of X' is not specific: ...",
+            },
+        ]
+        inst = gs._build_retry_instruction_v2(
+            budget, actual_word_count=52, actual_scene_count=5, estimated_dur=28.0,
+            structural_issues=issues, allow_generated_images=False,
+        )
+        assert "Especificidad visual insuficiente" in inst
+        assert "map of Spain" in inst
+        assert "portrait of Marie Curie" in inst
+        assert "diagram of human heart" in inst
+        assert "es válido solo cuando es un nombre propio" not in inst
+        assert "abstracciones editoriales vacías" in inst

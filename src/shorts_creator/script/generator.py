@@ -154,7 +154,7 @@ Reglas:
 2. No inventes entidades ni datos para mejorar una query. Si un nombre propio concreto es útil, DEBE estar respaldado por el contenido de la narración de la escena; si la narración no lo contiene, no lo añadas solo por rellenar.
 3. Si la escena no tiene un nombre propio natural, describe un sujeto visual concreto y descriptivo (objeto, lugar, escena, fenómeno).
 4. Un solo término de entidad concreta es válido (por ejemplo, "Smosh", "Chernobyl", "Minecraft"); no lo rellenes con adjetivos vacíos.
-5. "X of Y" no es una muletilla de abstracción ("future of YouTube", "history of everything"). Si "X of Y" es un nombre propio real y recuperable (por ejemplo, "Statue of Liberty", "Library of Congress"), es válido porque nombra una entidad concreta.
+5. "X of Y" no es una muletilla de abstracción ("future of YouTube", "history of everything"). Es válido cuando nombra O describe concretamente un sujeto recuperable (por ejemplo, "Statue of Liberty", "map of Spain", "portrait of Marie Curie", "diagram of human heart").
 6. Cada query debe aportar términos sustantivos discriminativos: si una query se puede borrar y la escena no pierde nada visual, es demasiado vaga.
 
 ### Campos PROHIBIDOS en visualPlan
@@ -803,7 +803,7 @@ def _build_retry_instruction_v2(
             lines.append("- Si la escena no tiene un nombre propio natural, usa una descripción visual concreta del sujeto (objeto, lugar, escena, fenómeno).")
             lines.append("- Un solo término de entidad concreta es válido (por ejemplo, \"Smosh\", \"Chernobyl\", \"Minecraft\"); no lo rellenes con adjetivos vacíos.")
             lines.append("- Evita abstracciones editoriales como \"popular culture\", \"future of X\", \"impact of X\", \"why X matters\", \"famous early ...\", \"viral ... screenshot\".")
-            lines.append("- \"X of Y\" es válido solo cuando es un nombre propio real y recuperable (por ejemplo, \"Statue of Liberty\", \"Library of Congress\").")
+            lines.append("- \"X of Y\" es válido cuando nombra O describe concretamente un sujeto recuperable (por ejemplo, \"Statue of Liberty\", \"map of Spain\", \"portrait of Marie Curie\", \"diagram of human heart\"). Rechaza solo abstracciones editoriales vacías como \"future of X\", \"impact of X\", \"why X matters\".")
             lines.append("")
 
     # Closed enum — always present, every branch
