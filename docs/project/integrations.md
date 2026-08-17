@@ -29,8 +29,8 @@ Cada integración tiene un estado de validación: `VALIDADO`, `PENDIENTE_DE_VALI
 
 ## ElevenLabs (narración, alternativa opcional)
 
-- **Estado**: `VALIDADO` (implementado como alternativa)
-- **Método**: API REST
+- **Estado**: adapter con timing nativo implementado (Slice 2); validación real E2E pendiente (Slice 3). No es el TTS canónico.
+- **Método**: API REST; `POST /v1/text-to-speech/{voice_id}/with-timestamps` con normalización char→word a `word_boundaries` canónicas.
 - **Credenciales**: `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` en `.env`
 - **Pipeline vigente**: solo se usa cuando `TTS_PROVIDER=elevenlabs` en `bin/generate_audio.py` (`bin/tts_provider.py`). No es el TTS canónico.
 - **Nota**: plan gratuito con voces españolas limitadas.

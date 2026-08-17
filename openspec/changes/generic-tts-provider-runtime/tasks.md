@@ -8,12 +8,15 @@ Slice 1 (this change):
 - [x] Rename `activeDurationSource` to provider-neutral `subtitle_timing_last_cue_plus_guard`.
 - [x] Update subtitle-timing CLI help text (auto = prefer native provider timing).
 - [x] Add focused mocked tests in `tests/test_generic_tts_provider_runtime.py`.
-- [ ] Edge continuous path unchanged; non-Edge continuous fails explicitly.
+- [x] Edge continuous path unchanged; non-Edge continuous fails explicitly.
 
-Slice 2:
-- [ ] ElevenLabs native `/with-timestamps` via `synthesize_with_timing_async()`.
-- [ ] Character-to-word boundary normalization into canonical `word_boundaries`.
-- [ ] Advertise `timing_support="word"` only after real normalization is implemented.
+Slice 2 (this change):
+- [x] ElevenLabs native `/with-timestamps` via `synthesize_with_timing_async()`.
+- [x] Character-to-word boundary normalization into canonical `word_boundaries`.
+- [x] Advertise `timing_support="word"` only after real normalization is implemented.
+- [x] Pure normalizer + validation; normalized>raw alignment priority.
+- [x] Remove Edge fallback-label leak in the generic generator.
+- [x] ElevenLabs `__init__` env precedence fix.
 
 Slice 3:
 - [ ] Real provider validation (opt-in keyed) / closure.

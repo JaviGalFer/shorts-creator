@@ -2,12 +2,12 @@
 
 ## Runtime
 - Modular V2 architecture is complete: `bin/run_job.py` orchestrates `script -> assets -> audio -> prepare -> render -> validate`; `bin/` are CLI adapters over `src/shorts_creator/` domains.
-- Per-scene TTS runtime is provider-generic (Slice 1 of `generic-tts-provider-runtime`): `generate_audio_with_timestamps()` takes `tts_provider`; Edge remains default/validated. Continuous mode is Edge-only (`CONTINUOUS_TTS_PROVIDER_UNSUPPORTED` for non-Edge). ElevenLabs native timing pending Slice 2.
+- Per-scene TTS runtime is provider-generic (Slices 1-2 of `generic-tts-provider-runtime`): `generate_audio_with_timestamps()` takes `tts_provider`; Edge remains default/validated. ElevenLabs native `/with-timestamps` timing implemented (Slice 2) with character-to-word normalization. Continuous mode is Edge-only (`CONTINUOUS_TTS_PROVIDER_UNSUPPORTED` for non-Edge). ElevenLabs real E2E pending Slice 3.
 - n8n is legacy/alternative infrastructure, not the canonical orchestrator.
 - TTS and visual providers are replaceable; Edge TTS is currently the default and Wikimedia/Pixabay are current visual providers.
 
 ## Verified State
-- `main` base: `66ae15e`; active branch: `change/generic-duration-fitting`.
+- `main` base: `05aef83` (generic-duration-fitting merged); active branch: `change/generic-tts-provider-runtime`.
 - `modular-v2-migration`: closed. `AUDIO_DURATION_MISSING`: resolved. Host `ffprobe` remains absent; Docker fallback is used.
 - First complete technical E2E: `cmo-2026-08-16-172847`, through `VALIDATED`; request 30s, range 27-30, timeline 20.813s, MP4 approximately 20.88s.
 - Real E2E attempt `cmo-2026-08-16-184819` was blocked at script: a legacy bootstrap WPM hard gate rejected a V2-valid 67-word candidate (37.9s estimate) before TTS. The gate is now non-blocking; WPM remains bootstrap telemetry only.

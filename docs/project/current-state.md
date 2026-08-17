@@ -22,8 +22,9 @@
 ## Change activo: `generic-tts-provider-runtime`
 - Slice 1 completado: el runtime per-scene ya no fija `edge_tts`; `generate_audio_with_timestamps()` recibe el proveedor seleccionado vía `tts_provider` y `main_per_scene()` lo reenvía. La validación de disponibilidad es uniforme para todos los proveedores (sin fallback silencioso a Edge; credenciales ausentes fallan explícito).
 - Modo continuo sigue siendo Edge-only en Slice 1: `continuous` con un proveedor no-Edge falla con `CONTINUOUS_TTS_PROVIDER_UNSUPPORTED` antes de sintetizar o mutar metadata.
-- Metadata corregida: Edge `timing_support="word"`; ElevenLabs `timing_support="none"` (sin reclamar timing nativo hasta Slice 2). `activeDurationSource` ahora es `subtitle_timing_last_cue_plus_guard` (neutro al proveedor).
-- Slice 2 (pendiente): ElevenLabs `/with-timestamps` + normalización char→word. Slice 3 (pendiente): validación real / cierre.
+- Slice 2 completado: ElevenLabs es ahora un proveedor per-scene con timing nativo real vía `POST /v1/text-to-speech/{voice_id}/with-timestamps`. El adapter decodifica `audio_base64`, mide el audio real y normaliza el alineamiento de caracteres a las mismas `word_boundaries` canónicas (prefiere `normalized_alignment`, cae a `alignment`; malformado → sin timing nativo → fallback estimado). `timing_support="word"`.
+- Metadata corregida: Edge `timing_support="word"`; `activeDurationSource` es `subtitle_timing_last_cue_plus_guard` (neutro al proveedor). Se eliminó el leak de labels de fallback Edge en el generador genérico (`native_word_boundary`/`native_sentence_boundary`).
+- Slice 3 (pendiente): validación real de ElevenLabs (opt-in con key) / cierre. Edge sigue siendo el proveedor validado y por defecto.
 
 ## Baseline y límites
 - Baseline estable conocida en main: **`1215 passed, 0 failed`**. Suite completa de la rama activa tras presets/status: **`1198 passed, 51 skipped, 0 failed`**.
