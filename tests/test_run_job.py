@@ -1571,7 +1571,9 @@ class TestBuildStageCommandDispatch:
 def _make_args(topic="Test", duration=None, duration_profile=None,
                duration_target=None, duration_min=None, duration_max=None,
                strictness=None, model=None, stop_after="validate",
-               dry_run=False, verbose=False):
+               dry_run=False, verbose=False,
+               tts_provider=None, voice=None, subtitle_timing_provider=None):
+    from shorts_creator.pipeline.orchestrator import _resolve_audio_config
     class Args:
         pass
     a = Args()
@@ -1586,4 +1588,8 @@ def _make_args(topic="Test", duration=None, duration_profile=None,
     a.stop_after = stop_after
     a.dry_run = dry_run
     a.verbose = verbose
+    a.tts_provider = tts_provider
+    a.voice = voice
+    a.subtitle_timing_provider = subtitle_timing_provider
+    _resolve_audio_config(a)
     return a

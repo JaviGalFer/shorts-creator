@@ -1591,6 +1591,27 @@ def resolve_effective_voice(tts_provider: str, voice: str | None) -> str | None:
     return _read_runtime_env("TTS_VOICE", "es-ES-AlvaroNeural")
 
 
+def resolve_audio_job_config(
+    *,
+    tts_provider: str | None = None,
+    voice: str | None = None,
+    subtitle_timing_provider: str | None = None,
+) -> dict:
+    """Resolve the canonical job-level audio config once, reusing runtime semantics."""
+    provider = tts_provider or _read_runtime_env("TTS_PROVIDER", "edge_tts")
+    effective_voice = resolve_effective_voice(provider, voice)
+    timing = (
+        subtitle_timing_provider
+        or _read_runtime_env("SUBTITLE_TIMING_PROVIDER")
+        or _read_runtime_env("SUBTITLE_PROVIDER", "auto")
+    )
+    return {
+        "tts_provider": provider,
+        "voice": effective_voice,
+        "subtitle_timing_provider": timing,
+    }
+
+
 def resolve_provider_runtime_kwargs(tts_provider: str) -> dict:
     """Provider-specific secrets/model from project .env then process env.
 

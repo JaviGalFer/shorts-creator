@@ -24,6 +24,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print prompt and exit without calling API",
     )
     parser.add_argument("--model", help="LLM model override")
+    parser.add_argument(
+        "--tts-provider",
+        choices=["edge_tts", "elevenlabs"],
+        default=None,
+        help="TTS provider for the persisted job request",
+    )
+    parser.add_argument("--voice", default=None, help="Voice ID for the persisted job request")
+    parser.add_argument(
+        "--subtitle-timing-provider",
+        choices=["auto", "edge_tts", "whisper", "estimated"],
+        default=None,
+        help="Subtitle timing provider for the persisted job request",
+    )
     add_duration_profile_args(parser)
     return parser
 
@@ -43,6 +56,9 @@ def main() -> int:
         duration_min=args.duration_min,
         duration_max=args.duration_max,
         strictness=args.strictness,
+        tts_provider=args.tts_provider,
+        voice=args.voice,
+        subtitle_timing_provider=args.subtitle_timing_provider,
     )
 
 

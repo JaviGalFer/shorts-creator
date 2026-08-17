@@ -1334,6 +1334,9 @@ def generate_script(
     duration_min: int | None = None,
     duration_max: int | None = None,
     strictness: str | None = None,
+    tts_provider: str | None = None,
+    voice: str | None = None,
+    subtitle_timing_provider: str | None = None,
 ) -> int:
     """Generate and persist a canonical V2 script for one request."""
     llm_config = resolve_llm_config(model_override=model)
@@ -1834,12 +1837,12 @@ def generate_script(
         "scenePlan": scene_plan,
         "duration": duration_dict,
         "voice": {
-            "provider": "edge_tts",
-            "voiceId": "es-ES-AlvaroNeural",
+            "provider": tts_provider or "edge_tts",
+            "voiceId": voice or "es-ES-AlvaroNeural",
         },
         "subtitles": {
             "enabled": True,
-            "timingProvider": "auto",
+            "timingProvider": subtitle_timing_provider or "auto",
             "style": "shorts_upper_dynamic",
             "position": "upper_middle",
             "fontSize": 64,

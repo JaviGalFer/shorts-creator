@@ -25,7 +25,10 @@ from shorts_creator.contracts.duration import (
     resolve_requested_duration,
 )
 from shorts_creator.infrastructure.metadata_store import load_metadata, save_metadata
-from shorts_creator.audio.generator import resolve_audio_regeneration_config
+from shorts_creator.audio.generator import (
+    resolve_audio_job_config,
+    resolve_audio_regeneration_config,
+)
 from shorts_creator.rendering.preparer import _get_tail_pause_sec, project_render_duration
 from shorts_creator.script.generator import repair_voiceover_duration, resolve_llm_config
 
@@ -135,6 +138,17 @@ def _script_path(name: str) -> str:
     return str(_project_root() / "bin" / name)
 
 
+def _resolve_audio_config(args) -> dict:
+    """Resolve the canonical job audio config once (provider, voice, timing)."""
+    resolved = resolve_audio_job_config(
+        tts_provider=getattr(args, "tts_provider", None),
+        voice=getattr(args, "voice", None),
+        subtitle_timing_provider=getattr(args, "subtitle_timing_provider", None),
+    )
+    args.audio_config = resolved
+    return resolved
+
+
 def build_script_command(args) -> list[str]:
     cmd = [sys.executable, _script_path("generate_script.py")]
     cmd.extend(["--topic", args.topic])
@@ -156,16 +170,29 @@ def build_script_command(args) -> list[str]:
         cmd.extend(["--strictness", args.strictness])
     if args.model is not None:
         cmd.extend(["--model", args.model])
+    audio_config = getattr(args, "audio_config", None)
+    if audio_config:
+        cmd.extend(["--tts-provider", audio_config["tts_provider"]])
+        if audio_config.get("voice"):
+            cmd.extend(["--voice", audio_config["voice"]])
+        cmd.extend(["--subtitle-timing-provider", audio_config["subtitle_timing_provider"]])
     return cmd
 
 
-def build_stage_command(stage: str, metadata_path: str, metadata: dict | None = None) -> list[str]:
+def build_stage_command(stage: str, metadata_path: str, metadata: dict | None = None,
+                        audio_config: dict | None = None) -> list[str]:
     if stage == "assets":
         return [sys.executable, _script_path("fetch_images_v2.py"), metadata_path]
     script = STAGE_SCRIPTS.get(stage)
     if not script:
         raise ValueError(f"Unknown stage: {stage}")
-    return [sys.executable, _script_path(script), metadata_path]
+    cmd = [sys.executable, _script_path(script), metadata_path]
+    if stage == "audio" and audio_config:
+        cmd.extend(["--tts-provider", audio_config["tts_provider"]])
+        if audio_config.get("voice"):
+            cmd.extend(["--voice", audio_config["voice"]])
+        cmd.extend(["--subtitle-timing-provider", audio_config["subtitle_timing_provider"]])
+    return cmd
 
 
 def run_subprocess(cmd: list[str], verbose: bool, stage: str) -> subprocess.CompletedProcess:
@@ -526,7 +553,8 @@ def dry_run(args) -> int:
         if stage == "script":
             cmd = build_script_command(args)
         else:
-            cmd = build_stage_command(stage, "data/videos/{jobId}/metadata.json")
+            cmd = build_stage_command(stage, "data/videos/{jobId}/metadata.json",
+                                      audio_config=getattr(args, "audio_config", None))
         print(f"  Command: {' '.join(cmd)}")
     print("\n=== END DRY-RUN ===")
     return 0
@@ -575,6 +603,9 @@ def run_pipeline(
     duration_min: int | None = None,
     duration_max: int | None = None,
     strictness: str | None = None,
+    tts_provider: str | None = None,
+    voice: str | None = None,
+    subtitle_timing_provider: str | None = None,
 ) -> int:
     """Run the V2 pipeline through the requested stage."""
     args = SimpleNamespace(
@@ -591,7 +622,11 @@ def run_pipeline(
         duration_min=duration_min,
         duration_max=duration_max,
         strictness=strictness,
+        tts_provider=tts_provider,
+        voice=voice,
+        subtitle_timing_provider=subtitle_timing_provider,
     )
+    _resolve_audio_config(args)
 
     if args.dry_run:
         return dry_run(args)
@@ -683,7 +718,7 @@ def run_pipeline(
                 _final_summary(data, metadata_path, stage)
                 return 0
 
-            cmd = build_stage_command(stage, metadata_path, metadata=data)
+            cmd = build_stage_command(stage, metadata_path, metadata=data, audio_config=getattr(args, "audio_config", None))
             started = _utcnow()
             orchestration = data.setdefault("orchestration", {})
             orchestration["currentStage"] = stage
