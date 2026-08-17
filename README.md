@@ -4,7 +4,7 @@
 
 ![stack](https://img.shields.io/badge/stack-Python%20%2B%20FFmpeg%20%2B%20Docker-1f6feb?style=for-the-badge)
 ![mode](https://img.shields.io/badge/mode-local%20%7C%20Docker-0e8a16?style=for-the-badge)
-![tts](https://img.shields.io/badge/TTS-Edge%20voz%20natural-2ea44f?style=for-the-badge)
+![tts](https://img.shields.io/badge/TTS-Edge%20default%20%7C%20ElevenLabs-2ea44f?style=for-the-badge)
 ![llm](https://img.shields.io/badge/LLM-OpenAI--compatible-f0883e?style=for-the-badge)
 
 </div>
@@ -36,7 +36,7 @@ Referencias:
 | Tema o instrucción | `--topic` | Tema del vídeo |
 | Duración | `--duration`, `--duration-profile`, `--duration-target`, `--duration-min`, `--duration-max`, `--strictness` | Duración exacta, perfil predefinido o rango con nivel de tolerancia |
 | Modelo LLM | `--model` | Modelo del proveedor LLM (OpenAI-compatible) |
-| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | Edge TTS es el provider canónico operativo y validado. ElevenLabs tiene adapter per-scene con timing nativo (`/with-timestamps`); smoke real validado, E2E completo pendiente de cierre |
+| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | Edge TTS es el provider canónico operativo, validado y por defecto. ElevenLabs es un provider per-scene opcional validado, con timing nativo real (`/with-timestamps`) y E2E `quick_30` validado; el modo continuo NO es compatible con ElevenLabs. |
 | Voz | `--voice`, `voiceId`, `TTS_VOICE` | Voz de la narración. Para `elevenlabs` se usa `ELEVENLABS_VOICE_ID` (o `--voice`) en lugar de la voz por defecto de Edge |
 | Timing de subtítulos | `--subtitle-timing-provider`, `SUBTITLE_TIMING_PROVIDER` | `auto`, `edge_tts`, `whisper` o `estimated` |
 | Estilo de subtítulos | `--subtitle-style` | `documentary_safe`, `shorts_dynamic`, `shorts_upper_dynamic` |

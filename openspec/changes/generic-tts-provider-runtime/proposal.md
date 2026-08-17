@@ -20,11 +20,15 @@ provider.
   - Correct provider metadata: Edge `timing_support="word"`; ElevenLabs `timing_support="none"` until Slice 2.
   - Provider-neutral `activeDurationSource`.
   - Focused mocked tests.
-- **Slice 2 (done):** ElevenLabs native `/with-timestamps` + character-to-word normalization into canonical `word_boundaries`; `timing_support="word"`.
-- **Slice 3:** real provider validation / closure.
+- **Slice 2 (done):** ElevenLabs native `/with-timestamps` + character-to-word normalization into canonical `word_boundaries`; `timing_support="word"`. Runtime config hardening: resolve provider voice/secrets/model from project `.env` then process env; provider voice wins over implicit Edge default; consistent provider construction across availability and synthesis.
+- **Slice 3 (done):** job-level TTS config plumbing (`bin/run_job.py` exposes `--tts-provider`/`--voice`/`--subtitle-timing-provider`, resolved once and threaded to script and audio stages, preserved across fitting regeneration); real ElevenLabs smoke PASSED (`ELEVENLABS_REAL_SMOKE_OK`); canonical full real E2E `cmo-2026-08-17-145309` VALIDATED (28.20s, native timing, 2 fitting repairs). **Closed.**
+
+## Status
+This change is **COMPLETED / VERIFIED / CLOSED**.
 
 ## Out of scope
 Google TTS, Azure Speech, Piper, voice cloning, voice browser/UI, music, assets,
 semantic asset scoring, motion, publishing, n8n, API/web UI, duration algorithm
 changes, scene planning changes, provider-specific WPM tuning. Continuous mode
-remains Edge-specific in Slice 1.
+remains Edge-specific (`CONTINUOUS_TTS_PROVIDER_UNSUPPORTED` for non-Edge);
+ElevenLabs continuous mode is explicitly NOT SUPPORTED and out of scope.
