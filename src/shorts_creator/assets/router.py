@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from shorts_creator.contracts.visual_specificity import assess_query_specificity
+
 # ── Schema constants ────────────────────────────────────────────────────────
 
 SOURCING_PLAN_SCHEMA_VERSION = 1
@@ -362,7 +364,12 @@ def _derive_search_queries(
     max_queries: int,
     warnings: list[dict],
 ) -> list[dict[str, str]]:
-    """Derive search queries only.  imageGenerationPrompt is excluded."""
+    """Derive search queries only.  imageGenerationPrompt is excluded.
+
+    Candidate queries that fail the conservative specificity guard
+    (``assess_query_specificity``) are dropped before normal dedup/quota
+    handling, so vague/editorial candidates never reach the providers.
+    """
     queries: list[dict[str, str]] = []
     seen: set[str] = set()
 
@@ -371,6 +378,8 @@ def _derive_search_queries(
             return
         trimmed = text.strip()[:200]
         if not trimmed:
+            return
+        if not assess_query_specificity(trimmed)["ok"]:
             return
         key = trimmed.lower()
         if key in seen:

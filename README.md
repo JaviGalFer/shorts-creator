@@ -21,7 +21,7 @@ Visual Plan V2 es el único contrato visual canónico. La arquitectura modular V
 
 Pipeline V2 funcional y E2E técnico demostrado. Docker se utiliza para render y servicios auxiliares; `bin/run_job.py` es el orquestador canónico.
 
-El fitting post-TTS y la validación de cumplimiento de duración del MP4 están implementados y validados por E2E reales. quick_30 y deep_60 son la evidencia canónica exitosa. Los assets visuales se filtran por un gate de relevancia semántica determinista. Suite completa: **`1345 passed, 0 skipped, 0 failed`**.
+El fitting post-TTS y la validación de cumplimiento de duración del MP4 están implementados y validados por E2E reales. quick_30 y deep_60 son la evidencia canónica exitosa. Los assets visuales se filtran por un gate de relevancia semántica determinista y las queries visuales se validan por especificidad en la etapa de guion. Suite completa: **`1411 passed, 0 skipped, 0 failed`**.
 
 Referencias:
 - `docs/project/current-state.md` — estado detallado
@@ -68,7 +68,7 @@ script → assets → audio → prepare → render → validate
 
 | Etapa | Script | Entrada | Salida |
 |-------|--------|---------|--------|
-| Script | `bin/generate_script.py` | Tema, duración, perfil | `metadata.json` con guion V2 |
+| Script | `bin/generate_script.py` | Tema, duración, perfil | `metadata.json` con guion V2 (queries visuales validadas por especificidad) |
 | Assets | `bin/fetch_images_v2.py` | `metadata.json` | Imágenes en `assets/` |
 | Audio | `bin/generate_audio.py` | `metadata.json` | Narración MP3 por escena |
 | Prepare | `bin/prepare_job.py` | `metadata.json` | Subtítulos ASS, timeline de render |
@@ -185,6 +185,8 @@ Las variables de entorno se configuran en `.env`. Ver `.env.example` para la lis
 
 Los candidatos visuales pasan por un gate de relevancia semántica determinista y sin dependencias de provider (`deterministic_anchor_coverage_v2`) entre la búsqueda y la descarga: los términos débiles/soporte por sí solos no son suficiente evidencia, y los resultados no relevantes se descartan en favor de no resolver el segmento. El assessment se persiste en cada asset (`semanticAssessment`).
 
+La especificidad se valida aguas arriba, en la etapa de guion: las queries visuales (`searchQueries` y cada `visualSequence[].searchQuery`) deben describir sujetos concretos y recuperables (persona, obra, producto, evento, lugar, fecha, objeto o fenómeno; en inglés). El guard conservador (`contracts/visual_specificity.py`) rechaza queries vagas/editoriales (`QUERY_NOT_SPECIFIC`) y las convierte en un retry con remediación "Especificidad visual insuficiente". El router descarta además las queries derivadas que no pasen el guard antes de enviarlas a los providers. Los nombres propios deben estar respaldados por la narración de la escena o por contenido ya establecido antes en el mismo guion; las escenas finales de CTA reutilizan un sujeto ya presentado.
+
 ## Arquitectura actual
 
 ```
@@ -221,6 +223,7 @@ n8n no es el orquestador canónico del pipeline V2.
 - La aceleración GPU no está implementada; el render usa CPU.
 - La estimación bootstrap WPM es telemetría no bloqueante; la duración real del audio TTS y el fitting post-TTS son autoritativos. El fitting se validó en E2E reales (`quick_30` y `deep_60`).
 - El gate de relevancia semántica de assets es conservador y garantiza correlación gruesa con la intención del query (tema/entidad); no garantiza fidelidad temporal/editorial ni del contenido exacto de la imagen. Un segmento puede quedar sin resolver (`ASSETS_PARTIAL`) cuando el provider no devuelve metadata semántica suficiente — preferido sobre aceptar un asset irrelevante.
+- El guard de especificidad de queries visuales rechaza la vaguedad obvia y editorial, pero no demuestra grounding fáctico ni fidelidad visual/editorial exacta: los gaps de fidelidad de entidad (p. ej. un falso positivo de "Smosh fan art") quedan en el scorer semántico (`deterministic_anchor_coverage_v2`, sin cambios) y se registran como trabajo futuro (`asset-entity-fidelity`). La detección de near-duplicates visuales sigue siendo trabajo futuro.
 - No hay publicación automática ni integración con redes sociales.
 
 ## Documentación adicional

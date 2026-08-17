@@ -23,8 +23,8 @@ def _script(count):
         "voiceover": "uno dos tres cuatro cinco seis siete",
         "subtitle": "test",
         "targetDurationSec": 6,
-        "visualPlan": {"_schemaVersion": 2, "visualIntent": "explain", "subjects": ["x"],
-                       "searchQueries": ["x"], "assetPreferences": ["diagram"],
+        "visualPlan": {"_schemaVersion": 2, "visualIntent": "explain", "subjects": ["test subject"],
+                       "searchQueries": ["test diagram"], "assetPreferences": ["diagram"],
                        "visualSequence": [{"segmentIndex": 1, "assetPreference": "diagram", "durationFraction": 1.0, "transition": "cut"}]},
     } for number in range(1, count + 1)]}
 

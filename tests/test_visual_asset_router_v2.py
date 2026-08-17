@@ -1622,3 +1622,89 @@ class TestRegressionAfterFixes:
         s = result["sourcingPlan"]["segments"][0]
         for c in s["providerCandidates"]:
             assert "domainMode" not in c
+
+
+# ── Specificity-filtered query derivation (script-visual-specificity Slice 2) ─
+
+
+class TestSpecificityFilteredDerivation:
+    """_derive_search_queries drops vague/editorial candidates before dedup/quota.
+
+    Provider-agnostic: filtering uses only the conservative contract-level
+    specificity guard, never provider or domain vocabulary.
+    """
+
+    def _plan(self, search_queries, segment_query, subjects=None, **extra):
+        base = {
+            "_schemaVersion": SCHEMA_VERSION,
+            "visualIntent": "explain",
+            "subjects": subjects or ["subject one"],
+            "searchQueries": search_queries,
+            "assetPreferences": ["diagram"],
+            "visualSequence": [
+                {
+                    "segmentIndex": 1,
+                    "assetPreference": "diagram",
+                    "searchQuery": segment_query,
+                    "durationFraction": 1.0,
+                    "transition": "cut",
+                }
+            ],
+        }
+        base.update(extra)
+        return base
+
+    def test_vague_derived_queries_dropped(self):
+        result = _route(self._plan(
+            search_queries=["popular culture", "aurora borealis particles"],
+            segment_query="future of YouTube",
+        ))
+        s = result["sourcingPlan"]["segments"][0]
+        texts = [q["text"] for q in s["searchQueries"]]
+        assert "aurora borealis particles" in texts
+        assert "popular culture" not in texts
+        assert "future of YouTube" not in texts
+
+    def test_concrete_single_entity_query_kept(self):
+        result = _route(self._plan(
+            search_queries=["Smosh", "Minecraft"],
+            segment_query="Chernobyl",
+        ))
+        s = result["sourcingPlan"]["segments"][0]
+        texts = set(q["text"] for q in s["searchQueries"])
+        assert {"Smosh", "Minecraft", "Chernobyl"} <= texts
+
+    def test_no_search_queries_when_all_filtered(self):
+        result = _route(self._plan(
+            search_queries=["popular culture"],
+            segment_query="future of YouTube",
+            subjects=["popular culture"],
+        ))
+        s = result["sourcingPlan"]["segments"][0]
+        assert s["searchQueries"] == []
+        codes = [w["code"] for w in result["diagnostics"]["warnings"]]
+        assert "NO_SEARCH_QUERIES_DERIVED" in codes
+
+    def test_source_ordering_stable_after_filter(self):
+        # segment.searchQuery first, then scene.searchQueries in order, then subjects.
+        result = _route(self._plan(
+            search_queries=["viral YouTube screenshot", "aurora borealis particles", "Smosh"],
+            segment_query="Minecraft",
+            subjects=["river delta sediment"],
+        ))
+        s = result["sourcingPlan"]["segments"][0]
+        sources = [q["source"] for q in s["searchQueries"]]
+        texts = [q["text"] for q in s["searchQueries"]]
+        assert texts[0] == "Minecraft"
+        assert texts[1] == "aurora borealis particles"
+        assert texts[2] == "Smosh"
+        assert sources[0] == "segment.searchQuery"
+        assert sources[1] == "scene.searchQueries[1]"
+        assert sources[2] == "scene.searchQueries[2]"
+
+    def test_concrete_document_plan_keeps_queries(self):
+        # Existing concrete fixtures are unaffected by the filter.
+        result = _route(_photosynthesis_plan())
+        s = result["sourcingPlan"]["segments"][0]
+        assert len(s["searchQueries"]) >= 2
+        assert any("segment.searchQuery" in q["source"] for q in s["searchQueries"])
