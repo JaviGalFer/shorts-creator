@@ -1,6 +1,6 @@
 # Tasks: script-visual-specificity
 
-## Slice 1 — Vocabulario compartido + guard (este commit)
+## Slice 1 — Vocabulario compartido + guard (COMPLETO, `f1e4a08`)
 
 - [x] Crear `src/shorts_creator/contracts/visual_terms.py` con `GENERIC_FILLER`, `WEAK_SUPPORT_TERMS`, `tokenize` (mover mecánicamente desde `assets/semantic.py`) y `STOPWORDS` guard-only
 - [x] `assets/semantic.py`: importar/reexportar los nombres movidos; comportamiento del scorer intacto
@@ -13,11 +13,14 @@
 
 ## Slice 2 — Integración script + router
 
-- [ ] Prompt: sección `### Reglas de especificidad de las queries visuales` en `SYSTEM_PROMPT_V2` + refuerzo en user prompt (entidades concretas, prohibición de abstracciones editoriales y construcciones "X of Y", grounding en la narración, sin nombres inventados; un solo término de entidad es válido; queries en inglés)
-- [ ] Wiring del guard en `_validate_and_canonicalize_script_v2` (errores `QUERY_NOT_SPECIFIC` / `SEGMENT_QUERY_NOT_SPECIFIC`)
-- [ ] Bloque de retry dedicado "Especificidad visual insuficiente" en `_build_retry_instruction_v2`
-- [ ] Filtro en `router._derive_search_queries`: descartar queries derivadas que no pasen el guard; conservar `NO_SEARCH_QUERIES_DERIVED`
-- [ ] Tests: aserciones de prompt, simulación vago→retry→concreto, filtro de derivación, auditoría/actualización de fixtures afectadas (`test_adaptive_scene_planning`, derivación del router)
+- [x] Prompt: sección `### Reglas de especificidad de las queries visuales` en `SYSTEM_PROMPT_V2` + refuerzo en user prompt (entidades concretas, prohibición de abstracciones editoriales como "popular culture", "future of X", "impact of X", "why X matters"; "X of Y" NO se prohíbe de forma general — nombres propios recuperables como "Statue of Liberty" siguen válidos; grounding en la narración, sin nombres inventados; un solo término de entidad es válido; queries en inglés)
+- [x] Wiring del guard en `_validate_and_canonicalize_script_v2` (errores `QUERY_NOT_SPECIFIC` / `SEGMENT_QUERY_NOT_SPECIFIC`)
+- [x] Bloque de retry dedicado "Especificidad visual insuficiente" en `_build_retry_instruction_v2`
+- [x] Filtro en `router._derive_search_queries`: descartar queries derivadas que no pasen el guard; conservar `NO_SEARCH_QUERIES_DERIVED`
+- [x] Tests: aserciones de prompt, simulación vago→retry→concreto, filtro de derivación, auditoría/actualización de fixtures afectadas (`test_adaptive_scene_planning`, derivación del router)
+- [x] Ejecutar suites focales (especificidad, generate_script_v2, adaptive_scene_planning, router/fetch, executor/bridge, semantic) — todo verde
+- [x] `git diff --check` limpio; confirmar que `semantic.py` no tiene diff (scorer intacto)
+- [x] Commit único: `feat(visuals): enforce visual query specificity`
 
 ## Slice 3 — Evidencia real + cierre
 

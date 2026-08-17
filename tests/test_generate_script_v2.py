@@ -2081,3 +2081,190 @@ class TestCompressionPromptAttempts:
         p = gs._build_duration_prompt_instruction_v2(self._budget(), "balanced")
         for ph in ("{min_w}", "{max_w}", "{expected}"):
             assert ph not in p
+
+
+# ── Visual-query specificity (script-visual-specificity, Slice 2) ───────────
+
+
+class TestVisualQuerySpecificity:
+    """Script-stage specificity prompt, validation wiring and retry guidance."""
+
+    def _budget(self):
+        return {
+            "targetSec": 30, "minSec": 27, "maxSec": 33,
+            "minimumWords": 47, "preferredWords": 52, "maximumWords": 61,
+            "sceneCount": 5, "pauseSec": 1.4,
+            "spokenWordsPerMinute": 110, "estimatedScenePauseMs": 350,
+            "minSceneCount": 4, "maxSceneCount": 6,
+            "preferredSceneCount": 5, "targetSceneDurationSec": 6,
+        }
+
+    def _vague_vp(self):
+        return _v2_scene_vp(
+            searchQueries=["future of YouTube", "viral YouTube video screenshot"],
+            visualSequence=[
+                {
+                    "segmentIndex": 1,
+                    "assetPreference": "diagram",
+                    "searchQuery": "popular culture",
+                    "durationFraction": 1.0,
+                    "transition": "cut",
+                }
+            ],
+        )
+
+    def _vague_script(self):
+        return _v2_script(scenes=[
+            _v2_scene(1, vp_overrides=self._vague_vp()),
+            _v2_scene(2),
+            _v2_scene(3),
+            _v2_scene(4),
+        ])
+
+    # ── Prompt guidance ────────────────────────────────────────────────────
+
+    def test_prompt_contains_specificity_guidance(self):
+        assert "Reglas de especificidad de las queries visuales" in SYSTEM_PROMPT_V2
+        assert "sujetos concretos y recuperables" in SYSTEM_PROMPT_V2
+        assert "No inventes entidades ni datos para mejorar una query" in SYSTEM_PROMPT_V2
+        assert "respaldado por el contenido de la narración" in SYSTEM_PROMPT_V2
+        assert "Personas, obras, productos, eventos, lugares, fechas, objetos o fenómenos" in SYSTEM_PROMPT_V2
+
+    def test_prompt_queries_are_english(self):
+        assert "Siguen estando en inglés" in SYSTEM_PROMPT_V2
+
+    def test_prompt_does_not_blanket_ban_x_of_y(self):
+        # Named retrievable "X of Y" entities are explicitly allowed.
+        assert "Statue of Liberty" in SYSTEM_PROMPT_V2
+        assert "Library of Congress" in SYSTEM_PROMPT_V2
+        assert "es válido" in SYSTEM_PROMPT_V2
+        # The ban targets abstract editorial scaffolding, not the construction.
+        assert '"future of X"' in SYSTEM_PROMPT_V2
+        assert '"impact of X"' in SYSTEM_PROMPT_V2
+        assert '"why X matters"' in SYSTEM_PROMPT_V2
+        assert '"popular culture"' in SYSTEM_PROMPT_V2
+
+    def test_prompt_no_youtube_specific_ban(self):
+        # Guidance is generic; none of the rules require YouTube-specific logic.
+        assert "No uses abstracciones editoriales" in SYSTEM_PROMPT_V2
+
+    def test_user_prompt_contains_specificity_guidance(self):
+        p = gs._build_user_prompt_v2(
+            "Aurora boreal", self._budget(), "balanced",
+            allow_generated_images=False,
+        )
+        assert "sujeto concreto y recuperable en inglés" in p
+        assert "nunca inventes entidades" in p
+        assert "respaldadas por la narración" in p
+
+    def test_user_prompt_keeps_generation_gate(self):
+        p = gs._build_user_prompt_v2(
+            "Aurora boreal", self._budget(), "balanced",
+            allow_generated_images=False,
+        )
+        assert "allowGeneratedImages es false" in p
+
+    # ── Validation wiring ──────────────────────────────────────────────────
+
+    def test_vague_scene_and_segment_queries_rejected(self):
+        canonical, errors, _ = gs._validate_and_canonicalize_script_v2(
+            self._vague_script(), allow_generated_images=False,
+        )
+        assert canonical is None
+        codes = {e["code"] for e in errors}
+        assert "QUERY_NOT_SPECIFIC" in codes
+        assert "SEGMENT_QUERY_NOT_SPECIFIC" in codes
+        assert any("searchQueries[0]" in e["path"] for e in errors)
+        assert any("visualSequence[0].searchQuery" in e["path"] for e in errors)
+
+    def test_concrete_plan_passes_specificity(self):
+        canonical, errors, _ = gs._validate_and_canonicalize_script_v2(
+            _v2_script(), allow_generated_images=False,
+        )
+        assert canonical is not None
+        assert not any(e["code"] in ("QUERY_NOT_SPECIFIC", "SEGMENT_QUERY_NOT_SPECIFIC") for e in errors)
+
+    def test_single_entity_query_passes_specificity(self):
+        vp = _v2_scene_vp(searchQueries=["Minecraft"])
+        script = _v2_script(scenes=[
+            _v2_scene(1, vp_overrides=vp),
+            _v2_scene(2), _v2_scene(3), _v2_scene(4),
+        ])
+        canonical, errors, _ = gs._validate_and_canonicalize_script_v2(
+            script, allow_generated_images=False,
+        )
+        assert canonical is not None
+        assert not any(e["code"] in ("QUERY_NOT_SPECIFIC", "SEGMENT_QUERY_NOT_SPECIFIC") for e in errors)
+
+    # ── Retry behavior ─────────────────────────────────────────────────────
+
+    def test_vague_candidate_retries_then_concrete_passes(self, monkeypatch, tmp_path):
+        calls = [0]
+        prompts = []
+
+        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
+            calls[0] += 1
+            prompts.append(prompt)
+            if calls[0] == 1:
+                return _json.dumps(self._vague_script())
+            return _json.dumps(_v2_script())
+
+        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
+        monkeypatch.setattr(gs, "call_llm", mock_call)
+        out_path = tmp_path / "metadata.json"
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
+                                           "--duration", "30", "--output", str(out_path)])
+
+        exit_code = gs.main()
+        assert exit_code == 0
+        assert calls[0] == 2
+        meta = _json.loads(out_path.read_text())
+        assert meta["status"] == "SCRIPT_DRAFT"
+        assert ("QUERY_NOT_SPECIFIC" in prompts[1] or "SEGMENT_QUERY_NOT_SPECIFIC" in prompts[1])
+        assert "Especificidad visual insuficiente" in prompts[1]
+
+    def test_vague_all_attempts_review_required(self, monkeypatch, tmp_path):
+        def mock_call(prompt, api_key, model, provider="openai", system_prompt=None):
+            return _json.dumps(self._vague_script())
+
+        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
+        monkeypatch.setattr(gs, "call_llm", mock_call)
+        out_path = tmp_path / "metadata.json"
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
+                                           "--duration", "30", "--output", str(out_path)])
+
+        exit_code = gs.main()
+        assert exit_code == 0
+        meta = _json.loads(out_path.read_text())
+        assert meta["status"] == "REVIEW_REQUIRED"
+        assert meta["durationContract"]["structureValid"] is False
+        assert "QUERY_NOT_SPECIFIC" in meta["durationContract"]["structureIssues"]
+        assert any("VISUAL_PLAN_V2_INVALID" in r for r in meta.get("reviewReasons", []))
+
+    def test_retry_remediation_mentions_failed_query(self):
+        budget = self._budget()
+        issues = [
+            {
+                "sceneNumber": 2,
+                "code": "QUERY_NOT_SPECIFIC",
+                "path": "scenes[2].visualPlan.searchQueries[0]",
+                "message": "scene 2: visual query 'future of YouTube' is not specific: ...",
+            },
+        ]
+        inst = gs._build_retry_instruction_v2(
+            budget, actual_word_count=52, actual_scene_count=5, estimated_dur=28.0,
+            structural_issues=issues, allow_generated_images=False,
+        )
+        assert "Especificidad visual insuficiente" in inst
+        assert "searchQueries[0]" in inst
+        assert "future of YouTube" in inst
+        assert "nunca inventes entidades" in inst
+
+    def test_retry_remediation_absent_without_specificity_issues(self):
+        budget = self._budget()
+        inst = gs._build_retry_instruction_v2(
+            budget, actual_word_count=52, actual_scene_count=5, estimated_dur=28.0,
+            structural_issues=[{"sceneNumber": 1, "code": "TEST_ERROR", "path": "x", "message": "m"}],
+            allow_generated_images=False,
+        )
+        assert "Especificidad visual insuficiente" not in inst

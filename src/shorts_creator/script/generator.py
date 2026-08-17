@@ -13,6 +13,7 @@ from pathlib import Path
 
 from shorts_creator.contracts.duration import calculate_word_budget, resolve_requested_duration, resolve_scene_plan
 from shorts_creator.contracts.visual import ALLOWED_ASSET_PREFERENCES, canonicalize_visual_plan_v2
+from shorts_creator.contracts.visual_specificity import assess_visual_plan_specificity
 from shorts_creator.infrastructure.metadata_store import save_metadata
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -101,7 +102,7 @@ Cada escena DEBE contener un objeto `visualPlan` con los siguientes campos oblig
 | `_schemaVersion` | int | Siempre 2 |
 | `visualIntent` | string | Uno de: explain, show, compare, contextualize, immerse, emphasize |
 | `subjects` | string[] | Sujetos visuales de la escena. No vacío. |
-| `searchQueries` | string[] | Queries de búsqueda en inglés. No vacío. Concretas y específicas. |
+| `searchQueries` | string[] | Queries de búsqueda en inglés. No vacío. Concretas y específicas (ver «Reglas de especificidad de las queries visuales»). |
 | `assetPreferences` | string[] | Tipos de asset preferidos para esta escena. No vacío. Valores del enum cerrado de AssetPreferences (ver sección «AssetPreferences permitidos»). |
 | `visualSequence` | object[] | Secuencia de segmentos visuales. No vacío. |
 
@@ -130,7 +131,7 @@ Cada segmento en visualSequence debe contener:
 ### Reglas estrictas
 
 1. `subjects` no vacío.
-2. `searchQueries` no vacío. Queries en inglés, concretas, sin URLs, sin nombres de providers.
+2. `searchQueries` no vacío. Queries en inglés, concretas y específicas (ver «Reglas de especificidad de las queries visuales»), sin URLs, sin nombres de providers.
 3. `assetPreferences` no vacío. Valores del enum permitido.
 4. `visualSequence` no vacío. `segmentIndex` secuencial desde 1.
 5. Cada segmento usa una `assetPreference` incluida en `assetPreferences`.
@@ -139,6 +140,22 @@ Cada segmento en visualSequence debe contener:
 8. No exigir alternancia artificial cuando un solo tipo sea el más apropiado.
 9. `allowGeneratedImage` es false por defecto. No usar "generated" en `assetPreferences` ni en segmentos a menos que `allowGeneratedImage` sea true y la request lo permita.
 10. `imageGenerationPrompt` y `negativePrompt` solo cuando `allowGeneratedImage` sea true.
+
+### Reglas de especificidad de las queries visuales
+
+Las queries visuales (`searchQueries` y cada `visualSequence[].searchQuery`) se usan literalmente para buscar assets reales en bancos de imágenes. Deben describir sujetos concretos y recuperables cuando sea posible:
+
+- Personas, obras, productos, eventos, lugares, fechas, objetos o fenómenos concretos.
+- Siguen estando en inglés.
+
+Reglas:
+
+1. No uses abstracciones editoriales ni frases de opinión, popularidad o temporalidad vaga como query principal: por ejemplo, "popular culture", "impact of X", "why X matters", "future of X", "famous early ...", "viral ... screenshot".
+2. No inventes entidades ni datos para mejorar una query. Si un nombre propio concreto es útil, DEBE estar respaldado por el contenido de la narración de la escena; si la narración no lo contiene, no lo añadas solo por rellenar.
+3. Si la escena no tiene un nombre propio natural, describe un sujeto visual concreto y descriptivo (objeto, lugar, escena, fenómeno).
+4. Un solo término de entidad concreta es válido (por ejemplo, "Smosh", "Chernobyl", "Minecraft"); no lo rellenes con adjetivos vacíos.
+5. "X of Y" no es una muletilla de abstracción ("future of YouTube", "history of everything"). Si "X of Y" es un nombre propio real y recuperable (por ejemplo, "Statue of Liberty", "Library of Congress"), es válido porque nombra una entidad concreta.
+6. Cada query debe aportar términos sustantivos discriminativos: si una query se puede borrar y la escena no pierde nada visual, es demasiado vaga.
 
 ### Campos PROHIBIDOS en visualPlan
 
@@ -462,7 +479,10 @@ def _build_user_prompt_v2(topic: str, budget: dict, strictness: str, *, allow_ge
         f"Quiero que el arranque tenga máxima retención, que cada escena tenga un plan visual detallado "
         f"con visualPlan schema v2, y que la progresión visual sea coherente. "
         f"IMPORTANTE: Cada escena DEBE tener un visualPlan completo con _schemaVersion=2, "
-        f"visualIntent, subjects, searchQueries, assetPreferences y visualSequence.\n\n"
+        f"visualIntent, subjects, searchQueries, assetPreferences y visualSequence. "
+        f"Cada query visual debe ser un sujeto concreto y recuperable en inglés (persona, obra, "
+        f"producto, evento, lugar, fecha, objeto o fenómeno); evita abstracciones editoriales y "
+        f"nunca inventes entidades que no estén respaldadas por la narración de la escena.\n\n"
         f"{duration_instruction}\n\n"
         f"{gate}"
     )
@@ -618,6 +638,23 @@ def _validate_and_canonicalize_script_v2(
             })
             all_ok = False
 
+        # Visual-query specificity guard (conservative). Vague/editorial queries
+        # are rejected so the retry loop can steer the model toward concrete,
+        # retrievable subjects grounded in the scene.
+        specificity = assess_visual_plan_specificity(vp)
+        for spec_err in specificity.get("errors", []):
+            assessment = spec_err.get("assessment", {})
+            errors.append({
+                "sceneNumber": sn,
+                "code": spec_err.get("code", "QUERY_NOT_SPECIFIC"),
+                "path": f"scenes[{sn}].visualPlan.{spec_err.get('path', '')}",
+                "message": (
+                    f"scene {sn}: visual query '{spec_err.get('query', '')}' is not specific: "
+                    f"{assessment.get('reason', '')}"
+                ),
+            })
+            all_ok = False
+
         if not all_ok:
             continue
 
@@ -746,6 +783,28 @@ def _build_retry_instruction_v2(
         lines.append("- subjects y searchQueries no pueden estar vacíos.")
         lines.append("- assetPreference de cada segmento debe estar en assetPreferences de la escena.")
         lines.append("")
+
+        specificity_issues = [
+            issue for issue in structural_issues
+            if issue.get("code") in ("QUERY_NOT_SPECIFIC", "SEGMENT_QUERY_NOT_SPECIFIC")
+        ]
+        if specificity_issues:
+            lines.append("### Especificidad visual insuficiente")
+            lines.append("")
+            lines.append("Estas queries visuales se rechazaron porque no describen un sujeto concreto y recuperable:")
+            lines.append("")
+            for issue in specificity_issues:
+                lines.append(f"- Path: {issue.get('path', '')}")
+                lines.append(f"  Query: {issue.get('message', '')}")
+            lines.append("")
+            lines.append("Para corregirlas:")
+            lines.append("- Nombra un sujeto concreto y recuperable en inglés: persona, obra, producto, evento, lugar, fecha, objeto o fenómeno.")
+            lines.append("- Los nombres propios deben estar respaldados por la narración de la escena; nunca inventes entidades ni datos.")
+            lines.append("- Si la escena no tiene un nombre propio natural, usa una descripción visual concreta del sujeto (objeto, lugar, escena, fenómeno).")
+            lines.append("- Un solo término de entidad concreta es válido (por ejemplo, \"Smosh\", \"Chernobyl\", \"Minecraft\"); no lo rellenes con adjetivos vacíos.")
+            lines.append("- Evita abstracciones editoriales como \"popular culture\", \"future of X\", \"impact of X\", \"why X matters\", \"famous early ...\", \"viral ... screenshot\".")
+            lines.append("- \"X of Y\" es válido solo cuando es un nombre propio real y recuperable (por ejemplo, \"Statue of Liberty\", \"Library of Congress\").")
+            lines.append("")
 
     # Closed enum — always present, every branch
     lines.append(_build_asset_preference_constraint_block(allow_generated_images))
