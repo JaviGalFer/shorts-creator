@@ -19,6 +19,12 @@
 - Hardening de runtime: retry prompts y repair post-TTS usan el `scenePlan` persistido, por lo que un deep_60 válido de 10 escenas no recae al fallback 4-6 durante EXPAND/COMPRESS.
 - E2E canónico deep_60 `cmo-2026-08-16-203059`: MP4 60.37s, 9 escenas (plan adaptativo 9-11, preferencia 10), 2 reparaciones de voiceover, cumplimiento solicitado PASS y `VALIDATED`. El `cmo-2026-08-16-194540` fallido queda como contexto histórico de la planificación adaptativa.
 
+## Change activo: `generic-tts-provider-runtime`
+- Slice 1 completado: el runtime per-scene ya no fija `edge_tts`; `generate_audio_with_timestamps()` recibe el proveedor seleccionado vía `tts_provider` y `main_per_scene()` lo reenvía. La validación de disponibilidad es uniforme para todos los proveedores (sin fallback silencioso a Edge; credenciales ausentes fallan explícito).
+- Modo continuo sigue siendo Edge-only en Slice 1: `continuous` con un proveedor no-Edge falla con `CONTINUOUS_TTS_PROVIDER_UNSUPPORTED` antes de sintetizar o mutar metadata.
+- Metadata corregida: Edge `timing_support="word"`; ElevenLabs `timing_support="none"` (sin reclamar timing nativo hasta Slice 2). `activeDurationSource` ahora es `subtitle_timing_last_cue_plus_guard` (neutro al proveedor).
+- Slice 2 (pendiente): ElevenLabs `/with-timestamps` + normalización char→word. Slice 3 (pendiente): validación real / cierre.
+
 ## Baseline y límites
 - Baseline estable conocida en main: **`1215 passed, 0 failed`**. Suite completa de la rama activa tras presets/status: **`1198 passed, 51 skipped, 0 failed`**.
 - `AUDIO_DURATION_MISSING` está resuelto. `ffprobe` no está en host y depende del fallback Docker.

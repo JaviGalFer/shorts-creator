@@ -2,6 +2,7 @@
 
 ## Runtime
 - Modular V2 architecture is complete: `bin/run_job.py` orchestrates `script -> assets -> audio -> prepare -> render -> validate`; `bin/` are CLI adapters over `src/shorts_creator/` domains.
+- Per-scene TTS runtime is provider-generic (Slice 1 of `generic-tts-provider-runtime`): `generate_audio_with_timestamps()` takes `tts_provider`; Edge remains default/validated. Continuous mode is Edge-only (`CONTINUOUS_TTS_PROVIDER_UNSUPPORTED` for non-Edge). ElevenLabs native timing pending Slice 2.
 - n8n is legacy/alternative infrastructure, not the canonical orchestrator.
 - TTS and visual providers are replaceable; Edge TTS is currently the default and Wikimedia/Pixabay are current visual providers.
 
