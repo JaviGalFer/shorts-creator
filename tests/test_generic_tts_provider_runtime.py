@@ -154,11 +154,11 @@ class TestEdgeBaseline:
         assert len(st["cues"]) >= 1
 
 
-class TestElevenLabsSlice1:
-    def test_elevenlabs_metadata_does_not_claim_native_timing(self):
+class TestElevenLabsSlice2:
+    def test_elevenlabs_metadata_advertises_word_timing(self):
         from shorts_creator.audio.tts_provider import ElevenLabsProvider
         provider = ElevenLabsProvider(api_key="x")
-        assert provider.metadata.timing_support == "none"
+        assert provider.metadata.timing_support == "word"
 
     def test_no_timing_data_falls_back_to_estimated(self, tmp_path):
         meta_path, _ = _make_scene_meta(tmp_path)

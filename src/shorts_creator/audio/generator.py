@@ -987,7 +987,7 @@ async def generate_audio_with_timestamps(text: str, output_path: Path, voice: st
                                 "numberNormalizationFallbacks": [], "unmatchedRatio": 0,
                                 "confidence": "medium", "note": "no canonical tokens available"}
         cues = group_words_into_cues(annotated, sentence_boundaries)
-        return cues, timing_source or "edge_tts_word_boundary", "high", sentence_boundaries, matching_metrics
+        return cues, timing_source or "native_word_boundary", "high", sentence_boundaries, matching_metrics
 
     if sentence_boundaries:
         all_words = []
@@ -1001,7 +1001,7 @@ async def generate_audio_with_timestamps(text: str, output_path: Path, voice: st
             all_words.extend(words)
         if all_words:
             cues = group_words_into_cues(all_words)
-            return cues, timing_source or "edge_tts_sentence_boundary", "medium", sentence_boundaries, matching_metrics
+            return cues, timing_source or "native_sentence_boundary", "medium", sentence_boundaries, matching_metrics
 
     return None, None, None, sentence_boundaries, matching_metrics
 
