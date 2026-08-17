@@ -17,6 +17,7 @@ Slice 2 (this change):
 - [x] Pure normalizer + validation; normalized>raw alignment priority.
 - [x] Remove Edge fallback-label leak in the generic generator.
 - [x] ElevenLabs `__init__` env precedence fix.
+- [x] Runtime config hardening: resolve provider-specific voice/secrets/model from project `.env` then process env; provider voice wins over implicit Edge default; consistent provider construction across availability check and synthesis; non-string alignment chars and malformed base64 guarded.
 
 Slice 3:
 - [ ] Real provider validation (opt-in keyed) / closure.

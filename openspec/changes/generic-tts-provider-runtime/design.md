@@ -28,5 +28,13 @@ implement native timing and reports `timing_support="none"`. The canonical
 `subtitle_timing_last_cue_plus_guard`; the algorithm (last cue end plus
 `SPEECH_END_GUARD_SEC`, capped by physical duration) is unchanged.
 
+Runtime config is resolved once at the `generate_audio()` boundary: effective
+voice (`explicit --voice → provider-specific env → generic default`),
+provider-specific secrets/model (project `.env` then process env), and the
+same resolved config is passed to both the availability check and each
+per-scene synthesis so initial and regenerated audio use identical provider and
+voice. ElevenLabs voice config (`ELEVENLABS_VOICE_ID`) wins over the implicit
+Edge default; the API key never reaches metadata.
+
 Future providers normalize their native output into the same canonical form;
 Edge baseline and measured-duration fitting are unaffected.

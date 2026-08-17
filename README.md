@@ -36,8 +36,8 @@ Referencias:
 | Tema o instrucción | `--topic` | Tema del vídeo |
 | Duración | `--duration`, `--duration-profile`, `--duration-target`, `--duration-min`, `--duration-max`, `--strictness` | Duración exacta, perfil predefinido o rango con nivel de tolerancia |
 | Modelo LLM | `--model` | Modelo del proveedor LLM (OpenAI-compatible) |
-| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | Edge TTS es el provider canónico operativo; el registry contempla alternativas, pero ElevenLabs no está confirmado como path E2E per-scene |
-| Voz | `--voice`, `TTS_VOICE` | Voz para la narración (default: `es-ES-AlvaroNeural`) |
+| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | Edge TTS es el provider canónico operativo y validado. ElevenLabs tiene adapter per-scene con timing nativo (`/with-timestamps`); validación real E2E pendiente de cierre |
+| Voz | `--voice`, `voiceId`, `TTS_VOICE` | Voz de la narración. Para `elevenlabs` se usa `ELEVENLABS_VOICE_ID` (o `--voice`) en lugar de la voz por defecto de Edge |
 | Timing de subtítulos | `--subtitle-timing-provider`, `SUBTITLE_TIMING_PROVIDER` | `auto`, `edge_tts`, `whisper` o `estimated` |
 | Estilo de subtítulos | `--subtitle-style` | `documentary_safe`, `shorts_dynamic`, `shorts_upper_dynamic` |
 | Providers visuales | Wikimedia Commons, Pixabay | Imágenes de Wikimedia (sin API key) y Pixabay (requiere `PIXABAY_API_KEY`) |
