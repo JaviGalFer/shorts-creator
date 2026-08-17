@@ -140,6 +140,37 @@ class TestCliAndRequest:
         assert meta["status"] == "SCRIPT_DRAFT"
 
 
+    def test_v2_metadata_persists_source_providers(self, monkeypatch, tmp_path):
+        """Metadata v2 persists request.visuals.sourceProviders from --asset-providers."""
+        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
+        out_path = tmp_path / "metadata.json"
+
+        script = _v2_script()
+        monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
+                                           "--duration", "30", "--output", str(out_path),
+                                           "--asset-providers", "wikimedia_commons,pixabay"])
+
+        exit_code = gs.main()
+        assert exit_code == 0
+        meta = _json.loads(out_path.read_text())
+        visuals = meta["request"]["visuals"]
+        assert visuals["sourceProviders"] == ["wikimedia_commons", "pixabay"]
+
+
+    def test_v2_metadata_omits_source_providers_when_omitted(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(gs, "load_env", lambda: {"LLM_API_KEY": "fake"})
+        out_path = tmp_path / "metadata.json"
+        script = _v2_script()
+        monkeypatch.setattr(gs, "call_llm", lambda *a, **kw: _json.dumps(script))
+        monkeypatch.setattr(sys, "argv", ["generate_script.py", "--topic", "Test",
+                                           "--duration", "30", "--output", str(out_path)])
+        exit_code = gs.main()
+        assert exit_code == 0
+        meta = _json.loads(out_path.read_text())
+        assert "sourceProviders" not in meta["request"]["visuals"]
+
+
 # ── Success v2 tests ─────────────────────────────────────────────────────────
 
 

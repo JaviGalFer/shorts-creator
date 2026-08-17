@@ -1337,6 +1337,7 @@ def generate_script(
     tts_provider: str | None = None,
     voice: str | None = None,
     subtitle_timing_provider: str | None = None,
+    source_providers: list[str] | None = None,
 ) -> int:
     """Generate and persist a canonical V2 script for one request."""
     llm_config = resolve_llm_config(model_override=model)
@@ -1828,6 +1829,8 @@ def generate_script(
         "allowGeneratedImages": allow_generated_images,
     }
     visuals_request["schemaVersion"] = 2
+    if source_providers:
+        visuals_request["sourceProviders"] = list(source_providers)
 
     request = {
         "topic": topic,

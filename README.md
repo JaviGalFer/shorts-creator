@@ -21,7 +21,7 @@ Visual Plan V2 es el único contrato visual canónico. La arquitectura modular V
 
 Pipeline V2 funcional y E2E técnico demostrado. Docker se utiliza para render y servicios auxiliares; `bin/run_job.py` es el orquestador canónico.
 
-El fitting post-TTS y la validación de cumplimiento de duración del MP4 están implementados y validados por E2E reales. quick_30 y deep_60 son la evidencia canónica exitosa. Suite completa: **`1306 passed, 0 skipped, 0 failed`**.
+El fitting post-TTS y la validación de cumplimiento de duración del MP4 están implementados y validados por E2E reales. quick_30 y deep_60 son la evidencia canónica exitosa. Los assets visuales se filtran por un gate de relevancia semántica determinista. Suite completa: **`1345 passed, 0 skipped, 0 failed`**.
 
 Referencias:
 - `docs/project/current-state.md` — estado detallado
@@ -41,6 +41,7 @@ Referencias:
 | Timing de subtítulos | `--subtitle-timing-provider`, `SUBTITLE_TIMING_PROVIDER` | `auto`, `edge_tts`, `whisper` o `estimated` |
 | Estilo de subtítulos | `--subtitle-style` | `documentary_safe`, `shorts_dynamic`, `shorts_upper_dynamic` |
 | Providers visuales | Wikimedia Commons, Pixabay | Imágenes de Wikimedia (sin API key) y Pixabay (requiere `PIXABAY_API_KEY`) |
+| Fuente visual | `--asset-providers` | Lista explícita de providers en orden de prioridad (p. ej. `wikimedia_commons,pixabay`); se persiste en `request.visuals.sourceProviders`. Omitido → fallback por defecto de la matriz |
 | Ejecución parcial | `--stop-after` | Detener tras `script`, `assets`, `audio`, `prepare`, `render` o `validate` |
 | Planificación | `--dry-run` | Mostrar plan de ejecución sin ejecutar |
 
@@ -182,6 +183,8 @@ Las variables de entorno se configuran en `.env`. Ver `.env.example` para la lis
 | FreeAI | Deshabilitado, no implementado | — |
 | Pollinations | Deshabilitado, no implementado | — |
 
+Los candidatos visuales pasan por un gate de relevancia semántica determinista y sin dependencias de provider (`deterministic_anchor_coverage_v2`) entre la búsqueda y la descarga: los términos débiles/soporte por sí solos no son suficiente evidencia, y los resultados no relevantes se descartan en favor de no resolver el segmento. El assessment se persiste en cada asset (`semanticAssessment`).
+
 ## Arquitectura actual
 
 ```
@@ -217,6 +220,7 @@ n8n no es el orquestador canónico del pipeline V2.
 - `ffprobe` no está instalado en el host; la medición de duración de audio usa Docker como fallback.
 - La aceleración GPU no está implementada; el render usa CPU.
 - La estimación bootstrap WPM es telemetría no bloqueante; la duración real del audio TTS y el fitting post-TTS son autoritativos. El fitting se validó en E2E reales (`quick_30` y `deep_60`).
+- El gate de relevancia semántica de assets es conservador y garantiza correlación gruesa con la intención del query (tema/entidad); no garantiza fidelidad temporal/editorial ni del contenido exacto de la imagen. Un segmento puede quedar sin resolver (`ASSETS_PARTIAL`) cuando el provider no devuelve metadata semántica suficiente — preferido sobre aceptar un asset irrelevante.
 - No hay publicación automática ni integración con redes sociales.
 
 ## Documentación adicional

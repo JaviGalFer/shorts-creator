@@ -176,6 +176,9 @@ def build_script_command(args) -> list[str]:
         if audio_config.get("voice"):
             cmd.extend(["--voice", audio_config["voice"]])
         cmd.extend(["--subtitle-timing-provider", audio_config["subtitle_timing_provider"]])
+    asset_providers = getattr(args, "asset_providers", None)
+    if asset_providers:
+        cmd.extend(["--asset-providers", asset_providers])
     return cmd
 
 
@@ -606,6 +609,7 @@ def run_pipeline(
     tts_provider: str | None = None,
     voice: str | None = None,
     subtitle_timing_provider: str | None = None,
+    asset_providers: str | None = None,
 ) -> int:
     """Run the V2 pipeline through the requested stage."""
     args = SimpleNamespace(
@@ -625,6 +629,7 @@ def run_pipeline(
         tts_provider=tts_provider,
         voice=voice,
         subtitle_timing_provider=subtitle_timing_provider,
+        asset_providers=asset_providers,
     )
     _resolve_audio_config(args)
 

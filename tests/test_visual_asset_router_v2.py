@@ -1047,6 +1047,96 @@ class TestInvalidRequestConfig:
         assert any("UNRECOGNIZED_PROVIDER" in w for w in warnings)
 
 
+# ── Source policy: explicit provider list restricts + preserves order ───────
+
+
+class TestSourcePolicy:
+    def _plan(self):
+        return {
+            "_schemaVersion": SCHEMA_VERSION,
+            "visualIntent": "explain",
+            "subjects": ["rainbow"],
+            "searchQueries": ["rainbow"],
+            "assetPreferences": ["photograph"],
+            "visualSequence": [
+                {
+                    "segmentIndex": 1,
+                    "assetPreference": "photograph",
+                    "searchQuery": "rainbow",
+                    "durationFraction": 1.0,
+                    "transition": "cut",
+                }
+            ],
+        }
+
+    def test_source_providers_restrict_candidates_keep_order(self):
+        result = _route(self._plan(), request_visuals={
+            "sourceProviders": ["pixabay", "wikimedia_commons"],
+        })
+        seg = result["sourcingPlan"]["segments"][0]
+        providers = [c["provider"] for c in seg["providerCandidates"]]
+        assert providers == ["pixabay", "wikimedia_commons"]
+        priorities = [c["priority"] for c in seg["providerCandidates"]]
+        assert priorities == [1, 2]
+
+    def test_source_providers_single_restricts_to_one(self):
+        result = _route(self._plan(), request_visuals={
+            "sourceProviders": ["pixabay"],
+        })
+        seg = result["sourcingPlan"]["segments"][0]
+        providers = [c["provider"] for c in seg["providerCandidates"]]
+        assert providers == ["pixabay"]
+        assert seg["routingStatus"].startswith("ROUTABLE")
+
+    def test_source_providers_empty_uses_default_fallback(self):
+        result = _route(self._plan(), request_visuals={
+            "sourceProviders": [],
+        })
+        seg = result["sourcingPlan"]["segments"][0]
+        providers = [c["provider"] for c in seg["providerCandidates"]]
+        assert len(providers) >= 2
+        assert "wikimedia_commons" in providers
+
+    def test_source_providers_absent_uses_default_fallback(self):
+        result = _route(self._plan())
+        seg = result["sourcingPlan"]["segments"][0]
+        providers = [c["provider"] for c in seg["providerCandidates"]]
+        assert len(providers) >= 2
+
+    def test_source_providers_unknown_warns_and_ignores(self):
+        result = _route(self._plan(), request_visuals={
+            "sourceProviders": ["pixabay", "not_a_provider"],
+        })
+        assert result["ok"] is True
+        codes = [w["code"] for w in result["diagnostics"]["warnings"]]
+        assert any("UNRECOGNIZED_PROVIDER" in c for c in codes)
+        seg = result["sourcingPlan"]["segments"][0]
+        providers = [c["provider"] for c in seg["providerCandidates"]]
+        assert "not_a_provider" not in providers
+
+    def test_source_providers_all_excluded_unroutable(self):
+        result = _route(self._plan(), request_visuals={
+            "sourceProviders": ["freeai"],
+        })
+        seg = result["sourcingPlan"]["segments"][0]
+        assert seg["routingStatus"] == "UNROUTABLE"
+        assert seg["providerCandidates"] == []
+
+    def test_source_providers_non_list_falls_back(self):
+        result = _route(self._plan(), request_visuals={
+            "sourceProviders": "pixabay",
+        })
+        assert result["ok"] is True
+        seg = result["sourcingPlan"]["segments"][0]
+        providers = [c["provider"] for c in seg["providerCandidates"]]
+        assert len(providers) >= 2
+
+    def test_segment_carries_subjects(self):
+        result = _route(self._plan())
+        seg = result["sourcingPlan"]["segments"][0]
+        assert "rainbow" in seg["subjects"]
+
+
 # ── Legacy v1 field regression ─────────────────────────────────────────────
 
 

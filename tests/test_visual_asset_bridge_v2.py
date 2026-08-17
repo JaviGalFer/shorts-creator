@@ -312,6 +312,32 @@ def test_generation_prompt_used_preserved():
     assert seg["generationPromptUsed"] == "A futuristic cityscape at dawn"
 
 
+# ── Test 8b: semanticAssessment preserved ────────────────────────────────────
+
+
+def test_semantic_assessment_preserved():
+    metadata = _base_metadata()
+    executor_result = {
+        "resolvedAssets": [
+            _resolved_asset(
+                semanticAssessment={
+                    "verdict": "RELEVANT",
+                    "score": 100,
+                    "reasons": ["candidate semantic metadata shares substantive token(s) with the query/subjects"],
+                    "matchedEvidence": ["test"],
+                    "method": "deterministic_anchor_coverage_v2",
+                }
+            )
+        ],
+        "unresolvedSegments": [],
+    }
+    result = apply_visual_assets_v2_to_metadata(metadata, executor_result)
+
+    seg = result["assets"][0]["segments"][0]
+    assert seg["semanticAssessment"]["verdict"] == "RELEVANT"
+    assert seg["semanticAssessment"]["method"] == "deterministic_anchor_coverage_v2"
+
+
 # ── Test 9: durationFraction and transition from visualSequence ──────────────
 
 

@@ -127,6 +127,18 @@ def test_build_script_command_all_options():
     assert cmd[cmd.index("--model") + 1] == "gpt-4"
 
 
+def test_build_script_command_asset_providers():
+    args = _make_args(topic="Test", duration=30, asset_providers="wikimedia_commons,pixabay")
+    cmd = build_script_command(args)
+    assert cmd[cmd.index("--asset-providers") + 1] == "wikimedia_commons,pixabay"
+
+
+def test_build_script_command_asset_providers_omitted():
+    args = _make_args(topic="Test", duration=30)
+    cmd = build_script_command(args)
+    assert "--asset-providers" not in cmd
+
+
 def test_build_stage_command_assets():
     cmd = build_stage_command("assets", "/path/to/metadata.json")
     assert cmd[1].endswith("fetch_images_v2.py")
@@ -1572,7 +1584,8 @@ def _make_args(topic="Test", duration=None, duration_profile=None,
                duration_target=None, duration_min=None, duration_max=None,
                strictness=None, model=None, stop_after="validate",
                dry_run=False, verbose=False,
-               tts_provider=None, voice=None, subtitle_timing_provider=None):
+               tts_provider=None, voice=None, subtitle_timing_provider=None,
+               asset_providers=None):
     from shorts_creator.pipeline.orchestrator import _resolve_audio_config
     class Args:
         pass
@@ -1591,5 +1604,6 @@ def _make_args(topic="Test", duration=None, duration_profile=None,
     a.tts_provider = tts_provider
     a.voice = voice
     a.subtitle_timing_provider = subtitle_timing_provider
+    a.asset_providers = asset_providers
     _resolve_audio_config(a)
     return a

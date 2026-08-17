@@ -201,6 +201,7 @@ DEFAULT_REQUEST_VISUALS: dict[str, Any] = {
     "allowGeneratedImages": False,
     "preferredProviders": [],
     "blockedProviders": [],
+    "sourceProviders": [],
     "maxQueriesPerSegment": 4,
     "providerPriorityPolicy": "balanced",
 }
@@ -286,6 +287,29 @@ def _validate_request_config(
                 "INVALID_REQUEST_CONFIG:blockedProviders",
                 f"expected list, got {type(val).__name__}; using default ({canonical['blockedProviders']})",
                 "request_visuals.blockedProviders",
+            ))
+
+    if "sourceProviders" in config:
+        val = config["sourceProviders"]
+        if isinstance(val, list):
+            clean: list[str] = []
+            for i, p in enumerate(val):
+                if isinstance(p, str):
+                    p_clean = p.strip().lower()
+                    if p_clean in ALLOWED_PROVIDERS:
+                        clean.append(p_clean)
+                    else:
+                        warnings.append(_warn(
+                            f"UNRECOGNIZED_PROVIDER:request_visuals.sourceProviders[{i}]",
+                            f"provider '{p}' not recognized",
+                            f"request_visuals.sourceProviders[{i}]",
+                        ))
+            canonical["sourceProviders"] = clean
+        else:
+            warnings.append(_warn(
+                "INVALID_REQUEST_CONFIG:sourceProviders",
+                f"expected list, got {type(val).__name__}; using default ({canonical['sourceProviders']})",
+                "request_visuals.sourceProviders",
             ))
 
     if "maxQueriesPerSegment" in config:
@@ -669,11 +693,16 @@ def _route_segment(
                     if w not in c["warnings"]:
                         c["warnings"].append(w)
 
-    # ── Priority policy ordering ──────────────────────────────────────────
-    policy = request_visuals.get("providerPriorityPolicy", "balanced")
-    candidates = _apply_priority_policy(
-        candidates, canonical_plan, request_visuals, policy, asset_pref
-    )
+    # ── Source policy / priority ordering ────────────────────────────────
+    source_providers = request_visuals.get("sourceProviders") or []
+    if source_providers:
+        # Explicit provider list: use only those providers, preserving list order.
+        candidates, excluded = _apply_source_policy(candidates, excluded, source_providers)
+    else:
+        policy = request_visuals.get("providerPriorityPolicy", "balanced")
+        candidates = _apply_priority_policy(
+            candidates, canonical_plan, request_visuals, policy, asset_pref
+        )
 
     # ── Compute routing status ───────────────────────────────────────────
     status = _compute_routing_status(candidates, asset_pref, segment_idx)
@@ -687,9 +716,15 @@ def _route_segment(
                 if w not in segment_warnings:
                     segment_warnings.append(f"{c['provider']}: {w}")
 
+    subjects = canonical_plan.get("subjects") or []
+    if not isinstance(subjects, list):
+        subjects = []
+    subjects_clean = [s for s in subjects if isinstance(s, str) and s.strip()]
+
     return {
         "segmentIndex": segment_idx,
         "assetPreference": asset_pref,
+        "subjects": subjects_clean,
         "searchQueries": search_queries,
         "generationPrompts": generation_prompts,
         "providerCandidates": candidates,
@@ -698,6 +733,38 @@ def _route_segment(
         "warnings": segment_warnings,
         "unsupportedReasons": [],
     }
+
+
+def _apply_source_policy(
+    candidates: list[dict[str, Any]],
+    excluded: list[dict[str, Any]],
+    source_providers: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Filter and order candidates by an explicit provider list.
+
+    When ``source_providers`` is empty, candidates are returned unchanged
+    (default/router fallback order preserved).  Otherwise only candidates
+    whose provider is in the list are kept, ordered by the list position;
+    filtered-out candidates are appended to ``excluded`` for audit.
+    """
+    if not source_providers:
+        return candidates, excluded
+
+    order: dict[str, int] = {p: i for i, p in enumerate(source_providers)}
+    kept: list[dict[str, Any]] = []
+    for c in candidates:
+        if c.get("provider") in order:
+            kept.append(c)
+        else:
+            excluded.append(_make_excluded(
+                c["provider"],
+                "not in explicit source policy: request_visuals.sourceProviders",
+            ))
+
+    kept.sort(key=lambda c: order[c["provider"]])
+    for i, c in enumerate(kept):
+        c["priority"] = i + 1
+    return kept, excluded
 
 
 def _apply_priority_policy(

@@ -15,6 +15,11 @@ import re
 from pathlib import Path
 from typing import Any
 
+from shorts_creator.assets.semantic import (
+    RELEVANT,
+    assess_candidate,
+)
+
 # ── Constants ────────────────────────────────────────────────────────────────
 
 ALLOWED_AVAILABILITY_STATUSES: frozenset[str] = frozenset({
@@ -518,6 +523,7 @@ def execute_visual_sourcing_plan_v2(
         # ── Live path: multi-provider failover ────────────────────────────
         provider_attempts: list[dict] = []
         resolved_result: dict | None = None
+        resolved_strategy: str = ""
         last_non_terminal: dict | None = None
 
         for candidate in candidates:
@@ -576,6 +582,7 @@ def execute_visual_sourcing_plan_v2(
 
             if status == "RESOLVED":
                 resolved_result = provider_result
+                resolved_strategy = candidate.get("queryStrategy", "")
                 break
 
             if status in ("PROVIDER_ERROR",):
@@ -591,8 +598,28 @@ def execute_visual_sourcing_plan_v2(
 
         if resolved_result is not None:
             resolved_result["providerAttempts"] = provider_attempts
-            resolved_assets.append(resolved_result)
-            diagnostics["summary"]["resolved"] += 1
+            if _search_semantic_ok(resolved_result, resolved_strategy):
+                resolved_assets.append(resolved_result)
+                diagnostics["summary"]["resolved"] += 1
+            else:
+                # Generic postcondition: a search-strategy RESOLVED result must
+                # carry a RELEVANT semantic assessment. Never let it resolve.
+                warnings.append(_warn(
+                    "SEMANTIC_POSTCONDITION:RESOLVED",
+                    f"segment {segment_idx} provider {resolved_result.get('provider', '')} "
+                    "returned RESOLVED without a RELEVANT semanticAssessment",
+                    "",
+                ))
+                unresolved_segments.append({
+                    "segmentIndex": segment_idx,
+                    "assetPreference": asset_pref,
+                    "status": "PROVIDER_ERROR",
+                    "provider": resolved_result.get("provider", ""),
+                    "searchQueriesTried": resolved_result.get("searchQueriesTried", []),
+                    "reason": "SEMANTIC POSTCONDITION VIOLATION: RESOLVED without RELEVANT semanticAssessment",
+                    "providerAttempts": provider_attempts,
+                })
+                diagnostics["summary"]["providerError"] += 1
         else:
             if last_non_terminal is not None:
                 last_non_terminal["providerAttempts"] = provider_attempts
@@ -621,6 +648,35 @@ def execute_visual_sourcing_plan_v2(
         "dryRunAttempts": dry_run_attempts,
         "diagnostics": diagnostics,
     }
+
+
+def _search_semantic_ok(resolved: dict, strategy: str) -> bool:
+    """Postcondition for search-strategy providers.
+
+    A RESOLVED result from a search-strategy provider must carry a
+    ``semanticAssessment`` whose ``verdict`` is ``RELEVANT``; otherwise the
+    result is rejected and must never enter ``resolvedAssets``.  Generation
+    (prompt) strategies legitimately carry no token-overlap assessment and are
+    allowed through.  Provider-name agnostic: only the candidate's
+    ``queryStrategy`` is consulted.
+    """
+    if strategy != "search":
+        return True
+    sem = resolved.get("semanticAssessment") or {}
+    return sem.get("verdict") == RELEVANT
+
+
+def _evaluate_semantic(segment: dict, candidate: dict) -> dict:
+    """Score a candidate's semantic relevance to the segment expected intent.
+
+    Expected intent = candidate's queryUsed (primary) + scene subjects.
+    Returns the semantic assessment dict; the gate skips non-RELEVANT.
+    """
+    expected = {
+        "query": candidate.get("queryUsed", "") or "",
+        "subjects": segment.get("subjects") or [],
+    }
+    return assess_candidate(expected, candidate)
 
 
 def _try_live_resolution(
@@ -707,6 +763,7 @@ def _resolve_wikimedia(
         )
 
         download_errors: list[dict] = []
+        semantic_rejections: list[dict] = []
         any_candidate_found = False
 
         for _attempt_idx in range(_MAX_DOWNLOAD_ATTEMPTS):
@@ -727,6 +784,12 @@ def _resolve_wikimedia(
                 excluded_source_urls.add(resolved.get("sourceUrl", ""))
             if excluded_file_urls is not None:
                 excluded_file_urls.add(resolved.get("fileUrl", ""))
+
+            # ── Semantic gate: before download, skip irrelevant/unscorable ──
+            semantic = _evaluate_semantic(segment, resolved)
+            if semantic.get("verdict") != RELEVANT:
+                semantic_rejections.append(semantic)
+                continue
 
             relative_path, absolute_path = _compute_asset_paths(
                 job_dir, segment_idx, resolved, asset_namespace,
@@ -759,6 +822,7 @@ def _resolve_wikimedia(
                     "height": resolved.get("height", 0),
                     "searchQueryUsed": query_used,
                     "generationPromptUsed": None,
+                    "semanticAssessment": semantic,
                 }
 
             if absolute_path.exists():
@@ -789,6 +853,7 @@ def _resolve_wikimedia(
             "provider": "wikimedia_commons",
             "searchQueriesTried": query_texts,
             "reason": "no candidate passed minimum filters",
+            "semanticRejections": semantic_rejections,
         }
 
     except WikimediaRateLimitedError:
@@ -878,6 +943,7 @@ def _resolve_pixabay(
 
         _MAX_DOWNLOAD_ATTEMPTS = 20
         download_errors: list[dict] = []
+        semantic_rejections: list[dict] = []
 
         for attempt in range(min(_MAX_DOWNLOAD_ATTEMPTS, len(candidates))):
             pix_candidate = candidates[attempt]
@@ -886,6 +952,12 @@ def _resolve_pixabay(
                 excluded_source_urls.add(pix_candidate.get("sourceUrl", ""))
             if excluded_file_urls is not None:
                 excluded_file_urls.add(pix_candidate.get("fileUrl", ""))
+
+            # ── Semantic gate: before download, skip irrelevant/unscorable ──
+            semantic = _evaluate_semantic(segment, pix_candidate)
+            if semantic.get("verdict") != RELEVANT:
+                semantic_rejections.append(semantic)
+                continue
 
             relative_path, absolute_path = _compute_asset_paths(
                 job_dir, segment_idx, pix_candidate, asset_namespace,
@@ -920,6 +992,7 @@ def _resolve_pixabay(
                     "generationPromptUsed": None,
                     "tags": pix_candidate.get("tags", ""),
                     "pixabayId": pix_candidate.get("pixabayId"),
+                    "semanticAssessment": semantic,
                 }
 
             if absolute_path.exists():
@@ -950,6 +1023,7 @@ def _resolve_pixabay(
             "provider": "pixabay",
             "searchQueriesTried": query_texts,
             "reason": "no Pixabay candidate downloaded successfully",
+            "semanticRejections": semantic_rejections,
         }
 
     except ValueError as exc:

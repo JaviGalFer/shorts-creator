@@ -249,6 +249,69 @@ class TestLoadMetadata:
         assert updated["_visualAssetBridgeV2"]["summary"]["resolved"] == 1
 
 
+class TestRequestVisualsPlumbing:
+    def test_source_providers_passed_to_router(self, tmp_path, monkeypatch):
+        metadata = _base_metadata()
+        metadata["request"] = {
+            "visuals": {"sourceProviders": ["pixabay", "wikimedia_commons"]},
+        }
+        metadata_path = tmp_path / "metadata.json"
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+        captured: dict = {}
+
+        def spy_router(plan, scene=None, request_visuals=None):
+            captured["request_visuals"] = request_visuals
+            return _mock_router_ok(plan, scene=scene, request_visuals=request_visuals)
+
+        monkeypatch.setattr(
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+        )
+        monkeypatch.setattr(
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", spy_router
+        )
+        monkeypatch.setattr(
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
+            lambda **kw: _wrap_executor_result(
+                resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
+            ),
+        )
+
+        exit_code = fetch_images_v2.main([str(metadata_path)])
+        assert exit_code == 0
+        assert captured.get("request_visuals") == {
+            "sourceProviders": ["pixabay", "wikimedia_commons"],
+        }
+
+    def test_no_request_visuals_passes_none(self, tmp_path, monkeypatch):
+        metadata = _base_metadata()
+        metadata_path = tmp_path / "metadata.json"
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+        captured: dict = {}
+
+        def spy_router(plan, scene=None, request_visuals=None):
+            captured["request_visuals"] = request_visuals
+            return _mock_router_ok(plan, scene=scene, request_visuals=request_visuals)
+
+        monkeypatch.setattr(
+            "shorts_creator.assets.fetcher.canonicalize_visual_plan_v2", _mock_canonicalizer_ok
+        )
+        monkeypatch.setattr(
+            "shorts_creator.assets.router.build_visual_sourcing_plan_v2", spy_router
+        )
+        monkeypatch.setattr(
+            "shorts_creator.assets.executor.execute_visual_sourcing_plan_v2",
+            lambda **kw: _wrap_executor_result(
+                resolved=[_resolved_asset()], dry_run=kw.get("dry_run", False)
+            ),
+        )
+
+        exit_code = fetch_images_v2.main([str(metadata_path)])
+        assert exit_code == 0
+        assert captured.get("request_visuals") is None
+
+
 class TestSceneDetection:
     def test_processes_only_schema_version_2(self, tmp_path, monkeypatch):
         metadata = {
