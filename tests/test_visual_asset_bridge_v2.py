@@ -325,7 +325,7 @@ def test_semantic_assessment_preserved():
                     "score": 100,
                     "reasons": ["candidate semantic metadata shares substantive token(s) with the query/subjects"],
                     "matchedEvidence": ["test"],
-                    "method": "deterministic_token_overlap_v1",
+                    "method": "deterministic_anchor_coverage_v2",
                 }
             )
         ],
@@ -335,7 +335,7 @@ def test_semantic_assessment_preserved():
 
     seg = result["assets"][0]["segments"][0]
     assert seg["semanticAssessment"]["verdict"] == "RELEVANT"
-    assert seg["semanticAssessment"]["method"] == "deterministic_token_overlap_v1"
+    assert seg["semanticAssessment"]["method"] == "deterministic_anchor_coverage_v2"
 
 
 # ── Test 9: durationFraction and transition from visualSequence ──────────────

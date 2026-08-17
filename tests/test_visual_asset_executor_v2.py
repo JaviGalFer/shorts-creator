@@ -39,7 +39,7 @@ def _semantic_relevant():
             "candidate semantic metadata shares substantive token(s) with the query/subjects"
         ],
         "matchedEvidence": ["test"],
-        "method": "deterministic_token_overlap_v1",
+        "method": "deterministic_anchor_coverage_v2",
     }
 
 
@@ -885,7 +885,7 @@ class TestLiveModeWikimedia:
     def _mock_candidate(self):
         return {
             "provider": "wikimedia_commons",
-            "title": "Test Image",
+            "title": "Test query image",
             "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Test.jpg",
             "fileUrl": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Test.jpg",
             "thumbnailUrl": "",
@@ -1238,7 +1238,7 @@ class TestNamespaceInExecutor:
     def _mock_candidate(self):
         return {
             "provider": "wikimedia_commons",
-            "title": "Test Image",
+            "title": "Test query image",
             "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Test.jpg",
             "fileUrl": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Test.jpg",
             "thumbnailUrl": "",
@@ -1564,7 +1564,7 @@ class TestExclusionInExecutor:
     def _mock_candidate(self):
         return {
             "provider": "wikimedia_commons",
-            "title": "Test Image",
+            "title": "Test query image",
             "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Test.jpg",
             "fileUrl": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Test.jpg",
             "thumbnailUrl": "",
@@ -2132,7 +2132,7 @@ class TestSemanticGate:
         plan = self._sourcing_plan([self._segment()])
         with patch(
             "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
-            return_value=self._candidate("Test painting of a test", description="test scene"),
+            return_value=self._candidate("Test query painting", description="test scene"),
         ), patch(
             "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
             return_value=self._download_ok(),
@@ -2149,6 +2149,10 @@ class TestSemanticGate:
         assert sem is not None
         assert sem["verdict"] == "RELEVANT"
         assert "test" in sem["matchedEvidence"]
+        assert sem["anchorTerms"] == ["query", "test"]
+        assert sem["matchedAnchors"] == ["query", "test"]
+        assert sem["weakMatches"] == []
+        assert sem["anchorCoverage"] == 1.0
 
     def test_irrelevant_candidate_skipped_no_results(self, tmp_path):
         plan = self._sourcing_plan([self._segment()])
@@ -2196,7 +2200,7 @@ class TestSemanticGate:
             if calls[0] == 1:
                 return self._candidate("Volkswagen Beetle", description="car")
             if calls[0] == 2:
-                return self._candidate("Test painting", description="test")
+                return self._candidate("Test query painting", description="test")
             return None
 
         with patch(
@@ -2234,7 +2238,7 @@ class TestSemanticGate:
                     "verdict": "IRRELEVANT", "score": 0,
                     "reasons": ["no shared token"],
                     "matchedEvidence": [],
-                    "method": "deterministic_token_overlap_v1",
+                    "method": "deterministic_anchor_coverage_v2",
                 },
             },
         ):

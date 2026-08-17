@@ -1,7 +1,7 @@
 """Semantic relevance for visual asset candidates — provider-agnostic, deterministic.
 
 Normalizes provider-native candidate metadata into a generic semantic contract and
-scores it against the expected visual intent (``queryUsed`` + scene ``subjects``).
+scores it against the primary visual intent (``queryUsed``).
 
 Pure module: no I/O, no HTTP, no CLIP/embeddings/LLM.  Stdlib only.
 
@@ -18,7 +18,7 @@ RELEVANT = "RELEVANT"
 IRRELEVANT = "IRRELEVANT"
 UNSCORABLE = "UNSCORABLE"
 
-SEMANTIC_METHOD = "deterministic_token_overlap_v1"
+SEMANTIC_METHOD = "deterministic_anchor_coverage_v2"
 
 # Generic media/stock filler tokens that carry no topical evidence.
 GENERIC_FILLER: frozenset[str] = frozenset({
@@ -28,6 +28,17 @@ GENERIC_FILLER: frozenset[str] = frozenset({
     "free", "download", "downloads", "resolution", "wallpaper", "wallpapers",
     "background", "backgrounds", "jpeg", "jpg", "png", "webp", "gif",
     "high", "quality", "file", "files", "view", "views", "icon", "icons",
+})
+
+# Broad temporal, popularity, presentation, and platform-context terms can
+# describe many unrelated assets. They remain visible in diagnostics but can
+# never establish relevance without a discriminative query anchor.
+WEAK_SUPPORT_TERMS: frozenset[str] = frozenset({
+    "current", "early", "famous", "first", "formation", "future", "latest", "modern",
+    "new", "old", "popular", "viral",
+    "culture", "image", "images", "interface", "logo", "media", "photo",
+    "photos", "screen", "screenshot", "screenshots", "section", "social",
+    "video", "videos",
 })
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -138,9 +149,43 @@ def _evidence_tokens(semantic: dict) -> set[str]:
     ) | tokenize(semantic.get("tags", [])) | tokenize(semantic.get("labels", []))
 
 
-def _expected_tokens(query: str, subjects: list) -> set[str]:
-    """Expected-intent tokens: queryUsed (primary) + scene subjects (supplemental)."""
-    return tokenize(query) | tokenize(subjects)
+def _query_anchor_terms(query: str) -> tuple[set[str], set[str]]:
+    """Split primary query evidence into discriminative anchors and weak terms."""
+    query_terms = tokenize(query)
+    return query_terms - WEAK_SUPPORT_TERMS, query_terms & WEAK_SUPPORT_TERMS
+
+
+def _anchor_match_requirement(anchor_count: int) -> int:
+    """Require one focused anchor or at least half of a multi-anchor query."""
+    if anchor_count == 1:
+        return 1
+    return max(2, (anchor_count + 1) // 2)
+
+
+def _assessment(
+    *,
+    verdict: str,
+    score: int | None,
+    reasons: list[str],
+    anchor_terms: set[str],
+    matched_anchors: set[str],
+    weak_matches: set[str],
+) -> dict:
+    anchor_coverage = (
+        len(matched_anchors) / len(anchor_terms) if anchor_terms else None
+    )
+    return {
+        "verdict": verdict,
+        "score": score,
+        "reasons": reasons,
+        # Only discriminative anchor matches establish semantic relevance.
+        "matchedEvidence": sorted(matched_anchors),
+        "anchorTerms": sorted(anchor_terms),
+        "matchedAnchors": sorted(matched_anchors),
+        "weakMatches": sorted(weak_matches),
+        "anchorCoverage": anchor_coverage,
+        "method": SEMANTIC_METHOD,
+    }
 
 
 def score_semantic_relevance(expected: dict, candidate: dict) -> dict:
@@ -152,53 +197,64 @@ def score_semantic_relevance(expected: dict, candidate: dict) -> dict:
             ``to_semantic_candidate``.
 
     Returns:
-        ``{"verdict", "score", "reasons", "matchedEvidence", "method"}``.
-        - ``RELEVANT``: at least one substantive shared token (score 60-100).
-        - ``IRRELEVANT``: substantive evidence present but zero shared tokens.
-        - ``UNSCORABLE``: no substantive evidence (candidate or expected) to compare.
+        ``{"verdict", "score", "reasons", "matchedEvidence", "method"}``
+        plus anchor diagnostics.
+        - ``RELEVANT``: sufficient discriminative query-anchor coverage.
+        - ``IRRELEVANT``: candidate lacks enough discriminative query anchors.
+        - ``UNSCORABLE``: no substantive candidate evidence or query anchors.
+
+    ``queryUsed`` is the primary intent. Subject tokens are intentionally not
+    considered for the relevance verdict: they may describe a scene, but must
+    never rescue a candidate that misses the primary query anchors.
     """
     evidence = _evidence_tokens(candidate)
-    exp_tokens = _expected_tokens(expected.get("query", ""), expected.get("subjects", []))
+    anchor_terms, weak_terms = _query_anchor_terms(expected.get("query", ""))
+    matched_anchors = evidence & anchor_terms
+    weak_matches = evidence & weak_terms
 
     if not evidence:
-        return {
-            "verdict": UNSCORABLE,
-            "score": None,
-            "reasons": ["no substantive candidate semantic metadata to compare"],
-            "matchedEvidence": [],
-            "method": SEMANTIC_METHOD,
-        }
-    if not exp_tokens:
-        return {
-            "verdict": UNSCORABLE,
-            "score": None,
-            "reasons": ["no substantive expected intent (query/subjects) to compare"],
-            "matchedEvidence": [],
-            "method": SEMANTIC_METHOD,
-        }
+        return _assessment(
+            verdict=UNSCORABLE,
+            score=None,
+            reasons=["no substantive candidate semantic metadata to compare"],
+            anchor_terms=anchor_terms,
+            matched_anchors=matched_anchors,
+            weak_matches=weak_matches,
+        )
+    if not anchor_terms:
+        return _assessment(
+            verdict=UNSCORABLE,
+            score=None,
+            reasons=["no discriminative query anchors to compare"],
+            anchor_terms=anchor_terms,
+            matched_anchors=matched_anchors,
+            weak_matches=weak_matches,
+        )
 
-    matched = sorted(evidence & exp_tokens)
+    required = _anchor_match_requirement(len(anchor_terms))
+    if len(matched_anchors) < required:
+        return _assessment(
+            verdict=IRRELEVANT,
+            score=0,
+            reasons=[
+                "candidate lacks sufficient discriminative query-anchor coverage; "
+                "weak/support matches cannot establish relevance"
+            ],
+            anchor_terms=anchor_terms,
+            matched_anchors=matched_anchors,
+            weak_matches=weak_matches,
+        )
 
-    if not matched:
-        return {
-            "verdict": IRRELEVANT,
-            "score": 0,
-            "reasons": ["candidate semantic metadata shares no substantive token with the query/subjects"],
-            "matchedEvidence": [],
-            "method": SEMANTIC_METHOD,
-        }
-
-    overlap_ratio = len(matched) / len(exp_tokens)
-    score = 60 + min(40, round(40 * overlap_ratio))
-    return {
-        "verdict": RELEVANT,
-        "score": score,
-        "reasons": [
-            "candidate semantic metadata shares substantive token(s) with the query/subjects"
-        ],
-        "matchedEvidence": matched,
-        "method": SEMANTIC_METHOD,
-    }
+    anchor_coverage = len(matched_anchors) / len(anchor_terms)
+    score = 60 + min(40, round(40 * anchor_coverage))
+    return _assessment(
+        verdict=RELEVANT,
+        score=score,
+        reasons=["candidate satisfies discriminative query-anchor coverage"],
+        anchor_terms=anchor_terms,
+        matched_anchors=matched_anchors,
+        weak_matches=weak_matches,
+    )
 
 
 def assess_candidate(expected: dict, native_candidate: dict) -> dict:

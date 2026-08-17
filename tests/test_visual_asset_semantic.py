@@ -28,7 +28,7 @@ def test_constants():
     assert RELEVANT == "RELEVANT"
     assert IRRELEVANT == "IRRELEVANT"
     assert UNSCORABLE == "UNSCORABLE"
-    assert SEMANTIC_METHOD == "deterministic_token_overlap_v1"
+    assert SEMANTIC_METHOD == "deterministic_anchor_coverage_v2"
 
 
 # ── Positive controls: truly relevant metadata scores RELEVANT ─────────────
@@ -87,47 +87,75 @@ def test_prism_relevant():
     assert result["verdict"] == RELEVANT
 
 
-# ── Regression negatives: unrelated evidence → IRRELEVANT ──────────────────
+# ── Replay regression: real Pixabay candidates from local cache ─────────────
+
+# These are the eleven selected Pixabay hits from
+# los-semantic-regression-20260817-200642.  Tags are copied verbatim from the
+# local Pixabay cache entries identified by each pixabayId.
+_REPLAY_FALSE_POSITIVES = (
+    ("7647805", "YouTube logo image",
+     "volkswagen, automobile, antique car, beetle, vw, car wallpapers, vw beetle, vehicle, dare, emblem, logo, vw logo, car, transport, traffic"),
+    ("7718193", "early YouTube interface screenshot",
+     "bellflower, campanula, bud, purple flower, grow, sprout, early spring, early bloomer, bud, bud, bud, bud, bud, sprout"),
+    ("6055943", "famous early YouTubers photo",
+     "plant, plum blossom, sunbeams, nature, early spring, japan"),
+    ("7487173", "early YouTube vlogs image",
+     "dawn, ocean, nature, sky, sunrise, sunset, landscape, early morning"),
+    ("7510927", "early YouTube tutorials image",
+     "city, buildings, sunrise, skyline, water, twilight, nature, cityscape, early morning, quiet"),
+    ("5059830", "viral YouTube video screenshot",
+     "online, meeting, virtual, skype, zoom, video, conference, videoconference, webinar, remote, working, work, from, home, computer, businesswoman, pointing, couch, laptop, blue computer, blue home, blue laptop, blue work, blue video, blue meeting, blue online, blue videos, blue zoom, blue conference, blue couch, video, webinar, webinar, webinar, webinar, webinar"),
+    ("2673038", "YouTube comments section screenshot",
+     "kiwi, fruit, half, cross section, seeds, kiwi seeds, green, fresh, ripe, organic, food, delicious, eat, healthy, cut out, close up, kiwi, kiwi, kiwi, kiwi, kiwi"),
+    ("5355845", "YouTube influencers popular culture image",
+     "cancel, social, company, culture, break up, pull back, support, media, crime, community, youtube, shame, resignation, video, influencer, movie star, cancel, cancel, cancel, cancel, cancel, youtube, youtube, shame, resignation, resignation, influencer"),
+    ("4685942", "future of YouTube screenshot",
+     "lyon, flower background, flower, pink, nature, flora, petal, purple, bokeh, flower wallpaper, beautiful flowers, screenshot"),
+    ("5527726", "current popular YouTubers photo",
+     "coastal, village, sea, cliffs, steep, tower house, colorful, nature, wharf, path, popular, tourist, destination"),
+    ("998990", "social media subscribe follow image",
+     "media, social media, apps, social network, facebook, symbols, digital, twitter, network, social networking, icon, communication, www, internet, networking, button, social, social media, social media, social media, social media, social media"),
+)
 
 
-def test_volkswagen_irrelevant_for_youtube_logo_image():
-    cand = to_semantic_candidate({
-        "provider": "wikimedia_commons",
-        "title": "Volkswagen Beetle parked on a street",
-        "description": "classic german car",
-    })
-    result = score_semantic_relevance(_expected("YouTube logo image"), cand)
+def test_cached_replay_candidates_require_query_anchor_coverage():
+    for pixabay_id, query, tags in _REPLAY_FALSE_POSITIVES:
+        result = assess_candidate(
+            _expected(query),
+            {"provider": "pixabay", "pixabayId": pixabay_id, "tags": tags},
+        )
+        assert result["verdict"] == IRRELEVANT, pixabay_id
+        assert result["score"] == 0, pixabay_id
+        assert result["anchorTerms"], pixabay_id
+        assert "anchorCoverage" in result
+        assert "weakMatches" in result
+
+
+def test_subjects_cannot_rescue_missing_query_anchor():
+    result = assess_candidate(
+        _expected(
+            "YouTube logo image",
+            ["YouTube logo", "pantalla de ordenador", "primeros videos"],
+        ),
+        {
+            "provider": "pixabay",
+            "pixabayId": "7647805",
+            "tags": _REPLAY_FALSE_POSITIVES[0][2],
+        },
+    )
     assert result["verdict"] == IRRELEVANT
-    assert result["score"] == 0
-    assert result["matchedEvidence"] == []
+    assert result["matchedAnchors"] == []
+    assert result["weakMatches"] == ["logo"]
 
 
-def test_kiwi_irrelevant_for_youtube_comments_screenshot():
-    cand = to_semantic_candidate({
-        "provider": "pixabay",
-        "tags": "kiwi, fruit, healthy, food",
-    })
-    result = score_semantic_relevance(_expected("YouTube comments section screenshot"), cand)
-    assert result["verdict"] == IRRELEVANT
-
-
-def test_flower_irrelevant_for_famous_early_youtubers():
-    cand = to_semantic_candidate({
-        "provider": "wikimedia_commons",
-        "title": "Pink plum blossom flowers",
-        "description": "garden flower petals in bloom",
-    })
-    result = score_semantic_relevance(_expected("famous early YouTubers photo"), cand)
-    assert result["verdict"] == IRRELEVANT
-
-
-def test_pride_irrelevant_for_rainbow_formation_illustration():
-    cand = to_semantic_candidate({
-        "provider": "pixabay",
-        "tags": "pride, flag, community, event",
-    })
-    result = score_semantic_relevance(_expected("rainbow formation illustration"), cand)
-    assert result["verdict"] == IRRELEVANT
+def test_subjects_cannot_replace_an_anchorless_query():
+    result = assess_candidate(
+        _expected("early screenshot", ["YouTube comments"]),
+        {"provider": "pixabay", "tags": "youtube, comments, screenshot"},
+    )
+    assert result["verdict"] == UNSCORABLE
+    assert result["anchorTerms"] == []
+    assert result["weakMatches"] == ["screenshot"]
 
 
 # ── UNSCORABLE: missing substantive evidence on either side ────────────────
