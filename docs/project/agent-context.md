@@ -8,7 +8,7 @@
 - TTS and visual providers are replaceable; Edge TTS is currently the default and Wikimedia/Pixabay are current visual providers.
 
 ## Verified State
-- `main` base: `05aef83` (generic-duration-fitting merged). `generic-tts-provider-runtime`: COMPLETED / VERIFIED / CLOSED on `change/generic-tts-provider-runtime`.
+- `main` base: `ebeb688` (generic-tts-provider-runtime merged/closed on main).
 - `modular-v2-migration`: closed. `AUDIO_DURATION_MISSING`: resolved. Host `ffprobe` remains absent; Docker fallback is used.
 - First complete technical E2E: `cmo-2026-08-16-172847`, through `VALIDATED`; request 30s, range 27-30, timeline 20.813s, MP4 approximately 20.88s.
 - Real E2E attempt `cmo-2026-08-16-184819` was blocked at script: a legacy bootstrap WPM hard gate rejected a V2-valid 67-word candidate (37.9s estimate) before TTS. The gate is now non-blocking; WPM remains bootstrap telemetry only.
@@ -21,4 +21,4 @@
 - Branch full suite after adaptive runtime hardening: `1213 passed, 51 skipped, 0 failed`. The skips were legacy bootstrap-compression convergence tests.
 - Canonical deep_60 E2E `cmo-2026-08-16-203059`: 60.37s MP4, 9 scenes (adaptive plan 9-11, prefer 10), 2 voiceover repairs, requested-duration PASS, `VALIDATED`. The failed 5-scene `cmo-2026-08-16-194540` stays as historical context for adaptive scene planning.
 - generic-duration-fitting: COMPLETED / VERIFIED / CLOSED. Obsolete bootstrap-compression tests retired (23 deleted, 28 unskipped); `resolvedConfig.scenePlan` is preserved from the request; the CLI `durationContractStatus` line now reports the persisted bootstrap contract. Full suite on close: `1243 passed, 0 skipped, 0 failed`.
-- generic-tts-provider-runtime: COMPLETED / VERIFIED / CLOSED on `change/generic-tts-provider-runtime`. Supporting docs: full suite `1306 passed, 0 failed, 0 skipped` (all implementation commits pre-dating a test-only isolation fix). `test_generate_with_timestamps_uses_selected_provider` writes its artifact into `tmp_path` (no repo-root `out.mp3`).
+- generic-tts-provider-runtime: COMPLETED / VERIFIED / CLOSED, merged into `main` at `ebeb688`. Supporting docs: full suite `1306 passed, 0 failed, 0 skipped` (all implementation commits pre-dating a test-only isolation fix). `test_generate_with_timestamps_uses_selected_provider` writes its artifact into `tmp_path` (no repo-root `out.mp3`).

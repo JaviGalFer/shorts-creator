@@ -12,17 +12,19 @@ fail explicitly from the registry error. Missing ElevenLabs credentials resolve
 to an unavailable provider and fail explicitly with no silent Edge fallback and
 no secret persistence.
 
-Continuous mode remains Edge-specific in Slice 1. At the `generate_audio()`
+Continuous mode remains Edge-specific in the final design. At the `generate_audio()`
 boundary, `continuous` with any non-Edge provider fails with
 `CONTINUOUS_TTS_PROVIDER_UNSUPPORTED` before any synthesis or metadata
 mutation, so no audio is ever generated with a provider different from the one
 requested.
 
-Timing metadata is corrected to reflect actual capability: Edge emits native
-word boundaries and reports `timing_support="word"`; ElevenLabs does not yet
-implement native timing and reports `timing_support="none"`. The canonical
+Timing metadata reflects actual capability: Edge emits native word boundaries
+and reports `timing_support="word"`. ElevenLabs implements native timing via
+the `/with-timestamps` endpoint and reports `timing_support="word"`; its
+`normalized_alignment`/`alignment` output is normalized into the canonical
 `timing_data["word_boundaries"]` (startSec/endSec/text) and
-`timing_data["timing_source"]` contract is unchanged.
+`timing_data["timing_source"]` contract. Both providers are validated per
+scene.
 
 `activeDurationSource` is renamed to the provider-neutral
 `subtitle_timing_last_cue_plus_guard`; the algorithm (last cue end plus
