@@ -46,6 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Subtitle timing provider (default: auto or env)",
     )
+    parser.add_argument(
+        "--asset-providers",
+        default=None,
+        help="Comma-separated visual source providers to restrict to, in priority "
+             "order (e.g. wikimedia_commons,pixabay). Omitted -> default fallback.",
+    )
     return parser
 
 
@@ -68,6 +74,7 @@ def main() -> int:
         tts_provider=args.tts_provider,
         voice=args.voice,
         subtitle_timing_provider=args.subtitle_timing_provider,
+        asset_providers=args.asset_providers,
     )
 
 

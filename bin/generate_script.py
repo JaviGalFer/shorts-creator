@@ -25,6 +25,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--model", help="LLM model override")
     parser.add_argument(
+        "--asset-providers",
+        default=None,
+        help="Comma-separated list of visual source providers to restrict to, "
+             "in priority order (e.g. wikimedia_commons,pixabay). Omitted -> default fallback.",
+    )
+    parser.add_argument(
         "--tts-provider",
         choices=["edge_tts", "elevenlabs"],
         default=None,
@@ -59,7 +65,15 @@ def main() -> int:
         tts_provider=args.tts_provider,
         voice=args.voice,
         subtitle_timing_provider=args.subtitle_timing_provider,
+        source_providers=_parse_source_providers(args.asset_providers),
     )
+
+
+def _parse_source_providers(raw: str | None) -> list[str] | None:
+    if raw is None:
+        return None
+    items = [p.strip().lower() for p in raw.split(",") if p.strip()]
+    return items or None
 
 
 if __name__ == "__main__":

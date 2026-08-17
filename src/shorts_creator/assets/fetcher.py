@@ -191,6 +191,7 @@ def _process_scene(
     excluded_file_urls: set[str] | None = None,
     wikimedia_cache: dict[str, list] | None = None,
     provider_credentials: dict | None = None,
+    request_visuals: dict | None = None,
 ) -> dict:
     from shorts_creator.assets.executor import execute_visual_sourcing_plan_v2
     from shorts_creator.assets.router import build_visual_sourcing_plan_v2
@@ -233,7 +234,9 @@ def _process_scene(
     canonical_plan = canon_result["canonicalPlan"]
 
     # Step b: route
-    route_result = build_visual_sourcing_plan_v2(canonical_plan)
+    route_result = build_visual_sourcing_plan_v2(
+        canonical_plan, request_visuals=request_visuals
+    )
     if not route_result.get("ok") or route_result.get("sourcingPlan") is None:
         diag = route_result.get("diagnostics", {})
         errors = diag.get("errors", [])
@@ -342,6 +345,10 @@ def fetch_assets(
     # 2. Find v2 scenes
     v2_entries = _find_v2_scenes(metadata)
 
+    request_visuals = metadata.get("request", {}).get("visuals")
+    if not isinstance(request_visuals, dict):
+        request_visuals = None
+
     # 3. No v2 plans → ASSET_FAILED
     if not v2_entries:
         metadata["status"] = "ASSET_FAILED"
@@ -438,6 +445,7 @@ def fetch_assets(
             excluded_file_urls=excluded_file_urls,
             wikimedia_cache=wikimedia_cache,
             provider_credentials=provider_credentials,
+            request_visuals=request_visuals,
         )
         combined_resolved.extend(result["resolved"])
         combined_unresolved.extend(result["unresolved"])

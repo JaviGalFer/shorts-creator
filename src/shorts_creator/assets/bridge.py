@@ -138,6 +138,7 @@ def _map_resolved_asset(
         "scoreReasons": list(asset.get("scoreReasons", []) or []),
         "queryUsed": asset.get("searchQueryUsed", ""),
         "generationPromptUsed": asset.get("generationPromptUsed"),
+        "semanticAssessment": asset.get("semanticAssessment"),
         "durationFraction": vs_entry.get("durationFraction", 1.0),
         "transition": vs_entry.get("transition", "cut"),
     }

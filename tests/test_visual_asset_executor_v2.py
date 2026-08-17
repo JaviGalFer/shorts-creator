@@ -30,6 +30,19 @@ from shorts_creator.assets.executor import (
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 
+def _semantic_relevant():
+    """Contract-conforming semantic assessment for a search-strategy RESOLVED result."""
+    return {
+        "verdict": "RELEVANT",
+        "score": 100,
+        "reasons": [
+            "candidate semantic metadata shares substantive token(s) with the query/subjects"
+        ],
+        "matchedEvidence": ["test"],
+        "method": "deterministic_token_overlap_v1",
+    }
+
+
 def _default_provider_config(**overrides) -> dict:
     cfg = {
         "wikimedia_commons": {
@@ -1748,6 +1761,7 @@ class TestMultiProviderFailover:
                 "license": "CC", "author": "A",
                 "mimeType": "image/jpeg", "width": 800, "height": 800,
                 "searchQueryUsed": "test", "generationPromptUsed": None,
+                "semanticAssessment": _semantic_relevant(),
             },
         ), patch(
             "shorts_creator.assets.executor._resolve_pixabay", wraps=mock_pixabay,
@@ -1782,6 +1796,7 @@ class TestMultiProviderFailover:
                 "license": "Pixabay Content License", "author": "Test",
                 "mimeType": "image/jpeg", "width": 1280, "height": 720,
                 "searchQueryUsed": "test", "generationPromptUsed": None,
+                "semanticAssessment": _semantic_relevant(),
             },
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1819,6 +1834,7 @@ class TestMultiProviderFailover:
                 "license": "Pixabay Content License", "author": "Test",
                 "mimeType": "image/jpeg", "width": 1280, "height": 720,
                 "searchQueryUsed": "test", "generationPromptUsed": None,
+                "semanticAssessment": _semantic_relevant(),
             },
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1848,6 +1864,7 @@ class TestMultiProviderFailover:
                 "license": "Pixabay Content License", "author": "Test",
                 "mimeType": "image/jpeg", "width": 1280, "height": 720,
                 "searchQueryUsed": "test", "generationPromptUsed": None,
+                "semanticAssessment": _semantic_relevant(),
             },
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1899,6 +1916,7 @@ class TestMultiProviderFailover:
                 "license": "CC", "author": "A",
                 "mimeType": "image/jpeg", "width": 800, "height": 800,
                 "searchQueryUsed": "test", "generationPromptUsed": None,
+                "semanticAssessment": _semantic_relevant(),
             },
         ):
             config_no_pixabay_key = {
@@ -1938,6 +1956,7 @@ class TestMultiProviderFailover:
                 "license": "Pixabay", "author": "T",
                 "mimeType": "image/jpeg", "width": 900, "height": 900,
                 "searchQueryUsed": "test", "generationPromptUsed": None,
+                "semanticAssessment": _semantic_relevant(),
             },
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -1968,6 +1987,7 @@ class TestMultiProviderFailover:
                 "license": "Pixabay", "author": "T",
                 "mimeType": "image/jpeg", "width": 900, "height": 900,
                 "searchQueryUsed": "test", "generationPromptUsed": None,
+                "semanticAssessment": _semantic_relevant(),
             },
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -2023,6 +2043,7 @@ class TestMultiProviderFailover:
                 "license": "CC", "author": "A",
                 "mimeType": "image/jpeg", "width": 800, "height": 800,
                 "searchQueryUsed": "test", "generationPromptUsed": None,
+                "semanticAssessment": _semantic_relevant(),
             },
         ):
             result = execute_visual_sourcing_plan_v2(
@@ -2031,3 +2052,200 @@ class TestMultiProviderFailover:
             )
         assert len(result["resolvedAssets"]) == 1
         assert result["resolvedAssets"][0]["provider"] == "wikimedia_commons"
+
+
+# ── Semantic relevance gate (asset-semantic-relevance, Slice 1) ─────────────
+
+
+class TestSemanticGate:
+    """The semantic gate runs after real provider search, before download."""
+
+    def _live_wikimedia_config(self):
+        return {
+            "wikimedia_commons": {
+                "enabled": True, "implemented": True,
+                "requiresApiKey": False, "live": True,
+            },
+        }
+
+    def _download_ok(self):
+        return {"ok": True, "path": "/tmp/job/assets/seg_001.jpg",
+                "size": 50000, "mimeType": "image/jpeg", "error": None}
+
+    def _segment(self, query="test query"):
+        return {
+            "segmentIndex": 1,
+            "assetPreference": "painting",
+            "searchQueries": [{"text": query, "source": "segment.searchQuery"}],
+            "generationPrompts": [],
+            "providerCandidates": [
+                {
+                    "provider": "wikimedia_commons",
+                    "priority": 1,
+                    "queryStrategy": "search",
+                    "candidateStatus": "included",
+                    "availability": "available",
+                    "requiresApiKey": False,
+                    "supportStrength": "medium",
+                    "reason": "painting — medium support",
+                    "exclusionReason": None,
+                    "warnings": [],
+                },
+            ],
+            "excludedProviders": [],
+            "routingStatus": "ROUTABLE_WITH_WARNINGS",
+            "warnings": [],
+            "unsupportedReasons": [],
+        }
+
+    def _sourcing_plan(self, segments):
+        return {
+            "schemaVersion": 1,
+            "segments": segments,
+            "summary": {
+                "totalSegments": len(segments),
+                "routable": 0,
+                "routableWithWarnings": len(segments),
+                "unroutable": 0,
+            },
+        }
+
+    def _candidate(self, title, description="", tags="", file_name="File.jpg"):
+        return {
+            "provider": "wikimedia_commons",
+            "title": title,
+            "description": description,
+            "tags": tags,
+            "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/a/ab/File.jpg",
+            "fileUrl": f"https://upload.wikimedia.org/wikipedia/commons/a/ab/{file_name}",
+            "thumbnailUrl": "",
+            "license": "Public Domain",
+            "author": "Test Author",
+            "width": 1200,
+            "height": 800,
+            "mimeType": "image/jpeg",
+            "queryUsed": "test query",
+            "score": 0.0,
+        }
+
+    def test_relevant_candidate_resolves_with_assessment(self, tmp_path):
+        plan = self._sourcing_plan([self._segment()])
+        with patch(
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
+            return_value=self._candidate("Test painting of a test", description="test scene"),
+        ), patch(
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
+            return_value=self._download_ok(),
+        ):
+            result = execute_visual_sourcing_plan_v2(
+                plan, self._live_wikimedia_config(),
+                dry_run=False, job_dir=str(tmp_path),
+            )
+        assert result["ok"] is True
+        assert len(result["resolvedAssets"]) == 1
+        ra = result["resolvedAssets"][0]
+        assert ra["status"] == "RESOLVED"
+        sem = ra["semanticAssessment"]
+        assert sem is not None
+        assert sem["verdict"] == "RELEVANT"
+        assert "test" in sem["matchedEvidence"]
+
+    def test_irrelevant_candidate_skipped_no_results(self, tmp_path):
+        plan = self._sourcing_plan([self._segment()])
+        with patch(
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
+            return_value=self._candidate("Volkswagen Beetle classic car", description="car"),
+        ):
+            result = execute_visual_sourcing_plan_v2(
+                plan, self._live_wikimedia_config(),
+                dry_run=False, job_dir=str(tmp_path),
+            )
+        assert len(result["resolvedAssets"]) == 0
+        assert len(result["unresolvedSegments"]) == 1
+        us = result["unresolvedSegments"][0]
+        assert us["status"] == "NO_RESULTS"
+        rej = us.get("semanticRejections") or []
+        assert rej
+        assert all(r["verdict"] == "IRRELEVANT" for r in rej)
+
+    def test_unscorable_candidate_skipped_no_results(self, tmp_path):
+        plan = self._sourcing_plan([self._segment()])
+        with patch(
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
+            return_value=self._candidate("Image", description=""),
+        ):
+            result = execute_visual_sourcing_plan_v2(
+                plan, self._live_wikimedia_config(),
+                dry_run=False, job_dir=str(tmp_path),
+            )
+        assert len(result["resolvedAssets"]) == 0
+        assert len(result["unresolvedSegments"]) == 1
+        us = result["unresolvedSegments"][0]
+        assert us["status"] == "NO_RESULTS"
+        rej = us.get("semanticRejections") or []
+        assert rej
+        assert all(r["verdict"] == "UNSCORABLE" for r in rej)
+
+    def test_irrelevant_then_relevant_candidate_falls_through(self, tmp_path):
+        plan = self._sourcing_plan([self._segment()])
+        calls = [0]
+
+        def mock_resolve(queries, user_agent=None, excluded_source_urls=None,
+                         excluded_file_urls=None, cache=None):
+            calls[0] += 1
+            if calls[0] == 1:
+                return self._candidate("Volkswagen Beetle", description="car")
+            if calls[0] == 2:
+                return self._candidate("Test painting", description="test")
+            return None
+
+        with patch(
+            "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
+            side_effect=mock_resolve,
+        ), patch(
+            "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
+            return_value=self._download_ok(),
+        ):
+            result = execute_visual_sourcing_plan_v2(
+                plan, self._live_wikimedia_config(),
+                dry_run=False, job_dir=str(tmp_path),
+            )
+        assert len(result["resolvedAssets"]) == 1
+        ra = result["resolvedAssets"][0]
+        assert ra["status"] == "RESOLVED"
+        assert ra["semanticAssessment"]["verdict"] == "RELEVANT"
+        assert calls[0] >= 2
+        assert len(result["unresolvedSegments"]) == 0
+
+    def test_postcondition_rejects_search_resolved_without_relevant(self, tmp_path):
+        """A search-strategy RESOLVED without a RELEVANT assessment never resolves."""
+        plan = self._sourcing_plan([self._segment()])
+        with patch(
+            "shorts_creator.assets.executor._resolve_wikimedia",
+            return_value={
+                "segmentIndex": 1, "assetPreference": "painting",
+                "status": "RESOLVED", "provider": "wikimedia_commons",
+                "assetPath": "assets/seg_001.jpg", "fileSize": 50000,
+                "sourceUrl": "", "fileUrl": "",
+                "license": "Public Domain", "author": "A",
+                "mimeType": "image/jpeg", "width": 800, "height": 800,
+                "searchQueryUsed": "test", "generationPromptUsed": None,
+                "semanticAssessment": {
+                    "verdict": "IRRELEVANT", "score": 0,
+                    "reasons": ["no shared token"],
+                    "matchedEvidence": [],
+                    "method": "deterministic_token_overlap_v1",
+                },
+            },
+        ):
+            result = execute_visual_sourcing_plan_v2(
+                plan, self._live_wikimedia_config(),
+                dry_run=False, job_dir=str(tmp_path),
+            )
+        assert len(result["resolvedAssets"]) == 0
+        assert len(result["unresolvedSegments"]) == 1
+        us = result["unresolvedSegments"][0]
+        assert us["status"] == "PROVIDER_ERROR"
+        assert "SEMANTIC POSTCONDITION" in us["reason"]
+        codes = [w["code"] for w in result["diagnostics"]["warnings"]]
+        assert any("SEMANTIC_POSTCONDITION" in c for c in codes)
