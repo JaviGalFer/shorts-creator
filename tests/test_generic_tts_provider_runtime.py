@@ -84,17 +84,19 @@ class TestProviderSelection:
         assert mock_gp.call_args.args[0] == "elevenlabs"
         assert mock_gp.call_args.kwargs.get("voice") == "es-ES-AlvaroNeural"
 
-    def test_generate_with_timestamps_uses_selected_provider(self):
+    def test_generate_with_timestamps_uses_selected_provider(self, tmp_path):
+        out_path = tmp_path / "out.mp3"
         with patch("shorts_creator.audio.generator.get_provider") as mock_gp:
             mock_provider = MagicMock()
             mock_provider.synthesize_with_timing_async = _edge_synth
             mock_gp.return_value = mock_provider
             asyncio.run(
                 generator.generate_audio_with_timestamps(
-                    "Hola mundo.", "out.mp3", "es-ES-ElviraNeural",
+                    "Hola mundo.", str(out_path), "es-ES-ElviraNeural",
                     tts_provider="elevenlabs",
                 )
             )
+        assert out_path.exists()
         assert mock_gp.call_args.args[0] == "elevenlabs"
         assert mock_gp.call_args.kwargs.get("voice") == "es-ES-ElviraNeural"
 
