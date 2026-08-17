@@ -336,8 +336,12 @@ class ElevenLabsProvider(TTSProvider):
         audio_b64 = body.get("audio_base64") if isinstance(body, dict) else None
         if not audio_b64:
             raise RuntimeError("ElevenLabs timed synthesis: missing audio_base64")
+        try:
+            audio_bytes = base64.b64decode(audio_b64, validate=True)
+        except Exception as exc:
+            raise RuntimeError("ElevenLabs timed synthesis: invalid audio_base64") from exc
         with open(output_path, "wb") as f:
-            f.write(base64.b64decode(audio_b64))
+            f.write(audio_bytes)
         result = _measure_audio(output_path, "elevenlabs", voice)
 
         normalized = body.get("normalized_alignment") if isinstance(body, dict) else None
@@ -367,6 +371,8 @@ def _is_valid_alignment(alignment) -> bool:
     if not (isinstance(chars, list) and isinstance(starts, list) and isinstance(ends, list)):
         return False
     if not (len(chars) == len(starts) == len(ends)):
+        return False
+    if not all(isinstance(c, str) for c in chars):
         return False
     prev_start = -1.0
     prev_end = -1.0

@@ -956,9 +956,11 @@ def estimate_words_from_text(text: str, sentence_start: float, sentence_end: flo
 async def generate_audio_with_timestamps(text: str, output_path: Path, voice: str = "es-ES-AlvaroNeural",
                                          scene_timings_for_words: list[dict] | None = None,
                                          narration_units: list[dict] | None = None,
-                                         *,
-                                         tts_provider: str = "edge_tts"):
-    provider = get_provider(tts_provider, voice=voice)
+*,
+                                             tts_provider: str = "edge_tts",
+                                             provider_kwargs: dict | None = None):
+    provider_kwargs = provider_kwargs or {}
+    provider = get_provider(tts_provider, voice=voice, **provider_kwargs)
     options = TTSOptions(voice=voice)
 
     try:
@@ -1396,6 +1398,7 @@ async def main_per_scene(
     force_regenerate: bool = False,
     tts_provider: str = "edge_tts",
     subtitle_timing_provider: str = "auto",
+    provider_kwargs: dict | None = None,
 ) -> int:
     data = load_metadata(str(metadata_path))
     job_id = data["jobId"]
@@ -1429,7 +1432,8 @@ async def main_per_scene(
             continue
 
         cues, source, confidence, _, _ = await generate_audio_with_timestamps(
-            text, dest, voice, tts_provider=tts_provider
+            text, dest, voice, tts_provider=tts_provider,
+            provider_kwargs=provider_kwargs or {},
         )
 
         if cues and source:
@@ -1553,16 +1557,57 @@ async def main_per_scene(
     return exit_code
 
 
+def _read_runtime_env(key: str, default=None) -> str | None:
+    """Resolve project .env first, then process environment."""
+    value = _ENV.get(key)
+    if value is not None and value != "":
+        return value
+    value = os.environ.get(key, default)
+    return value
+
+
 def get_audio_defaults() -> dict[str, str]:
     """Return environment-derived defaults used by the CLI adapter."""
     return {
-        "voice": _ENV.get("TTS_VOICE", "es-ES-AlvaroNeural"),
-        "tts_provider": _ENV.get("TTS_PROVIDER", "edge_tts"),
+        "voice": _read_runtime_env("TTS_VOICE", "es-ES-AlvaroNeural"),
+        "tts_provider": _read_runtime_env("TTS_PROVIDER", "edge_tts"),
         "subtitle_timing_provider": (
-            _ENV.get("SUBTITLE_TIMING_PROVIDER")
-            or _ENV.get("SUBTITLE_PROVIDER", "auto")
+            _read_runtime_env("SUBTITLE_TIMING_PROVIDER")
+            or _read_runtime_env("SUBTITLE_PROVIDER", "auto")
         ),
     }
+
+
+def resolve_effective_voice(tts_provider: str, voice: str | None) -> str | None:
+    """Resolve the effective voice for a provider, honoring explicit CLI voice.
+
+    Explicit voice always wins. Otherwise provider-specific voice preferences
+    win over the implicit Edge default voice.
+    """
+    if voice:
+        return voice
+    if tts_provider == "elevenlabs":
+        return _read_runtime_env("ELEVENLABS_VOICE_ID", None)
+    return _read_runtime_env("TTS_VOICE", "es-ES-AlvaroNeural")
+
+
+def resolve_provider_runtime_kwargs(tts_provider: str) -> dict:
+    """Provider-specific secrets/model from project .env then process env.
+
+    Bounded to provider-specific runtime configuration; never includes the
+    voice (which flows through the explicit voice argument) and never the
+    API key's value into metadata.
+    """
+    if tts_provider != "elevenlabs":
+        return {}
+    kwargs = {}
+    api_key = _read_runtime_env("ELEVENLABS_API_KEY")
+    if api_key:
+        kwargs["api_key"] = api_key
+    model_id = _read_runtime_env("ELEVENLABS_MODEL_ID")
+    if model_id:
+        kwargs["model_id"] = model_id
+    return kwargs
 
 
 def resolve_audio_regeneration_config(metadata: dict) -> dict[str, str]:
@@ -1582,9 +1627,9 @@ def resolve_audio_regeneration_config(metadata: dict) -> dict[str, str]:
 async def generate_audio(
     *,
     metadata_path: str | Path,
-    voice: str,
-    tts_provider: str,
-    subtitle_timing_provider: str,
+    voice: str | None = None,
+    tts_provider: str = "edge_tts",
+    subtitle_timing_provider: str = "auto",
     continuous: bool = False,
     join_style: str = "period",
     force_regenerate: bool = False,
@@ -1592,8 +1637,11 @@ async def generate_audio(
     """Generate audio artifacts and update metadata for one job."""
     resolved_metadata_path = Path(metadata_path).resolve()
 
+    effective_voice = resolve_effective_voice(tts_provider, voice)
+    provider_kwargs = resolve_provider_runtime_kwargs(tts_provider)
+
     try:
-        provider = get_provider(tts_provider, voice=voice)
+        provider = get_provider(tts_provider, voice=effective_voice, **provider_kwargs)
     except ValueError as exc:
         print(f"ERROR: {exc}")
         return 1
@@ -1611,11 +1659,12 @@ async def generate_audio(
     if continuous:
         return await main_continuous(
             resolved_metadata_path,
-            voice,
+            effective_voice,
             join_style=join_style,
             subtitle_provider=subtitle_timing_provider,
         )
     return await main_per_scene(
-        resolved_metadata_path, voice, force_regenerate=force_regenerate,
+        resolved_metadata_path, effective_voice, force_regenerate=force_regenerate,
         tts_provider=tts_provider, subtitle_timing_provider=subtitle_timing_provider,
+        provider_kwargs=provider_kwargs,
     )

@@ -15,7 +15,7 @@ def build_parser() -> argparse.ArgumentParser:
     defaults = generator.get_audio_defaults()
     parser = argparse.ArgumentParser()
     parser.add_argument("metadata_path")
-    parser.add_argument("--voice", default=defaults["voice"])
+    parser.add_argument("--voice", default=None)
     parser.add_argument(
         "--tts-provider",
         default=defaults["tts_provider"],
