@@ -49,30 +49,38 @@ Adaptadores (registrados en `PROVIDER_ADAPTERS`; el scorer no conoce providers):
 - `pixabay`: `tags` (string separado por comas) → `tags` list.
 - genérico: lee campos genéricos cuando existan (`title`, `description`, `tags`, `labels`, `keywords`, `categories`, `assetType`/`imageType`/`mimeType`).
 
-## Scorer determinista
+## Scorer determinista v2 (anchor-aware)
 
-Función pura `score_semantic_relevance(expected, candidate)`.
+Función pura `score_semantic_relevance(expected, candidate)` / `assess_candidate(expected, native_candidate)`.
 
-- `expected = {"query": queryUsed, "subjects": [...]}`
+- `expected = {"query": queryUsed, "subjects": [...]}` — `queryUsed` es la intención primaria.
 - `candidate` = contrato semántico normalizado.
 - Tokenización: minúsculas, alfanuméricos, longitud >= 3, excluyendo relleno genérico (`image`, `photo`, `stock`, ...).
 - Evidencia del candidato = `title ∪ description ∪ tags ∪ labels` (excluye `assetType` y `queryUsed`).
 
-Regla conservadora (justificada por fixtures):
+Clasificación de términos del query:
+
+- **Anchors discriminativos** = términos del query que no están en `WEAK_SUPPORT_TERMS` (p. ej. `youtube`, `comments`, `youtubers`, `rainbow`).
+- **Términos débiles/soporte** (`WEAK_SUPPORT_TERMS`) = temporales/de popularidad/presentación/contexto de plataforma (`early`, `famous`, `future`, `popular`, `viral`, `logo`, `screenshot`, `section`, `media`, `social`, `video`, `culture`, ...). Son visibles en `weakMatches` para diagnóstico pero NUNCA establecen relevancia.
+
+Regla conservadora (justificada por fixtures del replay real):
 
 | Caso | Condición | Verdict |
 |------|-----------|---------|
 | Sin tokens sustantivos en evidencia del candidato | metadata ausente o solo relleno | `UNSCORABLE` |
-| Sin tokens sustantivos en expected | consulta+subjects vacíos/genéricos | `UNSCORABLE` |
-| Sin token sustantivo compartido | evidencia presente, 0 overlap | `IRRELEVANT` |
-| ≥ 1 token sustantivo compartido | overlap → provee discriminant | `RELEVANT` |
+| Sin anchors en el query | query sin términos discriminativos | `UNSCORABLE` |
+| Cobertura de anchors insuficiente | `|matched_anchors| < required` | `IRRELEVANT` |
+| Cobertura de anchors suficiente | `required` = 1 (anchor único) o `max(2, ceil(n/2))` (múltiples) | `RELEVANT` |
+
+- Los `subjects` de la escena NO forman parte de la decisión de relevancia: describen la escena pero no rescatan un query sin anchor.
+- Los `weakMatches` por sí solos nunca producen `RELEVANT` (los falsos positivos del replay eran matchs débiles: `logo`, `early`, `section`, `screenshot`, `popular`).
 
 Score:
-- `RELEVANT`: `60 + min(40, round(40 * overlap_ratio))` con `overlap_ratio = |shared_substantive| / |expected_substantive|` → rango 60–100.
-- `IRRELEVANT`: `0`.
-- `UNSCORABLE`: `None`.
+- `RELEVANT`: `60 + min(40, round(40 * anchor_coverage))` con `anchor_coverage = |matched_anchors| / |anchor_terms|` → rango 60–100.
+- `IRRELEVANT`: `0`. `UNSCORABLE`: `None`.
 
-`method = "deterministic_token_overlap_v1"`. `matchedEvidence` = tokens sustantivos compartidos ordenados. `reasons` = lista legible.
+`method = "deterministic_anchor_coverage_v2"`. Diagnóstico persistido en el assessment:
+`anchorTerms`, `matchedAnchors`, `weakMatches`, `anchorCoverage`, `matchedEvidence` (= anchors), `reasons`.
 
 ## Gate en executor
 
@@ -89,7 +97,15 @@ download(...)
 if ok: resolved["semanticAssessment"] = semantic
 ```
 
-Cuando se agotan todos los candidatos rechazados semánticamente → `NO_RESULTS` con razón que menciona rechazo semántico (preferir unresolved sobre irrelevante).
+Cuando se agotan todos los candidatos rechazados semánticamente → `NO_RESULTS` con `semanticRejections` (preferir unresolved sobre irrelevante).
+
+### Postcondición de resolución (search-strategy)
+
+Posteriormente a los gates por provider, el executor aplica un invariante genérico en el punto de recolección (`_search_semantic_ok(resolved, strategy)`):
+
+- Estrategia `search` → el resultado `RESOLVED` DEBE llevar `semanticAssessment.verdict == RELEVANT`; si no, NUNCA entra en `resolvedAssets` (downgrade a `PROVIDER_ERROR` + warning `SEMANTIC_POSTCONDITION:RESOLVED`).
+- Estrategia `generation` (prompt) → se permite sin assessment token-overlap.
+- No hay ramas por nombre de provider; decide únicamente `queryStrategy` del candidato.
 
 ## Política de fuentes
 
@@ -104,6 +120,10 @@ else:
 ```
 
 `_apply_source_policy`: mantiene solo providers en la lista, los ordena por posición de la lista, renumera `priority`, y añade a `excludedProviders` con razón `"not in explicit source policy"`. Si la lista deja 0 candidatos → `routingStatus = UNROUTABLE`.
+
+### Superficie CLI para sourceProviders
+
+`bin/run_job.py --asset-providers wikimedia_commons,pixabay` → `orchestrator.run_pipeline(asset_providers=...)` → `build_script_command` añade `--asset-providers` → `bin/generate_script.py` divide en lista y llama a `generate_script(source_providers=...)`, que persiste `request.visuals.sourceProviders` en orden. `fetch_images_v2.py` lee `metadata["request"]["visuals"]` y lo pasa al router. Omitido → sin campo → fallback por defecto. Sin variables de entorno nuevas, sin providers nuevos.
 
 ## Router: subjects en segmento
 
@@ -125,3 +145,6 @@ Ningún cambio introduce secretos. `provider_credentials` sigue sin copiarse al 
 4. Bridge: propagar `semanticAssessment`.
 5. Fetcher: encaminar `request.visuals` al router.
 6. Tests focales + suite completa.
+7. CLI `--asset-providers` → `request.visuals.sourceProviders` (run_job → orquestador → generate_script).
+8. Postcondición `_search_semantic_ok` en recolector del executor.
+9. Hardening scorer v2 (anchor-coverage) con fixtures del replay real + suite completa `1345 passed`.

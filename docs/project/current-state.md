@@ -32,8 +32,20 @@
 - Estado final soportado: Edge per-scene y continuo VALIDADO (default); ElevenLabs per-scene VALIDADO (smoke + E2E real), continuo NO compatible, no es el default.
 - `generic-tts-provider-runtime`: COMPLETED / VERIFIED / CLOSED.
 
+## Change cerrado: `asset-semantic-relevance`
+
+- Slice 1 completado: el router soporta `request.visuals.sourceProviders` (lista explícita de providers con orden preservado; omitida → fallback por defecto de la matriz; lista que deja 0 candidatos → `UNROUTABLE`). Superficie CLI: `bin/run_job.py --asset-providers wikimedia_commons,pixabay` → persistido en `request.visuals.sourceProviders` por la etapa script y encaminado al router por `fetch_images_v2.py`. Sin env vars nuevas ni providers nuevos.
+- Contrato semántico genérico: `src/shorts_creator/assets/semantic.py` normaliza metadata nativa de provider (adaptadores Wikimedia/Pixabay) a un contrato común; el scorer es puro, determinista y sin ramas de provider.
+- Gate semántico en executor: tras la búsqueda y ANTES de la descarga, en `_resolve_wikimedia` y `_resolve_pixabay`; `IRRELEVANT`/`UNSCORABLE` → skip candidato → next candidato/consulta/provider → `NO_RESULTS` con `semanticRejections` si se agota. Preferir unresolved sobre irrelevante.
+- Postcondición genérica: un `RESOLVED` de provider search-strategy sin `semanticAssessment.verdict == RELEVANT` NUNCA entra en `resolvedAssets` (`PROVIDER_ERROR` + warning `SEMANTIC_POSTCONDITION:RESOLVED`). Se decide por `queryStrategy`, sin ramas por nombre de provider.
+- Hardening v2 del scorer: `deterministic_anchor_coverage_v2` reemplaza a `token_overlap_v1`. `queryUsed` es la intención primaria; los términos del query se clasifican en anchors discriminativos vs `WEAK_SUPPORT_TERMS` (early/famous/future/popular/viral/logo/screenshot/section/media/social/video/...). Los weak por sí solos nunca producen `RELEVANT`; con múltiples anchors se exige cobertura significativa (≥ mitad, mínimo 2); los `subjects` de la escena no rescatan la falta de anchor. Diagnóstico persistido: `anchorTerms`, `matchedAnchors`, `weakMatches`, `anchorCoverage`.
+- Replay real `los-semantic-v2-20260817-203235` sobre `los-2026-08-16-230341`: antes V1 resolvía 11/11 con assets severamente irrelevantes (Volkswagen, campanula/plum blossom, kiwi, flower/screenshot, coast); con V2 quedan **3 resuelto / 8 fallido, `ASSETS_PARTIAL`**. Los 3 aceptados son relevantes a YouTube (shorts, icon app mobile, iphone smartphone). Los falsos positivos obvios quedan rechazados.
+- `asset-semantic-relevance`: COMPLETED / VERIFIED / CLOSED.
+
 ## Baseline y límites
 - Baseline estable conocida en main: **`1215 passed, 0 failed`**. Suite completa de la rama activa tras presets/status: **`1198 passed, 51 skipped, 0 failed`**.
 - `AUDIO_DURATION_MISSING` está resuelto. `ffprobe` no está en host y depende del fallback Docker.
 - `generic-duration-fitting`: COMPLETED / VERIFIED / CLOSED. quick_30 `cmo-2026-08-16-194012`: VALIDATED. deep_60 `cmo-2026-08-16-203059`: VALIDATED (60.37s, 9 escenas). Suite completa al cierre: **`1243 passed, 0 skipped, 0 failed`**.
 - `generic-tts-provider-runtime`: COMPLETED / VERIFIED / CLOSED. Smoke real `ELEVENLABS_REAL_SMOKE_OK`; E2E ElevenLabs `cmo-2026-08-17-145309`: VALIDATED (28.20s). Suite completa al cierre: **`1306 passed, 0 skipped, 0 failed`**.
+- `asset-semantic-relevance`: COMPLETED / VERIFIED / CLOSED. Replay real v2 `los-semantic-v2-20260817-203235`: **3 resuelto / 8 fallido, `ASSETS_PARTIAL`** (V1 era 11/11 irrelevante). Suite completa al cierre: **`1345 passed, 0 skipped, 0 failed`**.
+- Limitación conocida del gate semántico: relevancia gruesa (tema/entidad), no fidelidad temporal/editorial/de contenido de imagen. Siguiente prioridad: especificidad de script + VisualPlan/query. Detección de near-duplicates visuales: trabajo futuro.
