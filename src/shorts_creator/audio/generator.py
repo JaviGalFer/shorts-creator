@@ -955,14 +955,16 @@ def estimate_words_from_text(text: str, sentence_start: float, sentence_end: flo
 
 async def generate_audio_with_timestamps(text: str, output_path: Path, voice: str = "es-ES-AlvaroNeural",
                                          scene_timings_for_words: list[dict] | None = None,
-                                         narration_units: list[dict] | None = None):
-    provider = get_provider("edge_tts", voice=voice)
+                                         narration_units: list[dict] | None = None,
+                                         *,
+                                         tts_provider: str = "edge_tts"):
+    provider = get_provider(tts_provider, voice=voice)
     options = TTSOptions(voice=voice)
 
     try:
         result = await provider.synthesize_with_timing_async(text, str(output_path), options)
     except ImportError:
-        print("ERROR: edge-tts not installed. Run: pip install edge-tts")
+        print(f"ERROR: {tts_provider} not installed.")
         return None, None, None, [], {}
 
     td = result.timing_data or {}
@@ -1426,7 +1428,9 @@ async def main_per_scene(
             results.append({"sceneNumber": scene_num, "success": True, "timing": subtitle_timing})
             continue
 
-        cues, source, confidence, _, _ = await generate_audio_with_timestamps(text, dest, voice)
+        cues, source, confidence, _, _ = await generate_audio_with_timestamps(
+            text, dest, voice, tts_provider=tts_provider
+        )
 
         if cues and source:
             subtitle_timing = {
@@ -1503,7 +1507,7 @@ async def main_per_scene(
             active = _compute_active_audio_duration(sd, physical)
             if active is not None:
                 entry["activeAudioDurationSec"] = active
-                entry["activeDurationSource"] = "edge_tts_last_cue_plus_guard"
+                entry["activeDurationSource"] = "subtitle_timing_last_cue_plus_guard"
             else:
                 entry["activeAudioDurationSec"] = None
         else:
@@ -1588,11 +1592,21 @@ async def generate_audio(
     """Generate audio artifacts and update metadata for one job."""
     resolved_metadata_path = Path(metadata_path).resolve()
 
-    if tts_provider != "edge_tts":
+    try:
         provider = get_provider(tts_provider, voice=voice)
-        if not provider.is_available():
-            print(f"ERROR: TTS provider '{tts_provider}' is not available")
-            return 1
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 1
+    if not provider.is_available():
+        print(f"ERROR: TTS provider '{tts_provider}' is not available")
+        return 1
+
+    if continuous and tts_provider != "edge_tts":
+        print(
+            f"ERROR: continuous mode only supports edge_tts; "
+            f"got '{tts_provider}'. CONTINUOUS_TTS_PROVIDER_UNSUPPORTED"
+        )
+        return 1
 
     if continuous:
         return await main_continuous(

@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Subtitle timing source "
             f"(default: {defaults['subtitle_timing_provider']}, from "
             "SUBTITLE_TIMING_PROVIDER or SUBTITLE_PROVIDER env). auto = prefer "
-            "edge-tts WordBoundary, fallback whisper, then estimated"
+            "native provider timing, then configured fallback/estimated timing"
         ),
     )
     parser.add_argument(
