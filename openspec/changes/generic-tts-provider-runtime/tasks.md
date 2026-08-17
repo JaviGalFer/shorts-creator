@@ -20,4 +20,6 @@ Slice 2 (this change):
 - [x] Runtime config hardening: resolve provider-specific voice/secrets/model from project `.env` then process env; provider voice wins over implicit Edge default; consistent provider construction across availability check and synthesis; non-string alignment chars and malformed base64 guarded.
 
 Slice 3:
-- [ ] Real provider validation (opt-in keyed) / closure.
+- [x] Run real ElevenLabs smoke: PASSED (`ELEVENLABS_REAL_SMOKE_OK`, voice `Xb7hH8MSUJpSbSDYk0k2`, 3.84s, `elevenlabs_normalized_alignment`, 10 word boundaries).
+- [ ] Full real E2E through the canonical `run_job.py` pipeline (pending; requires plumbing of TTS job config into the orchestrator command surface).
+- [x] `cmo-2026-08-17-142952` reclassified as an Edge regression E2E (not ElevenLabs validation): history records `--tts-provider edge_tts --voice es-ES-AlvaroNeural` in fitting regeneration; root cause was the missing `run_job` surface + hardcoded `request.voice`, fixed by this change.

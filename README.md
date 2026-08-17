@@ -36,7 +36,7 @@ Referencias:
 | Tema o instrucción | `--topic` | Tema del vídeo |
 | Duración | `--duration`, `--duration-profile`, `--duration-target`, `--duration-min`, `--duration-max`, `--strictness` | Duración exacta, perfil predefinido o rango con nivel de tolerancia |
 | Modelo LLM | `--model` | Modelo del proveedor LLM (OpenAI-compatible) |
-| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | Edge TTS es el provider canónico operativo y validado. ElevenLabs tiene adapter per-scene con timing nativo (`/with-timestamps`); validación real E2E pendiente de cierre |
+| Proveedor TTS | `--tts-provider`, `TTS_PROVIDER` | Edge TTS es el provider canónico operativo y validado. ElevenLabs tiene adapter per-scene con timing nativo (`/with-timestamps`); smoke real validado, E2E completo pendiente de cierre |
 | Voz | `--voice`, `voiceId`, `TTS_VOICE` | Voz de la narración. Para `elevenlabs` se usa `ELEVENLABS_VOICE_ID` (o `--voice`) en lugar de la voz por defecto de Edge |
 | Timing de subtítulos | `--subtitle-timing-provider`, `SUBTITLE_TIMING_PROVIDER` | `auto`, `edge_tts`, `whisper` o `estimated` |
 | Estilo de subtítulos | `--subtitle-style` | `documentary_safe`, `shorts_dynamic`, `shorts_upper_dynamic` |
@@ -117,6 +117,17 @@ Ejecutar solo hasta una etapa:
 ```bash
 python bin/run_job.py --topic "Prueba" --duration 35 --stop-after script
 ```
+
+TTS con proveedor/voz/timing explícitos (p. ej. ElevenLabs):
+
+```bash
+python bin/run_job.py --topic "Cómo se forma un arcoíris" --duration-preset quick_30 \
+  --tts-provider elevenlabs --voice Xb7hH8MSUJpSbSDYk0k2 --subtitle-timing-provider auto
+```
+
+La configuración resuelta se persiste en `request.voice` / `request.subtitles` del metadata y se
+propaga a la etapa de audio y a las regeneraciones de fitting; `--voice` gana sobre el entorno y
+la API key nunca se escribe en comandos ni metadata.
 
 ### Perfiles de duración
 
