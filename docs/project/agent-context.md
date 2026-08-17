@@ -8,6 +8,9 @@
 - TTS and visual providers are replaceable; Edge TTS is currently the default and Wikimedia/Pixabay are current visual providers.
 - Visual assets are semantically gated (`asset-semantic-relevance`, CLOSED): after provider search and before download, candidates are scored against the primary query intent by a provider-agnostic anchor-aware deterministic scorer (`deterministic_anchor_coverage_v2`); weak/support terms alone never yield `RELEVANT`, scene subjects cannot rescue a missing query anchor, and a search-strategy `RESOLVED` without `semanticAssessment.verdict == RELEVANT` never enters `resolvedAssets`. `bin/run_job.py --asset-providers wikimedia_commons,pixabay` restricts/persists `request.visuals.sourceProviders` in order (omitted → default fallback). Known limitation: the gate guarantees coarse topic relevance, not temporal/editorial/image-content fidelity.
 
+## Active Change: script-visual-specificity
+- Goal: improve upstream specificity so visual providers receive concrete, retrievable concepts instead of vague editorial queries. `contracts/visual_terms.py` owns the shared pure lexical vocabulary (`GENERIC_FILLER`, `WEAK_SUPPORT_TERMS`, `tokenize`, guard-only `STOPWORDS`); `assets/semantic.py` re-exports the moved names (scorer behavior unchanged); `contracts/visual_specificity.py` implements a conservative `QUERY_NOT_SPECIFIC` guard (reject when no anchors or `len(weak) >= len(anchors)`). Slice 1 (vocabulary + guard + focused tests) is in progress; Slice 2 (script prompt/validation/retry + router derivation filter) and Slice 3 (real replay evidence + docs close) pending. No script/router integration, no schema churn, no `deterministic_anchor_coverage_v2` change in Slice 1.
+
 ## Verified State
 - `main` base: `ebeb688` (generic-tts-provider-runtime merged/closed on main).
 - `modular-v2-migration`: closed. `AUDIO_DURATION_MISSING`: resolved. Host `ffprobe` remains absent; Docker fallback is used.

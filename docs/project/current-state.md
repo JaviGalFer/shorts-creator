@@ -2,6 +2,12 @@
 
 **Última actualización:** 2026-08-17
 
+## Change en curso: `script-visual-specificity`
+
+- Objetivo: mejorar la especificidad ascendente (script + VisualPlan/query) para que los providers visuales reciban conceptos concretos y recuperables en lugar de queries editoriales vagas (`popular culture`, `future of YouTube`, `viral YouTube video screenshot`, `famous early YouTubers photo`). El benchmark real `los-semantic-v2-20260817-203235` quedó en 3 resuelto / 8 fallido por esta falta de especificidad.
+- Slice 1 (en curso): vocabulario léxico compartido puro en `contracts/visual_terms.py` (mover `GENERIC_FILLER`, `WEAK_SUPPORT_TERMS`, `tokenize` desde `semantic.py`; añadir `STOPWORDS` guard-only), reexport en `assets/semantic.py` sin cambios de comportamiento, y guard conservador en `contracts/visual_specificity.py` (rechaza cuando no hay anchors o `len(weak) >= len(anchors)`).
+- Slices 2 y 3 pendientes: integración en script (prompt/validación/retry) + filtro de derivación del router; replay/E2E real de soporte + cierre.
+
 ## Estado vigente
 - Arquitectura modular V2 completa. `src/shorts_creator/` contiene contratos, pipeline, script, audio, assets, rendering, validation e infrastructure; `bin/` son adaptadores CLI.
 - Pipeline canónico: `script -> assets -> audio -> prepare -> render -> validate`. n8n es legacy/alternativo.

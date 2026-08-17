@@ -11,37 +11,19 @@ Scorer MUST NOT contain provider-specific branches.  Provider adapters in
 
 from __future__ import annotations
 
-import re
 from typing import Any
+
+from shorts_creator.contracts.visual_terms import (
+    GENERIC_FILLER,
+    WEAK_SUPPORT_TERMS,
+    tokenize,
+)
 
 RELEVANT = "RELEVANT"
 IRRELEVANT = "IRRELEVANT"
 UNSCORABLE = "UNSCORABLE"
 
 SEMANTIC_METHOD = "deterministic_anchor_coverage_v2"
-
-# Generic media/stock filler tokens that carry no topical evidence.
-GENERIC_FILLER: frozenset[str] = frozenset({
-    "image", "images", "photo", "photos", "photograph", "photographs",
-    "picture", "pictures", "illustration", "illustrations", "drawing",
-    "drawings", "graphic", "graphics", "clipart", "stock", "digital",
-    "free", "download", "downloads", "resolution", "wallpaper", "wallpapers",
-    "background", "backgrounds", "jpeg", "jpg", "png", "webp", "gif",
-    "high", "quality", "file", "files", "view", "views", "icon", "icons",
-})
-
-# Broad temporal, popularity, presentation, and platform-context terms can
-# describe many unrelated assets. They remain visible in diagnostics but can
-# never establish relevance without a discriminative query anchor.
-WEAK_SUPPORT_TERMS: frozenset[str] = frozenset({
-    "current", "early", "famous", "first", "formation", "future", "latest", "modern",
-    "new", "old", "popular", "viral",
-    "culture", "image", "images", "interface", "logo", "media", "photo",
-    "photos", "screen", "screenshot", "screenshots", "section", "social",
-    "video", "videos",
-})
-
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 # Default semantic contract keys (generic).  ``other`` holds provider adapter output.
 CONTRACT_KEYS: tuple[str, ...] = (
@@ -124,22 +106,6 @@ def to_semantic_candidate(candidate: dict) -> dict:
     adapter = PROVIDER_ADAPTERS.get(provider, _adapter_generic)
     sem = adapter(candidate)
     return {k: sem.get(k, "" if k in ("provider", "queryUsed", "title", "description", "assetType") else []) for k in CONTRACT_KEYS}
-
-
-def tokenize(text: Any) -> set[str]:
-    """Lowercase alphanumeric token set from a string or list of strings."""
-    tokens: set[str] = set()
-    if isinstance(text, str):
-        strings = [text]
-    elif isinstance(text, (list, tuple)):
-        strings = [str(s) for s in text]
-    else:
-        return tokens
-    for s in strings:
-        for tok in _TOKEN_RE.findall(str(s).lower()):
-            if len(tok) >= 3 and tok not in GENERIC_FILLER:
-                tokens.add(tok)
-    return tokens
 
 
 def _evidence_tokens(semantic: dict) -> set[str]:
