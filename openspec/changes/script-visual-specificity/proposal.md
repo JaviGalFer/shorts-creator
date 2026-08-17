@@ -55,3 +55,10 @@ Rechazar si:
 2. `semantic.py`: diff solo de imports/reexport; comportamiento del scorer intacto.
 3. `git diff --check` limpio.
 4. Sin integración script/router en este slice.
+
+## Cierre (evidencia final)
+
+- Run de descubrimiento `los-2026-08-17-204707`: `REVIEW_REQUIRED` bajo el guard inicial sobre-estricto → motivó la calibración (Slice 3A): `SPECIFICITY_WEAK_TERMS` guard-only separado del `WEAK_SUPPORT_TERMS` semántico y regla refinada del guard.
+- Run final `los-2026-08-17-205843`: script aprobado en attempt 0 (retries 0), todas las queries persistentes pasan el gate determinista, `ASSETS_PARTIAL`, 4/10 resueltos.
+- Suite completa en cierre: `1411 passed, 0 failed, 0 skipped`.
+- Limitación aceptada: `"Smosh fan art"` produjo un falso positivo (candidato genérico fan/art de Pixabay). La query es concreta y recuperable (upstream correcto); el falso positivo es comportamiento downstream de fidelidad entidad/sujeto en `deterministic_anchor_coverage_v2`, que permanece sin cambios. Se registra como seguimiento futuro (`asset-entity-fidelity`), no como fallo de este cambio.

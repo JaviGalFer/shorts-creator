@@ -2,12 +2,14 @@
 
 **Última actualización:** 2026-08-17
 
-## Change en curso: `script-visual-specificity`
+## Change cerrado: `script-visual-specificity`
 
-- Objetivo: mejorar la especificidad ascendente (script + VisualPlan/query) para que los providers visuales reciban conceptos concretos y recuperables en lugar de queries editoriales vagas (`popular culture`, `future of YouTube`, `viral YouTube video screenshot`, `famous early YouTubers photo`). El benchmark real `los-semantic-v2-20260817-203235` quedó en 3 resuelto / 8 fallido por esta falta de especificidad.
-- Slice 1 COMPLETED (`f1e4a08`): vocabulario léxico compartido puro en `contracts/visual_terms.py` (mover `GENERIC_FILLER`, `WEAK_SUPPORT_TERMS`, `tokenize` desde `semantic.py`; añadir `STOPWORDS` guard-only), reexport en `assets/semantic.py` sin cambios de comportamiento, y guard conservador en `contracts/visual_specificity.py` (rechaza cuando no hay anchors o `len(weak) >= len(anchors)`).
-- Slice 2 (en curso): prompt de script con sujetos concretos/recuperables y grounding anti-alucinación (sin baneo general de "X of Y"), guard conectado a la validación V2 → retry existente, sección de remediación dedicada, y filtro de derivación del router que descarta queries vagas. Sin churn de schema; sin cambios en `deterministic_anchor_coverage_v2`.
-- Slice 3 pendiente: replay/E2E real de soporte + cierre.
+- Objetivo: mejorar la especificidad ascendente (script + VisualPlan/query) para que los providers visuales reciban conceptos concretos y recuperables en lugar de queries editoriales vagas (`popular culture`, `future of YouTube`, `viral YouTube video screenshot`, `famous early YouTubers photo`).
+- Slice 1 (`f1e4a08`): vocabulario compartido puro en `contracts/visual_terms.py` (mover `GENERIC_FILLER`, `WEAK_SUPPORT_TERMS`, `tokenize`; añadir `STOPWORDS` guard-only), reexport en `assets/semantic.py` sin cambios de comportamiento, y guard conservador en `contracts/visual_specificity.py`.
+- Slice 2 (`32f8c75`, `33c562d`): prompt con sujetos concretos/recuperables y grounding anti-alucinación (sin baneo general de "X of Y"), guard conectado a la validación V2 → retry existente, sección de remediación "Especificidad visual insuficiente", y filtro de derivación del router que descarta queries vagas. Sin churn de schema.
+- Slice 3 + Slice 3A (`11bcc6d`): evidencia real y calibración. Run de descubrimiento `los-2026-08-17-204707` → `REVIEW_REQUIRED` bajo el guard inicial sobre-estricto → separación de `SPECIFICITY_WEAK_TERMS` (guard-only) del `WEAK_SUPPORT_TERMS` semántico y regla refinada del guard. Run final `los-2026-08-17-205843`: script aprobado en attempt 0 (retries 0), todas las queries persistentes `VALID`, `ASSETS_PARTIAL`, 4/10 resueltos.
+- Suite completa en cierre: `1411 passed, 0 failed, 0 skipped`; `git diff --check` limpio. `deterministic_anchor_coverage_v2` sin cambios.
+- Limitación aceptada: la query "Smosh fan art" produjo un falso positivo (arte genérico fan/art de Pixabay sin Smosh). Es comportamiento downstream de fidelidad entidad/sujeto del scorer semántico (sin cambios). Seguimiento futuro: `asset-entity-fidelity` (no diseñado ni implementado).
 
 ## Estado vigente
 - Arquitectura modular V2 completa. `src/shorts_creator/` contiene contratos, pipeline, script, audio, assets, rendering, validation e infrastructure; `bin/` son adaptadores CLI.
