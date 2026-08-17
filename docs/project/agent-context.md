@@ -1,5 +1,12 @@
 # Agent Context
 
+## Active Evaluation: generic-content-pipeline-evaluation (Phase 1) — NO production behavior changes
+- `asset-entity-fidelity` is PAUSED / research-only pending genericity evidence. It is NOT the active implementation direction. Do NOT implement `deterministic_anchor_coverage_v3` and do NOT add semantic heuristics.
+- Active change is `generic-content-pipeline-evaluation` (Fase 1): an offline evaluation harness of the CURRENT generic pipeline before further product/core changes. `tools/genericity_matrix.py` (read-only, offline, CLI + module) extracts per-job metrics from persisted `metadata.json` (job / visual plan / assets) without network, LLM, or provider calls.
+- Contract: bootstrap WPM duration is telemetry only (a `durationContract.status` FAIL is NOT an automatic genericity failure); unresolved causes not distinguishable from persisted metadata are classified `UNRESOLVED_CAUSE_UNCERTAIN` (no provider re-probing in Phase 1); CORE failure groups (`QUERY_GEN_FAILURE`, `VISUAL_PLAN_FAILURE`, `SEMANTIC_GATE_FALSE_POSITIVE`) are separated from SUPPLY/COVERAGE groups (`PROVIDER_COVERAGE_FAILURE`, `UNRESOLVED_CAUSE_UNCERTAIN`, `ACCEPTABLE_ASSETS_PARTIAL`).
+- Decision contract (Phase 2): per-topic `HEALTHY` / `USABLE_WITH_LIMITATIONS` / `SYSTEMIC_FAILURE`; aggregate `GREEN` / `YELLOW` / `RED`. Provider coverage limitations alone do not block GREEN.
+- See `openspec/changes/generic-content-pipeline-evaluation/`.
+
 ## Runtime
 - Modular V2 architecture is complete: `bin/run_job.py` orchestrates `script -> assets -> audio -> prepare -> render -> validate`; `bin/` are CLI adapters over `src/shorts_creator/` domains.
 - Per-scene TTS runtime is provider-generic (`generic-tts-provider-runtime`, CLOSED): `generate_audio_with_timestamps()` takes `tts_provider`; Edge remains default/validated. ElevenLabs native `/with-timestamps` timing implemented with character-to-word normalization. Runtime config hardening resolves provider voice/secrets/model from project `.env` then process env, computes it once in `generate_audio()`, and applies it consistently to availability and synthesis; provider voice wins over the implicit Edge default; the API key never persists. Continuous mode is Edge-only (`CONTINUOUS_TTS_PROVIDER_UNSUPPORTED` for non-Edge).
@@ -17,7 +24,8 @@
 - Accepted known limitation: "Smosh fan art" produced a generic fan/art Pixabay false positive. The upstream query is concrete/retrievable; the false positive is downstream entity/subject-fidelity behavior in `deterministic_anchor_coverage_v2` (unchanged, out of scope). Follow-up recorded as future change `asset-entity-fidelity` (not designed or implemented).
 
 ## Verified State
-- `main` base: `ebeb688` (generic-tts-provider-runtime merged/closed on main).
+- `main` base: `b7b8d57` (script-visual-specificity merged/closed on main).
+- `script-visual-specificity`: CLOSED (see Closed Change above). `asset-entity-fidelity`: PAUSED / research-only pending genericity evidence (NOT the active direction).
 - `modular-v2-migration`: closed. `AUDIO_DURATION_MISSING`: resolved. Host `ffprobe` remains absent; Docker fallback is used.
 - First complete technical E2E: `cmo-2026-08-16-172847`, through `VALIDATED`; request 30s, range 27-30, timeline 20.813s, MP4 approximately 20.88s.
 - Real E2E attempt `cmo-2026-08-16-184819` was blocked at script: a legacy bootstrap WPM hard gate rejected a V2-valid 67-word candidate (37.9s estimate) before TTS. The gate is now non-blocking; WPM remains bootstrap telemetry only.

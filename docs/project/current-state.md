@@ -1,6 +1,15 @@
 # Estado actual del proyecto
 
-**Última actualización:** 2026-08-17
+**Última actualización:** 2026-08-18
+
+## Evaluación activa: `generic-content-pipeline-evaluation` (Fase 1)
+
+- `asset-entity-fidelity` está EN PAUSA / research-only pendiente de evidencia de genericity. NO es la dirección de implementación activa. No implementar `deterministic_anchor_coverage_v3` ni añadir heurísticas semánticas.
+- Cambio activo: `generic-content-pipeline-evaluation` (Fase 1), un harness de evaluación OFFLINE del pipeline genérico actual ANTES de más cambios product/core. Sin cambios de comportamiento productivo.
+- `tools/genericity_matrix.py` (read-only, offline, CLI + módulo) extrae métricas por job de `metadata.json` persistido (job / visual plan / assets) sin red, LLM ni llamadas de provider.
+- Contrato: duración bootstrap WPM = telemetría (un `durationContract.status` FAIL NO es fallo de genericity automático); causas de unresolved no distinguibles desde metadata persistido se clasifican `UNRESOLVED_CAUSE_UNCERTAIN` (sin sondeo de provider en Fase 1); grupos CORE (`QUERY_GEN_FAILURE`, `VISUAL_PLAN_FAILURE`, `SEMANTIC_GATE_FALSE_POSITIVE`) separados de SUPPLY/COVERAGE (`PROVIDER_COVERAGE_FAILURE`, `UNRESOLVED_CAUSE_UNCERTAIN`, `ACCEPTABLE_ASSETS_PARTIAL`).
+- Contrato de decisión (Fase 2): por tema `HEALTHY` / `USABLE_WITH_LIMITATIONS` / `SYSTEMIC_FAILURE`; agregado `GREEN` / `YELLOW` / `RED`. Limitaciones de coverage de provider solas no bloquean GREEN.
+- Ver `openspec/changes/generic-content-pipeline-evaluation/`.
 
 ## Change cerrado: `script-visual-specificity`
 
@@ -57,4 +66,4 @@
 - `generic-duration-fitting`: COMPLETED / VERIFIED / CLOSED. quick_30 `cmo-2026-08-16-194012`: VALIDATED. deep_60 `cmo-2026-08-16-203059`: VALIDATED (60.37s, 9 escenas). Suite completa al cierre: **`1243 passed, 0 skipped, 0 failed`**.
 - `generic-tts-provider-runtime`: COMPLETED / VERIFIED / CLOSED. Smoke real `ELEVENLABS_REAL_SMOKE_OK`; E2E ElevenLabs `cmo-2026-08-17-145309`: VALIDATED (28.20s). Suite completa al cierre: **`1306 passed, 0 skipped, 0 failed`**.
 - `asset-semantic-relevance`: COMPLETED / VERIFIED / CLOSED. Replay real v2 `los-semantic-v2-20260817-203235`: **3 resuelto / 8 fallido, `ASSETS_PARTIAL`** (V1 era 11/11 irrelevante). Suite completa al cierre: **`1345 passed, 0 skipped, 0 failed`**.
-- Limitación conocida del gate semántico: relevancia gruesa (tema/entidad), no fidelidad temporal/editorial/de contenido de imagen. Siguiente prioridad: especificidad de script + VisualPlan/query. Detección de near-duplicates visuales: trabajo futuro.
+- Limitación conocida del gate semántico: relevancia gruesa (tema/entidad), no fidelidad temporal/editorial/de contenido de imagen. La próxima medida NO es añadir más heurísticas semánticas; es evaluar la genericity del pipeline actual con `generic-content-pipeline-evaluation` (Fase 2 ejecutará la matriz de 8 temas y decidirá GREEN/YELLOW/RED). Detección de near-duplicates visuales: trabajo futuro.
