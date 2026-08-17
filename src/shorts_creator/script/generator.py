@@ -151,11 +151,12 @@ Las queries visuales (`searchQueries` y cada `visualSequence[].searchQuery`) se 
 Reglas:
 
 1. No uses abstracciones editoriales ni frases de opinión, popularidad o temporalidad vaga como query principal: por ejemplo, "popular culture", "impact of X", "why X matters", "future of X", "famous early ...", "viral ... screenshot".
-2. No inventes entidades ni datos para mejorar una query. Si un nombre propio concreto es útil, DEBE estar respaldado por el contenido de la narración de la escena; si la narración no lo contiene, no lo añadas solo por rellenar.
+2. No inventes entidades ni datos para mejorar una query. Un nombre propio concreto es útil si está respaldado por el contenido de la narración de la escena actual O por entidades o temas ya establecidos explícitamente antes en el mismo guion; si no existe ningún nombre propio establecido, no lo inventes solo por rellenar.
 3. Si la escena no tiene un nombre propio natural, describe un sujeto visual concreto y descriptivo (objeto, lugar, escena, fenómeno).
 4. Un solo término de entidad concreta es válido (por ejemplo, "Smosh", "Chernobyl", "Minecraft"); no lo rellenes con adjetivos vacíos.
 5. "X of Y" no es una muletilla de abstracción ("future of YouTube", "history of everything"). Es válido cuando nombra O describe concretamente un sujeto recuperable (por ejemplo, "Statue of Liberty", "map of Spain", "portrait of Marie Curie", "diagram of human heart").
 6. Cada query debe aportar términos sustantivos discriminativos: si una query se puede borrar y la escena no pierde nada visual, es demasiado vaga.
+7. En una escena final de cierre o CTA sin nuevo sujeto visual concreto, reutiliza un sujeto o entidad concreta ya establecido previamente en el mismo guion (por ejemplo, un youtuber o marca ya nombrado) en lugar de inventar una entidad o producir abstracciones editoriales como "legacy", "popular culture" o "future of X".
 
 ### Campos PROHIBIDOS en visualPlan
 
@@ -482,7 +483,9 @@ def _build_user_prompt_v2(topic: str, budget: dict, strictness: str, *, allow_ge
         f"visualIntent, subjects, searchQueries, assetPreferences y visualSequence. "
         f"Cada query visual debe ser un sujeto concreto y recuperable en inglés (persona, obra, "
         f"producto, evento, lugar, fecha, objeto o fenómeno); evita abstracciones editoriales y "
-        f"nunca inventes entidades que no estén respaldadas por la narración de la escena.\n\n"
+        f"nunca inventes entidades que no estén respaldadas por la narración de la escena o por "
+        f"entidades ya establecidas antes en el mismo guion. En una escena final de cierre sin nuevo "
+        f"sujeto, reutiliza un sujeto concreto ya presentado en lugar de producir abstracciones.\n\n"
         f"{duration_instruction}\n\n"
         f"{gate}"
     )
@@ -799,9 +802,10 @@ def _build_retry_instruction_v2(
             lines.append("")
             lines.append("Para corregirlas:")
             lines.append("- Nombra un sujeto concreto y recuperable en inglés: persona, obra, producto, evento, lugar, fecha, objeto o fenómeno.")
-            lines.append("- Los nombres propios deben estar respaldados por la narración de la escena; nunca inventes entidades ni datos.")
+            lines.append("- Los nombres propios deben estar respaldados por la narración de la escena actual O por entidades o temas ya establecidos explícitamente antes en el mismo guion; nunca inventes entidades ni datos.")
             lines.append("- Si la escena no tiene un nombre propio natural, usa una descripción visual concreta del sujeto (objeto, lugar, escena, fenómeno).")
             lines.append("- Un solo término de entidad concreta es válido (por ejemplo, \"Smosh\", \"Chernobyl\", \"Minecraft\"); no lo rellenes con adjetivos vacíos.")
+            lines.append("- En una escena final de cierre o CTA sin nuevo sujeto, reutiliza un sujeto o entidad concreta ya establecido previamente en el guion; no produzcas abstracciones editoriales como \"legacy\", \"popular culture\" o \"future of X\".")
             lines.append("- Evita abstracciones editoriales como \"popular culture\", \"future of X\", \"impact of X\", \"why X matters\", \"famous early ...\", \"viral ... screenshot\".")
             lines.append("- \"X of Y\" es válido cuando nombra O describe concretamente un sujeto recuperable (por ejemplo, \"Statue of Liberty\", \"map of Spain\", \"portrait of Marie Curie\", \"diagram of human heart\"). Rechaza solo abstracciones editoriales vacías como \"future of X\", \"impact of X\", \"why X matters\".")
             lines.append("")

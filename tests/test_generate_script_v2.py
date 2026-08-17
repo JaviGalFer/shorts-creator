@@ -2293,3 +2293,36 @@ class TestVisualQuerySpecificity:
         assert "diagram of human heart" in inst
         assert "es válido solo cuando es un nombre propio" not in inst
         assert "abstracciones editoriales vacías" in inst
+
+    def test_prompt_grounds_entities_in_scene_or_prior_script(self):
+        assert "respaldado por el contenido de la narración de la escena actual O por entidades o temas ya establecidos explícitamente antes en el mismo guion" in SYSTEM_PROMPT_V2
+
+    def test_prompt_cta_reuses_established_subject(self):
+        assert "reutiliza un sujeto o entidad concreta ya establecido previamente" in SYSTEM_PROMPT_V2
+        assert "\"legacy\", \"popular culture\" o \"future of X\"" in SYSTEM_PROMPT_V2
+
+    def test_user_prompt_cta_reuse_guidance(self):
+        p = gs._build_user_prompt_v2(
+            "Aurora boreal", self._budget(), "balanced",
+            allow_generated_images=False,
+        )
+        assert "entidades ya establecidas antes en el mismo guion" in p
+        assert "reutiliza un sujeto concreto ya presentado" in p
+
+    def test_retry_remediation_cta_reuse_guidance(self):
+        budget = self._budget()
+        issues = [
+            {
+                "sceneNumber": 5,
+                "code": "QUERY_NOT_SPECIFIC",
+                "path": "scenes[5].visualPlan.searchQueries[0]",
+                "message": "scene 5: visual query 'popular culture' is not specific: ...",
+            },
+        ]
+        inst = gs._build_retry_instruction_v2(
+            budget, actual_word_count=52, actual_scene_count=5, estimated_dur=28.0,
+            structural_issues=issues, allow_generated_images=False,
+        )
+        assert "Especificidad visual insuficiente" in inst
+        assert "reutiliza un sujeto o entidad concreta ya establecido previamente" in inst
+        assert "no produzcas abstracciones editoriales como \"legacy\"" in inst

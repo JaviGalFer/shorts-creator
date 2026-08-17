@@ -81,6 +81,22 @@ def test_concrete_queries_accepted(query):
     assert assessment["anchorTerms"], f"expected anchors for '{query}'"
 
 
+@pytest.mark.parametrize("query", [
+    "Jenna Marbles early YouTube video screenshot",
+    "YouTube logo photograph",
+    "YouTube interface screenshot",
+    "viral content YouTube screenshot",
+    "YouTube logo history diagram",
+])
+def test_calibrated_queries_now_valid(query):
+    # Runtime calibration (Slice 3A): concrete subjects padded with neutral
+    # descriptors or bounded weak context remain VALID under the new rule.
+    assessment = assess_query_specificity(query)
+    assert assessment["verdict"] == VALID, f"expected VALID for '{query}': {assessment}"
+    assert assessment["ok"] is True
+    assert len(assessment["anchorTerms"]) >= 1
+
+
 def test_single_concrete_entity_remains_valid():
     for entity in ("Smosh", "Minecraft", "Chernobyl", "Turing", "Fuji"):
         assessment = assess_query_specificity(entity)
@@ -89,13 +105,16 @@ def test_single_concrete_entity_remains_valid():
 
 
 def test_diagnostics_shape():
-    assessment = assess_query_specificity("aurora borealis formation")
+    assessment = assess_query_specificity("aurora borealis famous popular culture")
     assert set(assessment) >= {
         "ok", "verdict", "reason", "contentTerms", "weakTerms", "anchorTerms",
     }
+    assert assessment["verdict"] == VAGUE
     assert "aurora" in assessment["contentTerms"]
-    assert "formation" in assessment["weakTerms"]
-    assert "formation" not in assessment["anchorTerms"]
+    assert "famous" in assessment["weakTerms"]
+    assert "popular" in assessment["weakTerms"]
+    assert "aurora" in assessment["anchorTerms"]
+    assert "famous" not in assessment["anchorTerms"]
 
 
 # ── Vocabulary move parity: semantic.py re-exports the shared terms ─────────
@@ -129,6 +148,22 @@ def test_stopwords_are_guard_only_not_filler():
     assert "of" in visual_terms.STOPWORDS
     assert "the" not in semantic.WEAK_SUPPORT_TERMS
     assert "the" not in semantic.GENERIC_FILLER
+    assert "the" not in visual_terms.SPECIFICITY_WEAK_TERMS
+
+
+def test_specificity_weak_terms_is_a_subset_of_semantic_weak():
+    assert visual_terms.SPECIFICITY_WEAK_TERMS <= semantic.WEAK_SUPPORT_TERMS
+    assert semantic.WEAK_SUPPORT_TERMS != visual_terms.SPECIFICITY_WEAK_TERMS
+
+
+@pytest.mark.parametrize("word", [
+    "logo", "interface", "formation", "first", "current", "latest", "modern",
+    "new", "old",
+])
+def test_neutral_descriptors_not_specificity_weak(word):
+    # Calibration (Slice 3A): these neutral descriptors must NOT count as
+    # specificity-weak, even though several remain semantic weak terms.
+    assert word not in visual_terms.SPECIFICITY_WEAK_TERMS
 
 
 # ── Plan-level assessment ───────────────────────────────────────────────────

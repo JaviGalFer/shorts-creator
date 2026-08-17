@@ -53,6 +53,19 @@ STOPWORDS: frozenset[str] = frozenset({
     "your",
 })
 
+# Guard-only specificity-weak terms: a strict subset of the semantic scorer's
+# WEAK_SUPPORT_TERMS capturing editorial/popularity/temporal abstractions that
+# make a query visually vague.  The specificity guard uses THIS set, not the
+# full WEAK_SUPPORT_TERMS, so neutral descriptors such as "logo",
+# "interface", "formation", "first", "current", "latest", "modern", "new",
+# "old" never inflate the weak side of a query that names a concrete subject.
+# Deliberately NOT used by the semantic scorer.
+SPECIFICITY_WEAK_TERMS: frozenset[str] = frozenset({
+    "early", "famous", "future", "popular", "viral", "culture", "media",
+    "social", "video", "videos", "screen", "screenshot", "screenshots",
+    "section",
+})
+
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
