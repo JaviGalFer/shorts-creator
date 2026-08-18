@@ -1,6 +1,14 @@
 # Estado actual del proyecto
 
-**Última actualización:** 2026-08-17
+**Última actualización:** 2026-08-18
+
+## Evaluación cerrada: `generic-content-pipeline-evaluation` — COMPLETED / VERIFIED / CLOSED
+
+- Benchmark de genericity del pipeline ACTUAL completado (harness offline Fase 1 + ejecución real de 8 temas Fase 2 + revisión visual externa de píxeles). Contact sheets en `data/evaluations/genericity-phase2-visual-review/` (git-ignored).
+- Resultado agregado: **YELLOW**. La capa script/VisualPlan es sana y topic-agnostic en los 8 dominios (sin `QUERY_GEN_FAILURE` ni `VISUAL_PLAN_FAILURE`; 0 queries VAGUE; retries 0). Por tema: Volcán `HEALTHY`; Aurora/Porsche/Spring Boot/Pulpos/Videojuegos/Hipoteca `USABLE_WITH_LIMITATIONS`; Roma `SYSTEMIC_FAILURE` (solo capa de assets, no comprensión de dominio).
+- Revisión visual de los 38 resueltos: **16 CLEARLY_RELEVANT / 14 COARSE_BUT_USABLE / 8 FALSE_POSITIVE_OR_UNUSABLE**. Fallos repetidos de fidelidad visual/semántica en la aceptación downstream en dominios no relacionados; cobertura de provider limitada (software, videojuegos, conceptos difíciles de ilustrar) = SUPPLY, no corrupción de arquitectura.
+- Conclusión de diseño: `asset-entity-fidelity` permanece como EVIDENCIA DE INVESTIGACIÓN SOLO (pausado). NO implementar `deterministic_anchor_coverage_v3` / `FORM_OR_MEDIUM_TERMS`. Futuro cambio registrado: **`asset-visual-semantic-fidelity`** (validación semántico-visual de segunda etapa por píxeles, provider-agnostic, manteniendo el gate de metadata como primera etapa; no diseñado). Dirección de producto separada registrada: fallback search-vs-generation para cobertura.
+- Ver `openspec/changes/generic-content-pipeline-evaluation/` (informe completo: `phase2-report.md`).
 
 ## Change cerrado: `script-visual-specificity`
 
@@ -9,7 +17,7 @@
 - Slice 2 (`32f8c75`, `33c562d`): prompt con sujetos concretos/recuperables y grounding anti-alucinación (sin baneo general de "X of Y"), guard conectado a la validación V2 → retry existente, sección de remediación "Especificidad visual insuficiente", y filtro de derivación del router que descarta queries vagas. Sin churn de schema.
 - Slice 3 + Slice 3A (`11bcc6d`): evidencia real y calibración. Run de descubrimiento `los-2026-08-17-204707` → `REVIEW_REQUIRED` bajo el guard inicial sobre-estricto → separación de `SPECIFICITY_WEAK_TERMS` (guard-only) del `WEAK_SUPPORT_TERMS` semántico y regla refinada del guard. Run final `los-2026-08-17-205843`: script aprobado en attempt 0 (retries 0), todas las queries persistentes `VALID`, `ASSETS_PARTIAL`, 4/10 resueltos.
 - Suite completa en cierre: `1411 passed, 0 failed, 0 skipped`; `git diff --check` limpio. `deterministic_anchor_coverage_v2` sin cambios.
-- Limitación aceptada: la query "Smosh fan art" produjo un falso positivo (arte genérico fan/art de Pixabay sin Smosh). Es comportamiento downstream de fidelidad entidad/sujeto del scorer semántico (sin cambios). Seguimiento futuro: `asset-entity-fidelity` (no diseñado ni implementado).
+- Limitación aceptada: la query "Smosh fan art" produjo un falso positivo (arte genérico fan/art de Pixabay sin Smosh). Es comportamiento downstream de fidelidad entidad/sujeto del scorer semántico (sin cambios). Tras `generic-content-pipeline-evaluation`, el seguimiento se amplió a `asset-visual-semantic-fidelity`; `asset-entity-fidelity` queda como evidencia de investigación.
 
 ## Estado vigente
 - Arquitectura modular V2 completa. `src/shorts_creator/` contiene contratos, pipeline, script, audio, assets, rendering, validation e infrastructure; `bin/` son adaptadores CLI.
@@ -57,4 +65,5 @@
 - `generic-duration-fitting`: COMPLETED / VERIFIED / CLOSED. quick_30 `cmo-2026-08-16-194012`: VALIDATED. deep_60 `cmo-2026-08-16-203059`: VALIDATED (60.37s, 9 escenas). Suite completa al cierre: **`1243 passed, 0 skipped, 0 failed`**.
 - `generic-tts-provider-runtime`: COMPLETED / VERIFIED / CLOSED. Smoke real `ELEVENLABS_REAL_SMOKE_OK`; E2E ElevenLabs `cmo-2026-08-17-145309`: VALIDATED (28.20s). Suite completa al cierre: **`1306 passed, 0 skipped, 0 failed`**.
 - `asset-semantic-relevance`: COMPLETED / VERIFIED / CLOSED. Replay real v2 `los-semantic-v2-20260817-203235`: **3 resuelto / 8 fallido, `ASSETS_PARTIAL`** (V1 era 11/11 irrelevante). Suite completa al cierre: **`1345 passed, 0 skipped, 0 failed`**.
-- Limitación conocida del gate semántico: relevancia gruesa (tema/entidad), no fidelidad temporal/editorial/de contenido de imagen. Siguiente prioridad: especificidad de script + VisualPlan/query. Detección de near-duplicates visuales: trabajo futuro.
+- `generic-content-pipeline-evaluation`: COMPLETED / VERIFIED / CLOSED. Benchmark real de 8 temas (quick_30, `--stop-after assets`): decisión agregada **YELLOW**; capa script/VisualPlan genérica y sana; 8/38 assets resueltos `FALSE_POSITIVE_OR_UNUSABLE` en 5 dominios no relacionados; cobertura de provider limitada (SUPPLY). Evidencia y contact sheets en `openspec/changes/generic-content-pipeline-evaluation/` y `data/evaluations/genericity-phase2-visual-review/`.
+- Limitación conocida del gate semántico: relevancia gruesa (tema/entidad), no fidelidad temporal/editorial/de contenido de imagen — confirmada como fallo downstream repetido por `generic-content-pipeline-evaluation`. Siguiente investigación (no diseñada): **`asset-visual-semantic-fidelity`** (validación semántico-visual por píxeles de segunda etapa). NO añadir heurísticas semánticas nuevas ahora; NO implementar `asset-entity-fidelity` / `deterministic_anchor_coverage_v3`. Detección de near-duplicates visuales: trabajo futuro.

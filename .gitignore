@@ -12,6 +12,7 @@ data/renders/*
 data/metadata/*
 data/videos/*
 data/cache/*
+data/evaluations/*
 logs!*
 !data/**/.gitkeep
 !logs/.gitkeep
