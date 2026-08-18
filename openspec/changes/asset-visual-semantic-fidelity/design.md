@@ -60,7 +60,7 @@ Los conteos subyacentes se exponen siempre. El target de elegibilidad es provisi
 - `openspec/changes/asset-visual-semantic-fidelity/{proposal,design,tasks}.md`
 - Correcciones de docs: `docs/project/agent-context.md`, `docs/project/current-state.md`
 
-## Slice 2 (ACTIVO) — benchmark de codificadores locales (CPU-first)
+## Slice 2 (COMPLETADO) — benchmark de codificadores locales (CPU-first)
 
 - **Candidatos SOLO:** A. OpenCLIP `ViT-B/32` / `laion2b_s34b_b79k`; B. SigLIP 2 `google/siglip2-base-patch16-224`. NO ViT-L, NO SO400M, NO VLMs generativos, NO más checkpoints, NO API.
 - **Aislamiento:** entorno temporal fuera del repo (p.ej. `/tmp/shorts-visual-fidelity-venv`), CPU-only; descargas fuera del repo; NO tocar `pyproject.toml`/requirements/venv del proyecto/`src/`/`bin/`.
@@ -99,10 +99,38 @@ Detalle bad assets (OpenCLIP P1): rechaza 7/8 — antena nocturna, GIF frame 0 e
 
 Decisión Slice 2: **A. LOCAL_ENCODER_PROMISING** (OpenCLIP ViT-B-32 P1 cumple target provisional; held-out no colapsa). Slice 3 (API multimodal) mantiene valor comparativo, especialmente para fallos de acción/escena.
 
-## Slice 3 (futuro, NO en este change) — API multimodal
-- Benchmark de API multimodal (OpenAI actual) con contrato estructurado ACCEPT/REJECT
-- Registrar precios de API por separado del uso real; coste medido, no estimado del plan
-- Comparar alternativas arquitectónicas B/C/D/E y decidir
+## Slice 3A (COMPLETADO) — benchmark multimodal OpenAI
+
+### Payload y seguridad
+
+- Modelo único: `gpt-5.6-luna`.
+- Una request independiente por asset en Responses API; no se envía `humanLabel`, provider, expected verdict, métricas ni ejemplos del dataset.
+- `instructions` fijo y topic-agnostic; input user contiene únicamente `queryUsed` y la imagen.
+- Imagen como data URL base64 en memoria; GIF animado se convierte a PNG frame 0 sin mutar el original.
+- `detail="high"`, `reasoning.effort="none"`, `max_output_tokens=128`, sin tools, web search ni conversación compartida.
+- Structured Output estricto con JSON Schema: solamente `verdict` (`ACCEPT`/`REJECT`) y `reasonCode` (`MATCH`, `WRONG_ENTITY`, `WRONG_VARIANT_OR_ERA`, `WRONG_ACTION_OR_SCENE`, `TOO_GENERIC_OR_ADJACENT`, `VISUALLY_UNUSABLE`, `OTHER_MISMATCH`).
+- Preflight obligatorio con `responses.input_tokens.count` y el mismo payload real antes de cualquier `responses.create`. `MAX_TOTAL_COST_USD=0.25`; si el máximo proyectado supera el cap, no se ejecuta ninguna inferencia.
+- Resultados persistidos en `data/evaluations/asset-visual-semantic-fidelity/` (git-ignored) sin API key, headers, base64 ni secretos.
+
+### Pricing y evidencia real
+
+Pricing de referencia fijado el 2026-08-18, no medido: input $0.20/M, cached input $0.02/M, output $1.20/M. SDK aislado: `openai 3.2.0`, `Pillow 12.3.0` en `/tmp/shorts-visual-fidelity-api-venv`; no son dependencias del proyecto.
+
+Preflight: **68,117 input tokens**, input proyectado **$0.0136234**, output máximo **$0.0058368**, máximo total **$0.0194602** → dentro del cap. Ejecución: 38/38 completadas, input real 68,117, cached 0, output 1,011, reasoning 0, coste real **$0.0148366** (**$0.0003904368/asset**).
+
+Métricas del harness: **17/30 acceptable retained**, **8/8 bad rejected**, `goodAssetRetention=0.5667`, `badAssetRejectionRecall=1.0`, `falseAcceptances=0`, `falseRejections=13`; confusion matrix TP 17 / TN 8 / FP 0 / FN 13. Latencia median **1.414 s**, p95 **3.663 s**, wall-clock acumulado de requests **65.644 s**.
+
+Per-topic (retained / good, bad rejected / bad): Aurora 2/4, 2/2; Porsche 4/6, 2/2; Spring Boot 2/2, 1/1; Roma 2/2, 2/2; Pulpos 1/4, 1/1; Volcán 4/6, 0/0; Videojuegos 0/2, 0/0; Hipoteca 2/4, 0/0.
+
+Porsche moderno (`Porsche 911 original model illustration`): **REJECT / `WRONG_VARIANT_OR_ERA`**. Es la mejora específica frente a OpenCLIP P1, que lo aceptó; el coste es una pérdida de 8 assets buenos adicionales.
+
+### Decisión Slice 3A
+
+Comparación directa contra OpenCLIP P1: local **25/30 retained + 7/8 badRejected** frente a API **17/30 + 8/8**. Decisión: **`LOCAL_ENCODER_PREFERRED`**. La API aporta rechazo perfecto de los 8 bad y corrige el Porsche moderno, pero la retención de buenos cae materialmente y no justifica coste, red y complejidad para este benchmark. No se integra ningún proveedor. Una futura Slice 3B podría estudiar únicamente escalado selectivo o una política menos conservadora, sin modificar aún producción.
+
+## Slice 3B (futuro, NO en este change) — investigación separada
+- Solo si se decide continuar: estudiar escalado selectivo/API para casos inciertos o un contrato de juez menos conservador.
+- No repetir automáticamente otros modelos ni alterar el runtime.
 
 ## Integración en runtime (futura, solo si el benchmark aprueba)
 - `executor.py` post-descarga, antes del return RESOLVED; gate de metadata se mantiene como primera etapa. Solo si el benchmark lo justifica.

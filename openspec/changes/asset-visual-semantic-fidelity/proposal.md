@@ -64,7 +64,8 @@ NO se benchmarquean ViT-L, SO400M, VLMs generativos, más checkpoints ni APIs. E
 
 ## Candidatos iniciales futuros y costes
 
-- Slice 3 (futuro): benchmark de API multimodal (OpenAI actual) con contrato estructurado ACCEPT/REJECT y coste medido.
+- Slice 3A (COMPLETADO): benchmark multimodal OpenAI con `gpt-5.6-luna`, contrato Structured Output ACCEPT/REJECT, preflight exacto de tokens y coste real limitado a $0.25.
+- Slice 3B (futuro separado): solo si se desea estudiar escalado selectivo/API para casos inciertos; no repetir automáticamente otros modelos ni integrar runtime.
 
 ### Costes y hardware
 
@@ -81,9 +82,11 @@ NO se benchmarquean ViT-L, SO400M, VLMs generativos, más checkpoints ni APIs. E
 
 **Criterios de éxito (Slice 1):** COMPLETADO en `5f2ea96` (31 tests verdes).
 
-## Fuera de alcance (Slice 1 y Slice 2)
+**Resultado Slice 3A:** 38/38 requests completadas; 17/30 buenos retenidos, 8/8 malos rechazados, 0 false acceptances, 13 false rejections; coste real `$0.0148366`. Decisión provisional: **LOCAL_ENCODER_PREFERRED** frente a OpenCLIP P1 (25/30, 7/8). No se integra runtime.
 
-- Instalación de ML en el entorno del proyecto; descarga de pesos al repo; benchmarks GPU automáticos (solo tras decisión CPU); llamadas a OpenAI o cualquier API de pago.
+## Fuera de alcance (Slice 1, Slice 2 y Slice 3A)
+
+- Instalación de ML o SDKs en el entorno del proyecto; descarga de pesos al repo; llamadas API fuera del preflight/ejecución controlada de Slice 3A.
 - Cambios en `src/shorts_creator/` o `bin/`.
 - Ejecución de la suite completa; merge/push.
 - Cierre del change global en Slice 2.
