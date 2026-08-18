@@ -1,5 +1,17 @@
 # Agent Context
 
+## Closed Investigation: visual-fidelity-vlm-judge-v2 — COMPLETED / VERIFIED / CLOSED (merged into `main`, no-ff)
+- Benchmark-first de un judge multimodal API **menos conservador** (`gpt-5.6-luna`, Responses API, 1 request/asset) frente a OpenCLIP y BLIP como segunda etapa visual-semántica. **No runtime integration.** Resultado: **`VLM_JUDGE_V2_NOT_USEFUL`**.
+- Contract: 3 vías `verdict: ACCEPT|REJECT|UNCERTAIN` + `reasonCode` + `shortReason`, Structured Output estricto, `detail=high`, `reasoning none`, sin tools; SIN `humanLabel`/scores previos/expected; input `queryUsed` + `assetPreference` solo si está en el contrato persistido del segmento; REJECT solo en mismatch material; métrica operativa **UNCERTAIN ⇒ ACCEPT** (fail-open).
+- Harness evaluation-only `tools/visual_fidelity_vlm_judge_v2.py`; semántica reasonCode autoritativa = `REASON_CODE_VERDICTS` (tests): `INSUFFICIENT_VISUAL_EVIDENCE` permite ACCEPT, REJECT o UNCERTAIN.
+- Preflight + hard cap `$0.10` (38 canonical + 20 dev = 58 assets). Proyección `$0.030613`; coste real persistido **`$0.013051`**; mediana ~1.58-1.59 s, p95 2.6-6.0 s. Sin API key ni base64 en outputs.
+- Datasets reutilizados SIN relabel (38 + 20). Los 20 son **development evidence**, NO holdout nuevo; sin afirmar generalización.
+- Resultados: canonical-38 **21/30 retained + 8/8 badRejected** (FA 0, FR 9, 0 UNCERTAIN); development-20 **4/13 usableRetained + 5/7 badRejected** (FA 2, FR 9, 0 UNCERTAIN). Fail-open nunca se activó (0 UNCERTAIN).
+- Casos críticos: resuelve 4/5 (data-center vs blockchain art, castillo final vs construcción, castillo vs planos, castillo vs construction-time diagram); falla **motor 2T vs 4T** (ACCEPT, mismo punto ciego que OpenCLIP).
+- **Decisión: `VLM_JUDGE_V2_NOT_USEFUL`** — falla canonical (21/30<24/30) y development (4/13<11/13); mejor rechazo de bad assets que OpenCLIP/BLIP pero peor retención de buenos. No integración, sin holdout nuevo. OpenCLIP ViT-B-32 @0.2296 sigue como pixel gate cuando está activado; `visual-fidelity-runtime` OFF por defecto.
+- Commits: `321da8a` (benchmark) + cierre documental (`docs(evaluation)`), merge no-ff a `main`. Suite en cierre: `1526 passed, 0 failed, 0 skipped`.
+- See `openspec/changes/visual-fidelity-vlm-judge-v2/`.
+
 ## Closed Change: visual-fidelity-runtime — COMPLETED / VERIFIED / CLOSED (merged into `main`)
 - Productize OpenCLIP as a SECOND visual gate in production assets: `metadata gate -> pixel gate -> ACCEPT/REJECT -> next candidate`. Metadata gate (`deterministic_anchor_coverage_v2`) stays as first cheap stage, unchanged.
 - Model/text: OpenCLIP `ViT-B-32` / `laion2b_s34b_b79k`, text policy P1 = `queryUsed`. Rationale: `asset-visual-semantic-fidelity` (CLOSED) measured 25/30 retained + 7/8 badRejected ELIGIBLE (calibrated threshold 0.2296, LOTO 24/30 + 7/8) and decided `LOCAL_ENCODER_PREFERRED` over the multimodal API (17/30 + 8/8).
@@ -52,8 +64,9 @@
 - Accepted known limitation: "Smosh fan art" produced a generic fan/art Pixabay false positive. The upstream query is concrete/retrievable; the false positive is downstream entity/subject-fidelity behavior in `deterministic_anchor_coverage_v2` (unchanged, out of scope). Initially recorded as future change `asset-entity-fidelity`; after `generic-content-pipeline-evaluation` (CLOSED) the follow-up was broadened into `asset-visual-semantic-fidelity` (visual-semantic pixel validation), with `asset-entity-fidelity` kept as research evidence only.
 
 ## Verified State
-- `main` base: `fd4d58d` (asset-visual-semantic-fidelity merged/closed on main). Working tree clean.
-- Active object on close: `visual-fidelity-compositional-benchmark` — COMPLETED / VERIFIED / CLOSED, merged into `main` (no-ff). Commits: `2426016` (benchmark), `4328438` (orientation correction), close commit. Baseline on open: `1494 passed`; after benchmark: `1503 passed`; after orientation correction: `1506 passed`; suite on close/merge: `1506 passed, 0 failed, 0 skipped`.
+- `main` base: `321da8a` (visual-fidelity-vlm-judge-v2 merged/closed on main, no-ff). Working tree clean.
+- Active object on close: `visual-fidelity-vlm-judge-v2` — COMPLETED / VERIFIED / CLOSED, merged into `main` (no-ff). Commits: `321da8a` (benchmark), close commit (`docs(evaluation)`). Baseline on open: `1506 passed`; after harness + tests: `1526 passed`; suite on close/merge: `1526 passed, 0 failed, 0 skipped`. Decision `VLM_JUDGE_V2_NOT_USEFUL` — canonical 21/30 + 8/8, development 4/13 + 5/7; no integration, no new holdout.
+- `visual-fidelity-compositional-benchmark`: COMPLETED / VERIFIED / CLOSED, merged into `main` (no-ff). Commits: `2426016` (benchmark), `4328438` (orientation correction), close commit. Baseline on open: `1494 passed`; after benchmark: `1503 passed`; after orientation correction: `1506 passed`; suite on close/merge: `1506 passed, 0 failed, 0 skipped`.
 - `visual-fidelity-runtime`: COMPLETED / VERIFIED / CLOSED, merged into `main` (branch `change/visual-fidelity-runtime`, HEAD `3be610d`). Baseline on open: `1460 passed`; after Slice 1: `1481 passed`; after Slice 2: `1492 passed`; after Slice 3: `1494 passed, 0 failed, 0 skipped` (root-level collection is blocked by unreadable root-owned `data/postgres/` Docker volume — environmental, unrelated to code). Runtime validation: 25/30 + 7/8 exact benchmark reproduction on CUDA.
 - `asset-visual-semantic-fidelity`: COMPLETED / VERIFIED / CLOSED on `main` (`fd4d58d`). Decision `LOCAL_ENCODER_PREFERRED` (OpenCLIP ViT-B-32 P1: 25/30 + 7/8; API gpt-5.6-luna: 17/30 + 8/8). NO runtime integration; that is now the `visual-fidelity-runtime` change. `asset-entity-fidelity`: PAUSED / research evidence only (NOT the active direction).
 - `generic-content-pipeline-evaluation`: COMPLETED / VERIFIED / CLOSED.
