@@ -1,11 +1,12 @@
 # Agent Context
 
-## Active Change: visual-fidelity-runtime — PLANNED (no implementation yet)
+## Active Change: visual-fidelity-runtime — SLICE 1 COMPLETED (Slice 2/3 pending)
 - Productize OpenCLIP as a SECOND visual gate in production assets: `metadata gate -> pixel gate -> ACCEPT/REJECT -> next candidate`. Metadata gate (`deterministic_anchor_coverage_v2`) stays as first cheap stage, unchanged.
 - Model/text: OpenCLIP `ViT-B-32` / `laion2b_s34b_b79k`, text policy P1 = `queryUsed`. Rationale: `asset-visual-semantic-fidelity` (CLOSED) measured 25/30 retained + 7/8 badRejected ELIGIBLE (calibrated threshold 0.2296, LOTO 24/30 + 7/8) and decided `LOCAL_ENCODER_PREFERRED` over the multimodal API (17/30 + 8/8).
-- Planned component: `src/shorts_creator/assets/visual_fidelity.py`; integration at `assets/executor.py` post-download/pre-RESOLVED (wikimedia + pixabay); `bridge.py` propagates telemetry. Model lazy-loaded and cached once per process; CUDA automatic with CPU fallback; GIF frame 0; optional dependency (no `requirements.txt` inflation); OpenCLIP absence/failure -> explicit bypass with warning + telemetry; rejection deletes the downloaded asset and tries the next candidate; tests without weights/downloads.
+- Slice 1 DONE: `src/shorts_creator/assets/visual_fidelity.py` (component only, NOT integrated) + `tests/test_visual_fidelity_runtime.py` (21 tests). Lazy singleton backend (thread-safe lock, failure cached), CUDA auto with CPU fallback + `device_override` for tests, `model.eval()` + `torch.no_grad()`, normalized cosine, GIF frame 0 without mutating the file, statuses `SCORED`/`UNAVAILABLE`/`DISABLED`, verdict `ACCEPT`/`REJECT`/`BYPASS`, never raises (fail-soft). Config: `VISUAL_FIDELITY_THRESHOLD` only — no threshold/invalid/non-finite -> `DISABLED`; torch/open_clip absent or load/scoring failure -> `UNAVAILABLE`. No ML/PIL imports at module level (source-scanned). Commit `feat(assets): add optional visual fidelity scorer`.
+- Planned next: integration at `assets/executor.py` post-download/pre-RESOLVED (wikimedia + pixabay); `bridge.py` propagates telemetry; rejection deletes the downloaded asset and tries the next candidate. Optional dependency (no `requirements.txt` inflation) documented as an extra in Slice 2/3.
 - `0.2296` is NOT a production threshold: the runtime requires an explicit configured/versioned threshold to enable the gate.
-- Slices: (1) component/lifecycle/config/tests, (2) executor integration + telemetry + fallback, (3) real validation/calibration and controlled activation. Out of scope: OpenAI/VLM, Slice 3B, new providers, search-vs-generation, UI.
+- Slices: (1) component/lifecycle/config/tests — DONE, (2) executor integration + telemetry + fallback, (3) real validation/calibration and controlled activation. Out of scope: OpenAI/VLM, Slice 3B, new providers, search-vs-generation, UI.
 - See `openspec/changes/visual-fidelity-runtime/`.
 
 ## Closed Evaluation: generic-content-pipeline-evaluation — COMPLETED / VERIFIED / CLOSED
@@ -42,7 +43,7 @@
 
 ## Verified State
 - `main` base: `fd4d58d` (asset-visual-semantic-fidelity merged/closed on main). Working tree clean.
-- Active object: `visual-fidelity-runtime` — PLANNED (proposal/design/tasks materialized; no implementation yet; branch `change/visual-fidelity-runtime`). Baseline on open: `python3 -m pytest -q tests` → `1460 passed, 0 failed, 0 skipped` (root-level collection is blocked by unreadable root-owned `data/postgres/` Docker volume — environmental, unrelated to code).
+- Active object: `visual-fidelity-runtime` — SLICE 1 COMPLETED (component only; branch `change/visual-fidelity-runtime`, HEAD `feat(assets): add optional visual fidelity scorer`). Baseline on open: `1460 passed`; after Slice 1: `python3 -m pytest -q tests` → `1481 passed, 0 failed, 0 skipped` (root-level collection is blocked by unreadable root-owned `data/postgres/` Docker volume — environmental, unrelated to code).
 - `asset-visual-semantic-fidelity`: COMPLETED / VERIFIED / CLOSED on `main` (`fd4d58d`). Decision `LOCAL_ENCODER_PREFERRED` (OpenCLIP ViT-B-32 P1: 25/30 + 7/8; API gpt-5.6-luna: 17/30 + 8/8). NO runtime integration; that is now the `visual-fidelity-runtime` change. `asset-entity-fidelity`: PAUSED / research evidence only (NOT the active direction).
 - `generic-content-pipeline-evaluation`: COMPLETED / VERIFIED / CLOSED.
 - `modular-v2-migration`: closed. `AUDIO_DURATION_MISSING`: resolved. Host `ffprobe` remains absent; Docker fallback is used.

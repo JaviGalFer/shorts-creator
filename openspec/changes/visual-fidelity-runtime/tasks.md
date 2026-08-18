@@ -1,6 +1,6 @@
 # Tasks: visual-fidelity-runtime
 
-**Status: PLANNED — cambio abierto, sin implementación.**
+**Status: SLICE 1 COMPLETADO — Slice 2 y Slice 3 pendientes.**
 
 ## Precondiciones (verificadas)
 
@@ -23,15 +23,20 @@
 - [x] Tests sin pesos ni descargas
 - [x] `0.2296` NO es threshold de producción (config explícita y versionada)
 
-## Slice 1 — Componente y lifecycle (PENDIENTE)
+## Slice 1 — Componente y lifecycle (COMPLETADO)
 
-- [ ] `src/shorts_creator/assets/visual_fidelity.py`:
-  - [ ] lazy singleton (carga una vez por proceso)
-  - [ ] CUDA automático / CPU fallback
-  - [ ] GIF frame 0 sin mutar el archivo
-  - [ ] threshold configurable (env/config), sin default `0.2296`
-  - [ ] status `SCORED` / `UNAVAILABLE` / `DISABLED` explícitos
-- [ ] `tests/test_visual_fidelity_runtime.py` (unit con mocks, sin pesos/red/torch real)
+- [x] `src/shorts_creator/assets/visual_fidelity.py`:
+  - [x] lazy singleton (carga una vez por proceso)
+  - [x] CUDA automático / CPU fallback (device_override para tests)
+  - [x] GIF frame 0 sin mutar el archivo
+  - [x] threshold configurable (env/config), sin default `0.2296` (`VISUAL_FIDELITY_THRESHOLD`)
+  - [x] status `SCORED` / `UNAVAILABLE` / `DISABLED` explícitos + verdict `ACCEPT`/`REJECT`/`BYPASS`
+- [x] `tests/test_visual_fidelity_runtime.py` (21 tests unit con mocks, sin pesos/red/torch real)
+- [x] Tests focales verdes: `python3 -m pytest tests/test_visual_fidelity_runtime.py -q` → `21 passed`
+- [x] Suite completa: `python3 -m pytest -q tests` → **`1481 passed, 0 failed, 0 skipped`** (1460 baseline + 21 nuevos)
+- [x] `git diff --check` limpio
+- [x] Commit: **feat(assets): add optional visual fidelity scorer**
+- [x] Sin integración en executor/bridge (Slice 2), sin deps base, sin instalar torch/open_clip, sin descargar pesos
 
 ## Slice 2 — Integración executor + telemetría (PENDIENTE)
 
