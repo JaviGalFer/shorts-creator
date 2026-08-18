@@ -1,6 +1,15 @@
 # Tasks: visual-fidelity-runtime
 
-**Status: SLICE 1 + SLICE 2 + SLICE 3 COMPLETADOS — cambio listo para cierre (merge a `main` pendiente).**
+**Status: COMPLETED / VERIFIED / CLOSED — SLICE 1 + SLICE 2 + SLICE 3 COMPLETADOS, mergeado a `main`.**
+
+## Cierre
+
+- Runtime OpenCLIP validado sobre el corpus canónico de 38 assets: **25/30 retained + 7/8 badRejected** (dev CUDA, 38/38 SCORED, scores idénticos al benchmark <1e-6).
+- `VISUAL_FIDELITY_THRESHOLD=0.2296` = **threshold candidato validado/versionado** en la documentación del change; NUNCA default hardcodeado en `visual_fidelity.py`.
+- Gate **OFF por defecto**: sin `VISUAL_FIDELITY_THRESHOLD` el pipeline se comporta igual que antes (bypass `DISABLED` + assessment persistido).
+- OpenCLIP sigue siendo **dependencia opcional** (no está en `requirements.txt` base).
+- Sin OpenAI/VLM, sin Slice 3B, sin search-vs-generation.
+- Suite completa al cierre: **`1494 passed, 0 failed, 0 skipped`** en `main`.
 
 ## Precondiciones (verificadas)
 
@@ -61,13 +70,13 @@
 - [x] Docs operativas en `design.md`: instalación opcional OpenCLIP, caché de pesos ($HF_HOME/hub), memoria GPU/CPU, comando de activación
 - [x] Hardening final bridge: `_map_unresolved_segment` propaga `visualFidelityRejections` (`_visualFidelityRejections`) + 2 tests focales
 - [x] Tests focales: `python3 -m pytest tests/test_visual_fidelity_runtime.py -q` → **34 passed**
-- [x] Suite completa: `python3 -m pytest -q tests` → **`1492 passed, 0 failed, 0 skipped`** (1492 baseline + 2 bridge, sin regresiones)
+- [x] Suite completa: `python3 -m pytest -q tests` → **`1494 passed, 0 failed, 0 skipped`** (1492 baseline + 2 bridge, sin regresiones)
 - [x] `git diff --check` limpio
 - [x] Commit: **test(assets): validate visual fidelity runtime**
 
 ## Estado del change
 
-- Slices 1 + 2 + 3 COMPLETADOS. Natura del cierre: merge a `main` y cierre OpenSpec quedan para el paso de cierre (fuera de esta sesión: NO merge/push).
+- Slices 1 + 2 + 3 COMPLETADOS. Cierre documental realizado; CHANGE CLOSED y mergeado a `main` (no se borra la rama; paso de cierre completo).
 
 ## Fuera de alcance
 
