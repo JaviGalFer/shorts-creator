@@ -1,5 +1,13 @@
 # Agent Context
 
+## Active Change: visual-fidelity-runtime — PLANNED (no implementation yet)
+- Productize OpenCLIP as a SECOND visual gate in production assets: `metadata gate -> pixel gate -> ACCEPT/REJECT -> next candidate`. Metadata gate (`deterministic_anchor_coverage_v2`) stays as first cheap stage, unchanged.
+- Model/text: OpenCLIP `ViT-B-32` / `laion2b_s34b_b79k`, text policy P1 = `queryUsed`. Rationale: `asset-visual-semantic-fidelity` (CLOSED) measured 25/30 retained + 7/8 badRejected ELIGIBLE (calibrated threshold 0.2296, LOTO 24/30 + 7/8) and decided `LOCAL_ENCODER_PREFERRED` over the multimodal API (17/30 + 8/8).
+- Planned component: `src/shorts_creator/assets/visual_fidelity.py`; integration at `assets/executor.py` post-download/pre-RESOLVED (wikimedia + pixabay); `bridge.py` propagates telemetry. Model lazy-loaded and cached once per process; CUDA automatic with CPU fallback; GIF frame 0; optional dependency (no `requirements.txt` inflation); OpenCLIP absence/failure -> explicit bypass with warning + telemetry; rejection deletes the downloaded asset and tries the next candidate; tests without weights/downloads.
+- `0.2296` is NOT a production threshold: the runtime requires an explicit configured/versioned threshold to enable the gate.
+- Slices: (1) component/lifecycle/config/tests, (2) executor integration + telemetry + fallback, (3) real validation/calibration and controlled activation. Out of scope: OpenAI/VLM, Slice 3B, new providers, search-vs-generation, UI.
+- See `openspec/changes/visual-fidelity-runtime/`.
+
 ## Closed Evaluation: generic-content-pipeline-evaluation — COMPLETED / VERIFIED / CLOSED
 - Genericity benchmark of the CURRENT generic pipeline completed (Fase 1 offline harness + Fase 2 real 8-topic execution + external pixel visual review). `tools/genericity_matrix.py` (read-only, offline, CLI + module) extracts per-job metrics from persisted `metadata.json` without network, LLM, or provider calls. Contact sheets: `data/evaluations/genericity-phase2-visual-review/` (git-ignored).
 - Result: aggregate **YELLOW**. Script/VisualPlan layer is healthy and topic-agnostic across all 8 unrelated domains (no `QUERY_GEN_FAILURE`, no `VISUAL_PLAN_FAILURE`; 0 queries VAGUE, script retries 0). Per-topic: Volcán HEALTHY; Aurora/Porsche/Spring Boot/Pulpos/Videojuegos/Hipoteca USABLE_WITH_LIMITATIONS; Roma SYSTEMIC_FAILURE (asset layer only, not domain understanding).
@@ -33,8 +41,10 @@
 - Accepted known limitation: "Smosh fan art" produced a generic fan/art Pixabay false positive. The upstream query is concrete/retrievable; the false positive is downstream entity/subject-fidelity behavior in `deterministic_anchor_coverage_v2` (unchanged, out of scope). Initially recorded as future change `asset-entity-fidelity`; after `generic-content-pipeline-evaluation` (CLOSED) the follow-up was broadened into `asset-visual-semantic-fidelity` (visual-semantic pixel validation), with `asset-entity-fidelity` kept as research evidence only.
 
 ## Verified State
-- `main` base: `296d553` (generic-content-pipeline-evaluation merged/closed on main).
-- `generic-content-pipeline-evaluation`: COMPLETED / VERIFIED / CLOSED (see Closed Evaluation above). `asset-entity-fidelity`: PAUSED / research evidence only (NOT the active direction). Active investigation: `asset-visual-semantic-fidelity` (benchmark-first; Slice 1, Slice 2 and Slice 3A COMPLETED; `LOCAL_ENCODER_PREFERRED`; no runtime integration; branch `change/asset-visual-semantic-fidelity`).
+- `main` base: `fd4d58d` (asset-visual-semantic-fidelity merged/closed on main). Working tree clean.
+- Active object: `visual-fidelity-runtime` — PLANNED (proposal/design/tasks materialized; no implementation yet; branch `change/visual-fidelity-runtime`). Baseline on open: `python3 -m pytest -q tests` → `1460 passed, 0 failed, 0 skipped` (root-level collection is blocked by unreadable root-owned `data/postgres/` Docker volume — environmental, unrelated to code).
+- `asset-visual-semantic-fidelity`: COMPLETED / VERIFIED / CLOSED on `main` (`fd4d58d`). Decision `LOCAL_ENCODER_PREFERRED` (OpenCLIP ViT-B-32 P1: 25/30 + 7/8; API gpt-5.6-luna: 17/30 + 8/8). NO runtime integration; that is now the `visual-fidelity-runtime` change. `asset-entity-fidelity`: PAUSED / research evidence only (NOT the active direction).
+- `generic-content-pipeline-evaluation`: COMPLETED / VERIFIED / CLOSED.
 - `modular-v2-migration`: closed. `AUDIO_DURATION_MISSING`: resolved. Host `ffprobe` remains absent; Docker fallback is used.
 - First complete technical E2E: `cmo-2026-08-16-172847`, through `VALIDATED`; request 30s, range 27-30, timeline 20.813s, MP4 approximately 20.88s.
 - Real E2E attempt `cmo-2026-08-16-184819` was blocked at script: a legacy bootstrap WPM hard gate rejected a V2-valid 67-word candidate (37.9s estimate) before TTS. The gate is now non-blocking; WPM remains bootstrap telemetry only.

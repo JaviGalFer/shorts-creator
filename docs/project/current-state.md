@@ -2,7 +2,16 @@
 
 **Última actualización:** 2026-08-18
 
-## Investigación activa: `asset-visual-semantic-fidelity` — benchmark-first (Slice 1 COMPLETADO, Slice 2 COMPLETADO, Slice 3A COMPLETADO)
+## Change activo: `visual-fidelity-runtime` — PLANIFICADO (sin implementación)
+
+- Objetivo: productizar OpenCLIP como SEGUNDO gate visual en assets de producción: `metadata gate -> pixel gate -> ACCEPT/REJECT -> siguiente candidato`. El gate de metadata (`deterministic_anchor_coverage_v2`) se mantiene como primera etapa barata y sin cambios.
+- Modelo/texto: OpenCLIP `ViT-B-32` / `laion2b_s34b_b79k`, política de texto P1 = `queryUsed`. Justificación: `asset-visual-semantic-fidelity` (CLOSED) midió 25/30 retained + 7/8 badRejected ELIGIBLE (umbral calibrado 0.2296, LOTO 24/30 + 7/8) y decidió `LOCAL_ENCODER_PREFERRED` frente a la API multimodal (17/30 + 8/8).
+- Componente previsto: `src/shorts_creator/assets/visual_fidelity.py`; integración en `assets/executor.py` post-descarga/pre-RESOLVED (wikimedia + pixabay); `bridge.py` propaga telemetría. Modelo lazy y cacheado una vez por proceso; CUDA automático con fallback CPU; GIF frame 0; dependencia opcional (sin inflar `requirements.txt`); ausencia/fallo de OpenCLIP → bypass explícito con warning + telemetría; rechazo borra el asset descargado y prueba el siguiente candidato; tests sin pesos ni descargas.
+- `0.2296` NO es umbral de producción: el runtime exigirá threshold explícito configurado/versionado para activar el gate.
+- Slices: (1) componente/lifecycle/config/tests, (2) integración executor + telemetría + fallback, (3) validación/calibración real y activación controlada. Fuera de alcance: OpenAI/VLM, Slice 3B, nuevos providers, search-vs-generation, UI.
+- Ver `openspec/changes/visual-fidelity-runtime/`.
+
+## Investigación cerrada: `asset-visual-semantic-fidelity` — COMPLETED / VERIFIED / CLOSED
 
 - Seguimiento de la evaluación cerrada `generic-content-pipeline-evaluation` (CLOSED, decisión **YELLOW**): investigar una validación semántico-visual de SEGUNDA ETAPA basada en los píxeles (provider-agnostic, topic-agnostic), conservando el gate de metadata actual (`deterministic_anchor_coverage_v2`) como primera etapa barata. Benchmark-first: sin cambios de runtime de producción hasta que la evidencia lo justifique.
 - Labels canónicas de los 38 assets rastreadas por Git en `tests/fixtures/asset_visual_fidelity/labels.json` (16 CLEARLY_RELEVANT / 14 COARSE_BUT_USABLE / 8 FALSE_POSITIVE_OR_UNUSABLE; interpretación binaria ACCEPT = CR+CU, REJECT = FP). Las imágenes permanecen en `data/videos/` (git-ignored).
@@ -77,4 +86,4 @@
 - `asset-semantic-relevance`: COMPLETED / VERIFIED / CLOSED. Replay real v2 `los-semantic-v2-20260817-203235`: **3 resuelto / 8 fallido, `ASSETS_PARTIAL`** (V1 era 11/11 irrelevante). Suite completa al cierre: **`1345 passed, 0 skipped, 0 failed`**.
 - `generic-content-pipeline-evaluation`: COMPLETED / VERIFIED / CLOSED. Benchmark real de 8 temas (quick_30, `--stop-after assets`): decisión agregada **YELLOW**; capa script/VisualPlan genérica y sana; 8/38 assets resueltos `FALSE_POSITIVE_OR_UNUSABLE` en 5 dominios no relacionados; cobertura de provider limitada (SUPPLY). Evidencia y contact sheets en `openspec/changes/generic-content-pipeline-evaluation/` y `data/evaluations/genericity-phase2-visual-review/`.
 - Limitación conocida del gate semántico: relevancia gruesa (tema/entidad), no fidelidad temporal/editorial/de contenido de imagen — confirmada como fallo downstream repetido por `generic-content-pipeline-evaluation`. Slice 1 COMPLETED, Slice 2 COMPLETED, Slice 3A COMPLETED; decisión **LOCAL_ENCODER_PREFERRED** (OpenCLIP ViT-B-32 P1 preferido sobre gpt-5.6-luna por mayor retención de assets buenos, sin coste/red/latencia adicionales; no hay integración runtime). No añadir heurísticas semánticas nuevas; NO implementar `asset-entity-fidelity` / `deterministic_anchor_coverage_v3`. Detección de near-duplicates visuales: trabajo futuro. Dirección separada de producto: fallback search-vs-generation.
-- Baseline main antes de la rama activa: **`296d553`** (`generic-content-pipeline-evaluation` mergeado/cerrado).
+- Baseline main antes de la rama activa: **`fd4d58d`** (`asset-visual-semantic-fidelity` mergeado/cerrado); baseline de la rama `change/visual-fidelity-runtime` al abrir: **`1460 passed, 0 failed, 0 skipped`** (`python3 -m pytest -q tests`; la invocación desde la raíz falla al recolectar `data/postgres/`, volumen Docker de postgres propiedad de root no readable — ambiental, no relacionado con el código).
