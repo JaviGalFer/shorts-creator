@@ -20,6 +20,15 @@ from shorts_creator.assets.semantic import (
     assess_candidate,
 )
 
+from shorts_creator.assets.visual_fidelity import (
+    ACCEPT,
+    DISABLED,
+    REJECT,
+    SCORED,
+    UNAVAILABLE,
+    score_visual_fidelity,
+)
+
 # ── Constants ────────────────────────────────────────────────────────────────
 
 ALLOWED_AVAILABILITY_STATUSES: frozenset[str] = frozenset({
@@ -679,6 +688,37 @@ def _evaluate_semantic(segment: dict, candidate: dict) -> dict:
     return assess_candidate(expected, candidate)
 
 
+def _apply_visual_fidelity_gate(
+    absolute_path: Path,
+    query_used: str,
+    warnings: list[dict],
+) -> tuple[bool, dict]:
+    """Post-download pixel gate (provider-agnostic: file + queryUsed only).
+
+    Returns ``(allow, assessment)``. ``allow=False`` means the candidate was
+    REJECTed: the caller deletes the downloaded file and tries the next
+    candidate. DISABLED/UNAVAILABLE are fail-soft bypasses (allow=True) with a
+    warning, so the gate never blocks the pipeline when it cannot run.
+    """
+    assessment = score_visual_fidelity(absolute_path, query_used)
+    status = assessment.get("status")
+    verdict = assessment.get("verdict")
+
+    if status == SCORED and verdict == REJECT:
+        return False, assessment
+
+    if status in (UNAVAILABLE, DISABLED):
+        warnings.append(_warn(
+            f"VISUAL_FIDELITY_BYPASS:{status}",
+            (
+                f"visual fidelity gate {status.lower()}; "
+                f"{assessment.get('reason') or 'no reason provided'}"
+            ),
+            "",
+        ))
+    return True, assessment
+
+
 def _try_live_resolution(
     provider: str,
     candidate: dict,
@@ -764,6 +804,7 @@ def _resolve_wikimedia(
 
         download_errors: list[dict] = []
         semantic_rejections: list[dict] = []
+        visual_fidelity_rejections: list[dict] = []
         any_candidate_found = False
 
         for _attempt_idx in range(_MAX_DOWNLOAD_ATTEMPTS):
@@ -805,6 +846,16 @@ def _resolve_wikimedia(
                 query_used = resolved.get("queryUsed", "")
                 if not query_used and query_texts:
                     query_used = query_texts[0]
+
+                vf_allow, vf_assessment = _apply_visual_fidelity_gate(
+                    absolute_path, query_used, warnings,
+                )
+                if not vf_allow:
+                    visual_fidelity_rejections.append(vf_assessment)
+                    if absolute_path.exists():
+                        absolute_path.unlink(missing_ok=True)
+                    continue
+
                 return {
                     "segmentIndex": segment_idx,
                     "assetPreference": asset_pref,
@@ -823,6 +874,7 @@ def _resolve_wikimedia(
                     "searchQueryUsed": query_used,
                     "generationPromptUsed": None,
                     "semanticAssessment": semantic,
+                    "visualFidelityAssessment": vf_assessment,
                 }
 
             if absolute_path.exists():
@@ -844,6 +896,7 @@ def _resolve_wikimedia(
                 "reason": "all download attempts failed",
                 "downloadAttempts": len(download_errors),
                 "downloadErrors": download_errors,
+                "visualFidelityRejections": visual_fidelity_rejections,
             }
 
         return {
@@ -854,6 +907,7 @@ def _resolve_wikimedia(
             "searchQueriesTried": query_texts,
             "reason": "no candidate passed minimum filters",
             "semanticRejections": semantic_rejections,
+            "visualFidelityRejections": visual_fidelity_rejections,
         }
 
     except WikimediaRateLimitedError:
@@ -944,6 +998,7 @@ def _resolve_pixabay(
         _MAX_DOWNLOAD_ATTEMPTS = 20
         download_errors: list[dict] = []
         semantic_rejections: list[dict] = []
+        visual_fidelity_rejections: list[dict] = []
 
         for attempt in range(min(_MAX_DOWNLOAD_ATTEMPTS, len(candidates))):
             pix_candidate = candidates[attempt]
@@ -972,6 +1027,16 @@ def _resolve_pixabay(
                 query_used = pix_candidate.get("queryUsed", "")
                 if not query_used and query_texts:
                     query_used = query_texts[0]
+
+                vf_allow, vf_assessment = _apply_visual_fidelity_gate(
+                    absolute_path, query_used, warnings,
+                )
+                if not vf_allow:
+                    visual_fidelity_rejections.append(vf_assessment)
+                    if absolute_path.exists():
+                        absolute_path.unlink(missing_ok=True)
+                    continue
+
                 return {
                     "segmentIndex": segment_idx,
                     "assetPreference": asset_pref,
@@ -993,6 +1058,7 @@ def _resolve_pixabay(
                     "tags": pix_candidate.get("tags", ""),
                     "pixabayId": pix_candidate.get("pixabayId"),
                     "semanticAssessment": semantic,
+                    "visualFidelityAssessment": vf_assessment,
                 }
 
             if absolute_path.exists():
@@ -1014,6 +1080,7 @@ def _resolve_pixabay(
                 "reason": "all Pixabay download attempts failed",
                 "downloadAttempts": len(download_errors),
                 "downloadErrors": download_errors,
+                "visualFidelityRejections": visual_fidelity_rejections,
             }
 
         return {
@@ -1024,6 +1091,7 @@ def _resolve_pixabay(
             "searchQueriesTried": query_texts,
             "reason": "no Pixabay candidate downloaded successfully",
             "semanticRejections": semantic_rejections,
+            "visualFidelityRejections": visual_fidelity_rejections,
         }
 
     except ValueError as exc:

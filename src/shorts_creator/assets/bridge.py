@@ -139,6 +139,7 @@ def _map_resolved_asset(
         "queryUsed": asset.get("searchQueryUsed", ""),
         "generationPromptUsed": asset.get("generationPromptUsed"),
         "semanticAssessment": asset.get("semanticAssessment"),
+        "visualFidelityAssessment": asset.get("visualFidelityAssessment"),
         "durationFraction": vs_entry.get("durationFraction", 1.0),
         "transition": vs_entry.get("transition", "cut"),
     }
@@ -185,6 +186,9 @@ def _map_unresolved_segment(
         "_reason": unresolved.get("reason", ""),
         "_searchQueriesTried": list(
             unresolved.get("searchQueriesTried", []) or []
+        ),
+        "_visualFidelityRejections": list(
+            unresolved.get("visualFidelityRejections", []) or []
         ),
         "_attemptedProviders": list(
             unresolved.get("providerAttempts",
