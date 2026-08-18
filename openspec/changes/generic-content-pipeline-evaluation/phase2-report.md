@@ -1,8 +1,13 @@
 # Informe Fase 2: generic-content-pipeline-evaluation
 
-**Estado:** Change OPEN pendiente de revisión del benchmark. Fase 1 COMPLETADA, Fase 2 ejecutada.
+**Estado:** COMPLETADO / VERIFICADO / CLOSED tras la revisión visual externa multimodal de los 38 assets resueltos (contact sheets en `data/evaluations/genericity-phase2-visual-review/`).
 
-**Importante sobre revisión visual:** el entorno de este agente NO dispone de capacidad real de inspección de píxeles (modelo no multimodal). Por ello, las clasificaciones de imagen se reportan como `VISUAL_REVIEW_PENDING`; las inferencias a partir de metadata/nombres/URLs se reportan por separado como `METADATA_ONLY_ASSESSMENT` y NO se presentan como inspección visual. Se listan los paths locales exactos por tema para revisión externa.
+**Sobre la revisión visual:** la revisión de píxeles se completó EXTERNAMENTE desde los cuatro contact sheets generados (modelo multimodal). Las clasificaciones visuales de este informe ya NO son provisionales: reflejan inspección de píxeles.
+
+**Totales de revisión visual (38 resueltos):**
+- `CLEARLY_RELEVANT`: 16
+- `COARSE_BUT_USABLE`: 14
+- `FALSE_POSITIVE_OR_UNUSABLE`: 8
 
 ---
 
@@ -96,9 +101,9 @@ Todas las `semanticAssessment.verdict == RELEVANT` (gate pasó todo lo resuelto)
 
 ---
 
-## 3. Detalle de assets resueltos (queryUsed · provider · fuente) + clase METADATA_ONLY / VISUAL_REVIEW_PENDING
+## 3. Detalle de assets resueltos (queryUsed · provider · fuente) — METADATA_ONLY (contexto de identificación)
 
-Todos los segments resueltos tienen `semanticAssessment.verdict=RELEVANT`. Clasificación imagen = `VISUAL_REVIEW_PENDING`; inferencia por metadata = `METADATA_ONLY_ASSESSMENT` (NO es inspección visual).
+Esta tabla es el registro de identificación por metadata (NO inspección visual). La clasificación VISUAL final por asset está en §3.1.
 
 ### 1) Aurora — `data/videos/cmo-2026-08-17-233901/assets/`
 | seg | queryUsed | prov | path | METADATA_ONLY_ASSESSMENT |
@@ -172,7 +177,69 @@ lote: NOTE — 2 de 4 resueltos probablemente off-topic.
 | s3.1 | mortgage interest calculator photograph | pixabay | scene_003_seg_001.jpg | on-topic |
 | s4.1 | amortization chart graph photograph | pixabay | scene_004_seg_001.png | **PROBABLE FALSE POSITIVE** (gráfico `interface-internet-program-browser`, no tabla de amortización) |
 
+### 3.1 Revisión visual final por asset (inspección de píxeles, revisión externa)
+
+Clasificación visual por asset (contact sheets): `CR`=CLEARLY_RELEVANT, `CU`=COARSE_BUT_USABLE, `FP`=FALSE_POSITIVE_OR_UNUSABLE.
+
+**1) Aurora — 6 resueltos (CR 2, CU 2, FP 2) → USABLE_WITH_LIMITATIONS**
+- s1.1 aurora night sky (wm) — CR
+- s1.2 aurora solar particles (wm) — **FP**: instalación nocturna/antena, no partículas sobre aurora
+- s2.1 solar flares (wm) — CR
+- s3.1 Earth-solar diagram (px) — CU
+- s4.1 aurora colors (px) — CU
+- s5.1 aurora night-sky GIF (wm) — **FP**: primer frame prácticamente en blanco/inutilizable
+
+**2) Porsche 911 — 8 resueltos (CR 3, CU 3, FP 2) → USABLE_WITH_LIMITATIONS**
+- s1.1 classic car (wm) — CR
+- s1.2 classic car (wm) — CR
+- s2.1 Porsche 911 1964 (px) — CU
+- s2.2 original model illustration (px) — **FP**: ilustración de modelo de rendimiento moderno, no el 911 original
+- s3.1 evolution comparison (px) — CU
+- s4.1 advanced technology (px) — CU
+- s5.1 legacy (px) — CR
+- s5.2 sports cars history diagram (px) — **FP**: diagrama de pista de tenis
+
+**3) Spring Boot — 3 resueltos (CR 1, CU 1, FP 1) → USABLE_WITH_LIMITATIONS**
+- s1.2 developer code editor (px) — CU
+- s2.2 Java code snippet (px) — CR
+- s3.1 project structure diagram (px) — **FP**: ilustración genérica web/workflow
+
+**4) Imperio Romano — 4 resueltos (CR 1, CU 1, FP 2) → SYSTEMIC_FAILURE (capa de assets)**
+- s1.2 Roman Empire historical scenes (px) — CR (Foro Romano)
+- s2.2 Roman Empire conflicts illustration (px) — CU (pintura de Julio César)
+- s3.1 Germanic tribes invasion photograph (px) — **FP**: cabaña de pescador no relacionada
+- s4.2 fall of Roman Empire illustration (px) — **FP**: retrato genérico de mujer romana
+
+> NOTA: `SYSTEMIC_FAILURE` aquí es exclusivamente de la ETAPA de assets (acceptance/cobertura). El script/VisualPlan de este tema fue sano y genérico; NO es fallo de comprensión de dominio.
+
+**5) Pulpos — 5 resueltos (CR 3, CU 1, FP 1) → USABLE_WITH_LIMITATIONS**
+- s2.1 camouflage reef (px) — CR
+- s2.2 hiding in coral (px) — CR
+- s3.1 tentacles catching prey (px) — **FP**: pulpo colgado/muerto, no representa la acción de caza pedida
+- s4.1 blue ringed octopus venom (px) — CR
+- s5.1 underwater environment (px) — CU
+
+**6) Volcán — 6 resueltos (CR 4, CU 2, FP 0) → HEALTHY**
+- s1.1 eruption lava flow (px) — CR
+- s2.2 earth crust diagram (px) — CU
+- s3.2 volcano explosion (px) — CR
+- s4.1 volcanic ash (px) — CR
+- s4.2 lava flow (px) — CR
+- s5.1 volcano landscape (px) — CU
+
+**7) Videojuegos 3D — 2 resueltos (CR 0, CU 2, FP 0) → USABLE_WITH_LIMITATIONS**
+- s3.1 PlayStation N64 comparison (px) — CU (joystick/controlador genérico)
+- s4.1 modern 3D immersive (px) — CU (VR headset)
+- Limitación principal: cobertura de provider (2/10), no planificación upstream.
+
+**8) Hipoteca — 4 resueltos (CR 2, CU 2, FP 0) → USABLE_WITH_LIMITATIONS**
+- s1.1 mortgage signing (px) — CR
+- s2.1 mortgage office agent (px) — CU
+- s3.1 interest calculator (px) — CR
+- s4.1 amortization chart (px) — CU: el gráfico genérico de analítica/laptop es coarse para amortización, pero NO es un falso positivo obvio tras inspección de píxeles.
+
 ---
+
 
 ## 4. Segmentos NO resueltos (status persistido) + causa
 
@@ -213,36 +280,35 @@ Distribución por tema (status persistido en metadata):
 
 ---
 
-## 6. Clasificación provisional por tema
+## 6. Clasificación final por tema (tras revisión visual de píxeles)
 
-Las clasificaciones dependen de la corrección visual: al no poder inspeccionar píxeles, se marcan `PROVISIONAL_`.
+Clasificaciones FINALES con inspección visual externa completa (ya no provisionales).
 
-| # | Tema | Clasificación provisional | Base |
-|---|------|---------------------------|------|
-| 1 | Aurora | `PROVISIONAL_HEALTHY` | script/plan buenos, 6/7 resueltos on-topic |
-| 2 | Porsche | `PROVISIONAL_USABLE_WITH_LIMITATIONS` | 1 probable FP + 1 coarse; resto on-topic |
-| 3 | Spring Boot | `PROVISIONAL_USABLE_WITH_LIMITATIONS` | 1 probable FP + 2 coarse; cobertura baja (3/10) |
-| 4 | Roma | `PROVISIONAL_USABLE_WITH_LIMITATIONS` | 2/4 probables FP off-topic; cobertura 4/9 |
-| 5 | Pulpos | `PROVISIONAL_HEALTHY` | script/plan buenos, resueltos on-topic, parcial aceptable |
-| 6 | Volcán | `PROVISIONAL_HEALTHY` | script/plan buenos, 6/9 on-topic |
-| 7 | Videojuegos | `PROVISIONAL_USABLE_WITH_LIMITATIONS` | 8/10 unres (cobertura), 2 coarse |
-| 8 | Hipoteca | `PROVISIONAL_USABLE_WITH_LIMITATIONS` | 1 probable FP + 1 coarse, pocos unresolved |
+| # | Tema | Clasificación final | CR/CU/FP | Base |
+|---|------|---------------------|----------|------|
+| 1 | Aurora | `USABLE_WITH_LIMITATIONS` | 2/2/2 | 2 assets inutilizables (antena nocturna, GIF en blanco) |
+| 2 | Porsche | `USABLE_WITH_LIMITATIONS` | 3/3/2 | ilustración de modelo moderno + pista de tenis |
+| 3 | Spring Boot | `USABLE_WITH_LIMITATIONS` | 1/1/1 | workflow genérico como "project structure" |
+| 4 | Roma | `SYSTEMIC_FAILURE` (capa de assets) | 1/1/2 | 2/4 off-topic obvios (cabaña, retrato) |
+| 5 | Pulpos | `USABLE_WITH_LIMITATIONS` | 3/1/1 | pulpo colgado no representa la acción de caza |
+| 6 | Volcán | `HEALTHY` | 4/2/0 | sin falsos positivos |
+| 7 | Videojuegos | `USABLE_WITH_LIMITATIONS` | 0/2/0 | cobertura 2/10 (provider), no upstream |
+| 8 | Hipoteca | `USABLE_WITH_LIMITATIONS` | 2/2/0 | coarse pero sin FP obvio tras píxeles |
 
-Ningún tema alcanza `SYSTEMIC_FAILURE`: el script/VisualPlan nunca malinterpreta el tema en ningún dominio (capa core genérica y sana).
+Ningún tema falla en script/VisualPlan: la capa core es genérica y sana en los 8 dominios. `SYSTEMIC_FAILURE` de Roma es exclusivamente de la ETAPA de assets (aceptación de candidatos off-topic), no de comprensión de dominio.
 
 ---
 
 ## 7. Decisión agregada
 
-**`AGGREGATE_DECISION_PENDING_VISUAL_REVIEW`**
+**`YELLOW`**
 
-Razones:
-- La revisión visual está materialmente incompleta (modelo no multimodal; clasificaciones `VISUAL_REVIEW_PENDING`).
-- No se fuerza GREEN/YELLOW/RED solo para cerrar.
+Interpretación (contrato del change):
+- Script/VisualPlan sano y topic-agnostic: sin patrón `QUERY_GEN_FAILURE`, sin patrón `VISUAL_PLAN_FAILURE`.
+- Fallo CORE repetido en la ACEPTACIÓN de candidatos downstream (fidelidad visual/semántica): 8 `FALSE_POSITIVE_OR_UNUSABLE` sobre 38 resueltos, repartidos en ≥4 dominios no relacionados.
+- La cobertura de provider también es limitada (especialmente software/videojuegos y conceptos difíciles de ilustrar con stock), pero permanece como SUPPLY, no corrupción de arquitectura.
 
-**Lean provisional (sin bloqueo):** **YELLOW**, por un fallo CORE repetido — `SEMANTIC_GATE_FALSE_POSITIVE` (probables) en ≥4 dominios no relacionados (automoción, software, historia, finanzas). Cumple el criterio de YELLOW del contrato aun cuando la cobertura de provider no bloqueara GREEN (≥6/8 HEALTHY/USABLE por script/plan).
-
-La cobertura de provider pobre se interpreta como SUPPLY, no como corrupción de la arquitectura.
+Totales finales de revisión visual: 38 resueltos → **16 `CLEARLY_RELEVANT` / 14 `COARSE_BUT_USABLE` / 8 `FALSE_POSITIVE_OR_UNUSABLE`**.
 
 ---
 
@@ -252,22 +318,22 @@ La cobertura de provider pobre se interpreta como SUPPLY, no como corrupción de
 Sí. Los 8 temas produjeron script + VisualPlan estructuralmente válidos en attempt 1 (retries 0), con queries 100% `VALID`/concretas, subjects apropiados y `assetPreferences` razonables. La capa script/VisualPlan se comporta genérica y uniformemente.
 
 **2. ¿Los malos resultados vienen de la generación de queries (upstream) o de la cobertura de provider (downstream)?**
-Del downstream (cobertura de provider + gate). No hay `QUERY_GEN_FAILURE` (todas las queries concretas y VALID). Los no resueltos son `NO_RESULTS` (cobertura) o `DOWNLOAD_FAILED`; los falsos positivos ocurren cuando el gate acepta un candidato genérico. El bootstrap `FAIL` de 3 jobs no impactó (telemetría no bloqueante).
+Del downstream (cobertura de provider + gate de aceptación). No hay `QUERY_GEN_FAILURE` (todas las queries concretas y VALID). Los no resueltos son `NO_RESULTS` (cobertura) o `DOWNLOAD_FAILED`; los resueltos incorrectos pasan el gate por solapamiento léxico sin garantía de que los píxeles representen la intención. El bootstrap `FAIL` de 3 jobs no impactó (telemetría no bloqueante).
 
 **3. ¿Aparecen falsos positivos semánticos repetidos en dominios no relacionados, o el caso Smosh fue aislado?**
-Repetidos. Proben 4 dominios NO relacionados (Porsche/automoción, Spring Boot/software, Roma/historia, hipoteca/finanzas) han aceptado candidatos claramente off-topic por metadata. El caso Smosh NO fue aislado; es un síntoma repetido.
+Repetidos y confirmados visualmente. 8 assets `FALSE_POSITIVE_OR_UNUSABLE` en 5 temas (Aurora 2, Porsche 2, Spring Boot 1, Roma 2, Pulpos 1) de dominios no relacionados. El caso Smosh NO fue aislado; es un síntoma recurrente de la etapa de assets.
 
 **4. ¿Los temas abstractos (Spring Boot, hipoteca) son materialmente peores que los de tema visual concreto?**
-Peores en COBERTURA de assets, no en calidad de script/VisualPlan. Spring Boot (3/10) y Videojuegos (2/10) tienen ratios bajos; hipoteca (4/6). La abstracción dificulta encontrar stock concreto, pero no degradó la generación de queries ni el plan. La tasa de probables FP no es peor en abstractos (Porsche, concreto, también tuvo FP).
+Peores en COBERTURA de assets, no en calidad de script/VisualPlan. Spring Boot (3/10) y Videojuegos (2/10) tienen ratios bajos; hipoteca (4/6). La abstracción dificulta encontrar stock concreto, pero no degradó la generación de queries ni el plan. La tasa de FP no es peor en abstractos (Aurora, Porsche, Roma y Pulpos — temas concretos — acumulan 7 de los 8 FP).
 
 **5. ¿Hay evidencia de que la arquitectura dejó de ser agnóstica de tema?**
 No. No hay ramas de dominio; los vocabularios léxicos (filler/weak/stop/specificity) son genéricos; los 8 dominios recibieron planes válidos. La arquitectura sigue siendo topic-agnostic.
 
 **6. ¿Asset-entity-fidelity está justificado por evidencia repetida, o debe seguir en pausa?**
-La evidencia repetida (FPs en 4 dominios no relacionados donde el gate acepta imágenes genéricas porque su metadata solapa anchors secundarios/genéricos) respalda la hipótesis de fidelidad entidad/sujeto. Por tanto, NO debería permanecer solo "research-only": está justificado reanudarlo como UN follow-up genérico y acotado (nunca con ramas de dominio). (Nota: esto NO se implementa en este change.)
+**Conclusión de diseño (cambiada tras la inspección de píxeles):** la evidencia muestra que el problema es MÁS amplio que la fidelidad de entidad nombrada. Los fallos cubren entidades, conceptos, ACCIONES y semántica de escena (`sports cars history`→pista de tenis; `Germanic tribes invasion`→cabaña; `octopus catching prey`→pulpo colgado; `aurora solar particles`→instalación nocturna). Por tanto `asset-entity-fidelity` permanece como EVIDENCIA DE INVESTIGACIÓN SOLO y NO es la dirección de implementación. `deterministic_anchor_coverage_v3` / `FORM_OR_MEDIUM_TERMS` NO es el próximo implementation aprobado. El futuro cambio genérico se registra como **`asset-visual-semantic-fidelity`** (ver §10).
 
 **7. ¿Cuál es la dirección siguiente más justificada (única)?**
-Dado: arquitectura genérica sana (Q5 no), fallo CORE repetido = gate semántico aceptando off-topic por solapamiento de anchors secundarios (Q3/Q6), y cobertura de provider pobre como SUPPLY — la dirección más justificada y acotada es **mejorar la fidelidad de entidad/sujeto del gate semántico (`asset-entity-fidelity` como mejora genérica y acotada de `deterministic_anchor_coverage_v2`)** para exigir el anchor definitorio de la entidad/tema, en lugar de aceptar candidatos que solo comparten términos secundarios. Secundariamente, evaluar estrategia de provider (más/mejores fuentes) por la cobertura SUPPLY.
+La siguiente dirección más justificada es **`asset-visual-semantic-fidelity`**: una validación semántico-visual genérica de segunda etapa basada en los PÍXELES de la imagen (provider-agnostic), manteniendo el gate de metadata actual como primera etapa barata. La evidencia demuestra que la relevancia léxica por metadata es un filtro previo útil pero no puede probar que los píxeles representen la intención visual pedida. Secundariamente (dirección de producto separada): estrategia de provider con fallback search-vs-generation para los conceptos que los bancos de stock no cubren.
 
 ---
 
@@ -281,3 +347,27 @@ Dado: arquitectura genérica sana (Q5 no), fallo CORE repetido = gate semántico
 - **6 Volcán:** `data/videos/qu-2026-08-17-234954/assets/{scene_001_seg_001.jpg, scene_002_seg_002.png, scene_003_seg_002.jpg, scene_004_seg_001.jpg, scene_004_seg_002.jpg, scene_005_seg_001.jpg}`
 - **7 Videojuegos:** `data/videos/cmo-2026-08-17-235250/assets/{scene_003_seg_001.jpg, scene_004_seg_001.jpg}`
 - **8 Hipoteca:** `data/videos/cmo-2026-08-17-235456/assets/{scene_001_seg_001.jpg, scene_002_seg_001.jpg, scene_003_seg_001.jpg, scene_004_seg_001.png}`
+
+---
+
+## 10. Conclusiones de diseño y cambios futuros registrados
+
+### Conclusión de genericity
+El pipeline es genérico y topic-agnostic en su capa core: script + VisualPlan (LLM) funcionan uniformemente en los 8 dominios sin ramas de dominio, queries 100% `VALID`, retries 0. La arquitectura NO está corrompida. Decisión agregada: **YELLOW**.
+
+### Conclusión de fidelidad downstream
+La evidencia visual muestra que el problema NO es solo de fidelidad de entidad nombrada: los fallos cubren entidades, conceptos, acciones y semántica de escena. La relevancia léxica por metadata es un filtro previo útil y barato, pero NO puede probar que los píxeles de la imagen representen la intención visual pedida. 8 de 38 assets resueltos resultaron `FALSE_POSITIVE_OR_UNUSABLE` repartidos en 5 dominios no relacionados.
+
+### Conclusión de cobertura de provider
+La cobertura de search providers (Wikimedia/Pixabay) no cubre todas las necesidades genéricas de VisualPlan (software, videojuegos, conceptos difíciles de ilustrar con stock). Permanecen como SUPPLY, separados de la arquitectura semántica.
+
+### Cambio futuro registrado: `asset-visual-semantic-fidelity` (NO diseñado ahora)
+- **Problem statement:** la relevancia semántica por metadata (léxica) es un coarse pre-filter válido pero no puede garantizar que los píxeles representen la intención visual pedida; los fallos incluyen entidades, conceptos, acciones y semántica de escena.
+- **Plan futuro:** investigar una validación semántico-visual genérica de SEGUNDA ETAPA basada en los píxeles de la imagen (provider-agnostic), conservando el gate de metadata actual como primera etapa barata.
+- **NO implementar en este cambio.** `deterministic_anchor_coverage_v3` / `FORM_OR_MEDIUM_TERMS` NO es la dirección aprobada.
+
+### Estado de `asset-entity-fidelity`
+Permanece como EVIDENCIA DE INVESTIGACIÓN SOLO (pausado). NO es la dirección de implementación activa. NO reemplaza al cambio futuro `asset-visual-semantic-fidelity`.
+
+### Dirección de producto separada (registrada, no diseñada)
+Los providers de búsqueda por sí solos no cubren todas las necesidades genéricas de VisualPlan; un fallback search-vs-generation es una dirección de producto separada.

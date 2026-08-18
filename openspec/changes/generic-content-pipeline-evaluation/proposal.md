@@ -92,3 +92,13 @@ Agregado:
 2. Test focal pasa con fixtures sintéticos (incluye `ASSETS_PARTIAL`, mix resuelto/no-resuelto, sin `semanticAssessment`, sin assets, bootstrap FAIL como telemetría no-fallo, y no-mutación del input).
 3. `git diff --check` limpio.
 4. Sin diff en `src/shorts_creator/` ni en comportamiento de `bin/`.
+
+## Resultado final (Fase 2 + revisión visual) — COMPLETADO / VERIFICADO / CLOSED
+
+- 8/8 jobs `ASSETS_PARTIAL`, script attempt 1 (retries 0) en todos los dominios, 0 queries VAGUE. Sin fallo de infraestructura.
+- Revisión visual externa de píxeles (contact sheets): 38 resueltos → **16 `CLEARLY_RELEVANT` / 14 `COARSE_BUT_USABLE` / 8 `FALSE_POSITIVE_OR_UNUSABLE`**.
+- Clasificación final por tema: Volcán `HEALTHY`; Aurora, Porsche, Spring Boot, Pulpos, Videojuegos 3D, Hipoteca `USABLE_WITH_LIMITATIONS`; Roma `SYSTEMIC_FAILURE` (solo capa de assets, el script/VisualPlan fue sano).
+- **Decisión agregada: `YELLOW`** — arquitectura core genérica y topic-agnostic; fallo CORE repetido en la aceptación downstream (fidelidad visual/semántica) en dominios no relacionados; cobertura de provider limitada (SUPPLY, no corrupción).
+- **Conclusión de diseño:** `asset-entity-fidelity` permanece como evidencia de investigación SOLO. El futuro cambio registrado es **`asset-visual-semantic-fidelity`**: validación semántico-visual de segunda etapa basada en píxeles (provider-agnostic), conservando el gate de metadata actual como primera etapa. `deterministic_anchor_coverage_v3` / `FORM_OR_MEDIUM_TERMS` NO es la dirección aprobada.
+- Dirección de producto separada registrada: fallback search-vs-generation para cobertura de conceptos difíciles de ilustrar con stock.
+- Detalle completo: `phase2-report.md`.

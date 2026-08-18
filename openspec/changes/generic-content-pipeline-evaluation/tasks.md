@@ -1,6 +1,6 @@
 # Tasks: generic-content-pipeline-evaluation
 
-**Status: EN CURSO — Fase 1 COMPLETADA, Fase 2 ACTIVA (evaluación/benchmark real). Change abierto pendiente de revisión.**
+**Status: CLOSED — Fases 1 y 2 completadas, revisión visual externa completada, decisión YELLOW. Merged a `main` con `--no-ff`.**
 
 ## Fase 1 — Setup, contrato y herramienta offline (COMPLETADA)
 
@@ -18,7 +18,7 @@
 - [x] `agent-context.md`: main base refleja `b7b8d57`; `script-visual-specificity` CLOSED; `asset-entity-fidelity` PAUSED / research-only pendiente de evidencia de genericity; evaluation activa `generic-content-pipeline-evaluation`
 - [x] `current-state.md`: dejar de describir la especificidad de script como próxima prioridad; reflejar `generic-content-pipeline-evaluation` como evaluación activa
 
-## Fase 2 — Ejecución real + análisis (ACTIVA, en curso en este change)
+## Fase 2 — Ejecución real + análisis (COMPLETADA)
 
 - [x] Refinar el harness (resolvedDetails + coverage): COMPLETADO
 - [x] Actualizar tests focales sintéticos con los campos nuevos: COMPLETADO
@@ -32,18 +32,26 @@
   (1. Cómo se forma una aurora boreal, 2. La evolución del Porsche 911, 3. Cómo funciona Spring Boot, 4. Por qué cayó el Imperio Romano, 5. Cómo cazan los pulpos, 6. Qué ocurre dentro de un volcán, 7. Cómo evolucionaron los videojuegos 3D, 8. Cómo funciona una hipoteca)
 - [x] Pasar cada `metadata.json` a `tools/genericity_matrix.py` y recopilar filas de la matriz: COMPLETADO (ver `phase2-report.md`)
 - [x] Revisión de guion/VisualPlan y matriz resuelto/no resuelto: COMPLETADO
-- [ ] Revisión VISUAL de píxeles (pendiente — pendiente de entorno con capacidad de inspección de imagen; clasificaciones provisionales + `VISUAL_REVIEW_PENDING`)
-- [x] Clasificar cada tema (provisional) + agregado: COMPLETADO → `AGGREGATE_DECISION_PENDING_VISUAL_REVIEW` (lean provisional YELLOW)
-- [ ] Análisis y cierre; marcar este change CLOSED cuando corresponda (tras revisión visual externa)
+- [x] Revisión VISUAL de píxeles: COMPLETADA (revisión externa multimodal desde los contact sheets `data/evaluations/genericity-phase2-visual-review/`; 38 resueltos → 16 CR / 14 CU / 8 FP). Clasificaciones finales (no provisionales) en `phase2-report.md`
+- [x] Clasificar cada tema (final) + agregado: COMPLETADO → **YELLOW**
+- [x] Análisis, conclusiones de diseño y cierre: COMPLETADO → change CLOSED
 
 ## Evidencia Fase 2 (runtime)
 
 - 8/8 jobs `ASSETS_PARTIAL`, todos script attempt 1 (retries 0), ninguno `REVIEW_REQUIRED`, sin fallo de infra/auth/API.
 - 3 jobs con `durBootstrap=FAIL` (Porsche, Spring Boot, hipoteca) = telemetría no bloqueante (contrato A confirmado).
 - 0 queries VAGUE en los 8 dominios (gate de especificidad OK).
-- CORE: probables `SEMANTIC_GATE_FALSE_POSITIVE` repetidos en 4 dominios no relacionados (Porsche, Spring Boot, Roma, hipoteca).
+- CORE: `SEMANTIC_GATE_FALSE_POSITIVE` CONFIRMADO por píxeles en 5 temas de dominios no relacionados (Aurora 2, Porsche 2, Spring Boot 1, Roma 2, Pulpos 1).
 - SUPPLY/COVERAGE: `NO_RESULTS` alto en Spring Boot (7), Videojuegos (8), Roma (5), Pulpos (4); causa persistida no distinguible → `UNRESOLVED_CAUSE_UNCERTAIN` (contrato B).
+- Clasificación final por tema: Volcán HEALTHY; Aurora, Porsche, Spring Boot, Pulpos, Videojuegos, Hipoteca USABLE_WITH_LIMITATIONS; Roma SYSTEMIC_FAILURE (solo capa de assets).
 - Detalle completo y paths de assets en `phase2-report.md`.
+
+## Cierre (CLOSED) — decisiones registradas
+
+- `asset-entity-fidelity`: permanece como EVIDENCIA DE INVESTIGACIÓN SOLO (pausado, no activo). NO implementar `deterministic_anchor_coverage_v3` / `FORM_OR_MEDIUM_TERMS`.
+- Cambio futuro registrado: **`asset-visual-semantic-fidelity`** — validación semántico-visual de segunda etapa basada en píxeles (provider-agnostic), conservando el gate de metadata actual como primera etapa. NO diseñado en esta sesión.
+- Dirección de producto separada registrada: fallback search-vs-generation para cobertura de conceptos difíciles de ilustrar con stock.
+- Contact sheets: `data/evaluations/genericity-phase2-visual-review/` (evidencia git-ignored vía `.gitignore` `data/evaluations/`).
 
 ## FUERA DE ALCANCE (Fase 1 y 2)
 

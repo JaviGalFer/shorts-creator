@@ -101,3 +101,11 @@ Agregado:
 - `git diff --check` limpio.
 - Sin diff en `src/`; sin cambios de comportamiento en `bin/`.
 - Docs actualizados: `agent-context` (main base `b7b8d57`, `script-visual-specificity` CLOSED, `asset-entity-fidelity` PAUSED, active evaluation `generic-content-pipeline-evaluation`), `current-state` (sin "script specificity" como siguiente prioridad).
+
+## Cierre final (Fase 2 + revisión visual) — COMPLETADO / VERIFICADO / CLOSED
+
+- 8/8 jobs `ASSETS_PARTIAL` (script attempt 1, retries 0, 0 queries VAGUE), sin fallo de infraestructura. Contact sheets generados en `data/evaluations/genericity-phase2-visual-review/` (evidencia, git-ignored).
+- Revisión visual de píxeles externa: 38 resueltos → 16 CR / 14 CU / 8 FP. Per-topic: Volcán HEALTHY; Aurora, Porsche, Spring Boot, Pulpos, Videojuegos, Hipoteca USABLE_WITH_LIMITATIONS; Roma SYSTEMIC_FAILURE (solo capa de assets).
+- Agregado: **YELLOW**. Arquitectura core genérica y sana (sin `QUERY_GEN_FAILURE` ni `VISUAL_PLAN_FAILURE`); fallo CORE repetido en la aceptación downstream (fidelidad visual/semántica) en dominios no relacionados; cobertura de provider limitada = SUPPLY.
+- Conclusión de diseño: `asset-entity-fidelity` sigue siendo evidencia de investigación SOLO. Futuro cambio registrado: **`asset-visual-semantic-fidelity`** (segunda etapa de validación semántico-visual por píxeles, provider-agnostic, manteniendo el gate de metadata como primera etapa). `deterministic_anchor_coverage_v3` / `FORM_OR_MEDIUM_TERMS` NO es la dirección aprobada. Dirección de producto separada registrada: fallback search-vs-generation.
+- Evidencia completa: `phase2-report.md`.
