@@ -31,7 +31,7 @@ _FIXTURES = _ROOT / "tests/fixtures/asset_visual_fidelity"
 CALIBRATION = _FIXTURES / "labels.json"
 HOLDOUT = _FIXTURES / "holdout_labels.json"
 
-BLIP_THRESHOLD = 0.015839167404919863  # locked from calibration; NOT tunable
+BLIP_THRESHOLD = 0.06636959873139858  # locked from calibration; NOT tunable
 
 
 def _read(path: Path) -> Path:
@@ -131,3 +131,58 @@ def test_holdout_blip_threshold_locked_is_not_in_fixture():
         raw = json.loads(fixture.read_text(encoding="utf-8"))
         dumped = json.dumps(raw)
         assert str(BLIP_THRESHOLD) not in dumped
+
+
+# ── BLIP ITM class orientation contract ──────────────────────────────────────
+# Official Salesforce BLIP: class 1 = MATCH, class 0 = NOT_MATCH (training
+# labels [ones(bs), zeros(2*bs)]; retrieval scoring uses itm_head(...)[:, 1]).
+# These tests make the contract explicit so a flipped orientation (class 0
+# reused as match) can never silently pass again.
+
+
+def test_blip_match_helper_uses_class_1():
+    from visual_fidelity_compositional_benchmark import blip_match_from_logits
+
+    # class1 logit higher than class0 -> match probability > 0.5
+    assert blip_match_from_logits([-3.0, 3.0]) > 0.99
+    # class0 logit higher than class1 -> match probability < 0.5
+    assert blip_match_from_logits([3.0, -3.0]) < 0.01
+    # symmetric logits -> 0.5
+    assert abs(blip_match_from_logits([0.0, 0.0]) - 0.5) < 1e-9
+
+
+def test_blip_orientation_guards_are_present_in_source():
+    source = _read(_ROOT / "tools/visual_fidelity_compositional_benchmark.py").read_text(
+        encoding="utf-8"
+    )
+    # The match class constant must exist and equal 1.
+    assert "BLIP_MATCH_CLASS = 1" in source
+    assert "BLIP_NOT_MATCH_CLASS = 0" in source
+    # The BLIP scoring path must read the match probability from class 1.
+    assert "probs[BLIP_MATCH_CLASS]" in source
+    # No silent class-0 reuse: the persisted per-asset score must be the
+    # matchProbability, never the notMatchProbability (raw logits[0, 0]
+    # extraction in the function and the notMatchScores dict are legitimate).
+    assignment_lines = [
+        line.strip()
+        for line in source.splitlines()
+        if ".assetPath" in line or "assetPath\"]]" in line
+    ]
+    assert 'scores[entry["assetPath"]] = match' in assignment_lines
+    assert 'scores[entry["assetPath"]] = not_match' not in assignment_lines
+    assert 'not_match_scores[entry["assetPath"]] = not_match' in assignment_lines
+    # An orientation sanity check must be wired into the BLIP run flow.
+    assert "_check_blip_orientation" in source
+    assert "matchProbabilityCompatible" in source
+
+
+def test_blip_orientation_manual_probe_semantics():
+    # Simulate the Cartesian case the sanity check asserts: a compatible pair
+    # (queryUsed of a real asset) must beat an unrelated text on match class.
+    from visual_fidelity_compositional_benchmark import blip_match_from_logits
+
+    compatible = blip_match_from_logits([-2.9, 2.9])  # CLEARLY_RELEVANT volcano
+    incompatible = blip_match_from_logits([4.1, -4.1])  # unrelated text
+    assert compatible > incompatible
+    assert compatible > 0.5
+    assert incompatible < 0.5

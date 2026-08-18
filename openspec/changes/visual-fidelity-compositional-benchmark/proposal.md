@@ -23,7 +23,8 @@ provider candidate
 Solo se evalúa **`Salesforce/blip-itm-base-coco`**:
 
 - `transformers.BlipProcessor` + `transformers.BlipForImageTextRetrieval`
-- cabeza ITM (`use_itm_head=True`), score = `softmax(itm_score)[0, 0]` (probabilidad de la clase positiva de matching)
+- cabeza ITM (`use_itm_head=True`), score = `softmax(itm_score.float(), dim=-1)[0, 1]` = **matchProbability** (clase positiva de matching)
+- El contrato clase-1=MATCH es la convención oficial de Salesforce BLIP: `train_retrieval.py` etiqueta los pares positivos con `ones` (clase 1) y `eval_retrieval.py` puntúa con `itm_head(...)[:, 1]`. La clase 0 es NOT-MATCH y NUNCA se usa como score. Una sanity check de orientación en-run (par compatible vs incompatible sobre un asset real) y tests unitarios offline impiden una inversión silenciosa del contrato.
 - raw `queryUsed` como política de texto (P1, sin templates)
 - `model.eval()`, `torch.no_grad()`, batch=1, RGB, GIF frame 0
 - NO se evalúa `large` en esta fase.

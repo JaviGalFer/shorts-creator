@@ -36,19 +36,35 @@ openspec/changes/visual-fidelity-compositional-benchmark/results.md  ← informe
   Toda métrica aquí se reporta contra 13/7 y se anota la cuenta nominal 12/8.
 - El holdout es disjunto del calibration (0 assetPaths en común, testeado).
 
-### Blip ITM score
+### Blip ITM score (contrato de clase corregido)
 
 ```
 processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base-coco")
 model     = BlipForImageTextRetrieval.from_pretrained(...).eval()
 inputs    = processor(text=raw_queryUsed, images=image_rgb_gif_frame0, return_tensors="pt")
 outputs   = model(**inputs, use_itm_head=True)
-score     = softmax(outputs.itm_score, dim=-1)[0, 0]   # P(imagen describe el query)
+logits    = outputs.itm_score                          # shape (batch, 2)
+matchProbability     = softmax(logits.float(), dim=-1)[0, 1]   # CLASE 1 = MATCH
+notMatchProbability  = softmax(logits.float(), dim=-1)[0, 0]   # CLASE 0 = NOT_MATCH
 ```
 
-- `itm_score` con `use_itm_head=True` tiene forma `(batch, 2)` con clase 0 =
-  matching positivo; se usa la probabilidad softmax de la clase 0 (monótona en el
-  logit, rango [0,1], comparable como score numérico finito).
+- `itm_score` con `use_itm_head=True` tiene forma `(batch, 2)`. La clase 1 es la
+  clase positiva (MATCH) según la implementación oficial de Salesforce BLIP:
+  `train_retrieval.py` construye `itm_labels = cat([ones(bs), zeros(2*bs)])`
+  (los pares positivos se etiquetan con clase 1) y `eval_retrieval.py` puntúa el
+  retrieval con `model.itm_head(...)[:, 1]`.
+- El score usado para thresholding es **matchProbability** = softmax clase 1
+  (monótona en logit, rango [0,1], score numérico finito). La probabilidad
+  complementaria (clase 0) y los logits crudos se persisten por asset como
+  `notMatchScores` e `itmLogits` para que el contrato sea auditable.
+- **Guard de orientación en-run:** antes de puntuar, `_check_blip_orientation`
+  toma un asset real del conjunto, lo puntúa con su propio `queryUsed` (par
+  compatible) y con un texto claramente incompatible; aborta el run si
+  `matchProbability(compatible) <= matchProbability(incompatible)`. Esto evita
+  volver a heredar una inversión silenciosa clase-0-vs-clase-1.
+- Tests unitarios offline (`blip_match_from_logits` + assertion de que el
+  assignment del score usa `match` y no `not_match`) fijan el contrato sin
+  importar ML.
 - Deterministic: `eval()`, `no_grad()`, `torch.manual_seed(0)`, batch=1.
 - GIF: frame 0 (misma convención que el benchmark humano y que OpenCLIP runtime).
 
@@ -68,19 +84,21 @@ existente, sin cambios): maximizar `badRejected` sujeto a `goodAssetRetention >=
 0.80`; si empate en `badRejected`, maximizar `acceptableRetained`; solo si ambos
 empatan, threshold más estricto. El winner se bloquea y se aplica al holdout sin re-ajustar.
 
-Resultado del bloqueo: threshold BLIP = **0.015839167404919863** (probabilidad softmax ITM).
+Resultado del bloqueo (CORRRIGE el anterior 0.015839167404919863, que usaba la
+clase 0 — NOT_MATCH — por error y queda **INVALIDADO**): threshold BLIP =
+**0.06636959873139858** (probabilidad matchProbability, clase 1).
 
 ## Performance (medida, no asumida)
 
-GTX 1650 SUPER (CUDA 12.8), batch=1:
+GTX 1650 SUPER (CUDA 12.8), batch=1 (carga reutilizando la caché HF ya poblada):
 
 | Modelo | load | total (38) | mediana | p95 | pico VRAM alloc | pico RSS | OOM |
 |---|---|---|---|---|---|---|---|
-| BLIP ITM base | ~15.3 s (38, 1er run c/ descarga) / ~11.1 s (20) | 25.97 s (38) | 140.9 ms | 264.0 ms (38) / 154.1 ms (20) | 924.6 MiB | 2324 MiB (38) | no |
+| BLIP ITM base (corregido) | ~4.3 s | 6.68 s (38) / 3.19 s (20) | ~136 ms | ~153 ms | 924.6 MiB | 1651 MiB | no |
 | OpenCLIP ViT-B-32 (holdout) | 2.70 s | 0.82 s | 8.3 ms | 10.6 ms | 624.8 MiB | 1873 MiB | no |
 
-BLIP carga más (~15 s) y puntúa ~17× más lento por asset que OpenCLIP en esta GPU
-(140.9 ms vs 8.3 ms), con mayor pico de VRAM (924.6 vs 624.8 MiB).
+BLIP carga ligeramente más y puntúa ~16× más lento por asset que OpenCLIP en esta
+GPU (~136 ms vs 8.3 ms), con mayor pico de VRAM (924.6 vs 624.8 MiB).
 
 ## Riesgos y límites conocidos
 
@@ -92,3 +110,5 @@ BLIP carga más (~15 s) y puntúa ~17× más lento por asset que OpenCLIP en est
   crudos se reportan siempre, no solo porcentajes.
 - Score = solo la cabeza ITM (sin agregar la rama ITC/contrastiva); decisión
   documentada del protocolo para aislar el matching explícito.
+- El contrato de clase 1=MATCH se fija por fuente oficial, sanity check en-run y
+  tests; no se asume silenciosamente (ver sección "Blip ITM score").
