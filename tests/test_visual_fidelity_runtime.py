@@ -785,3 +785,76 @@ def test_bridge_propagates_visual_fidelity_assessment():
     seg = result["assets"][0]["segments"][0]
     assert seg["visualFidelityAssessment"]["verdict"] == "ACCEPT"
     assert seg["visualFidelityAssessment"]["method"] == "openclip_vit_b32_p1"
+
+
+def test_bridge_propagates_visual_fidelity_rejections():
+    metadata = {
+        "jobId": "test-job-001",
+        "script": {
+            "scenes": [{
+                "sceneNumber": 1,
+                "visualPlan": {
+                    "_schemaVersion": 2,
+                    "visualSequence": [{
+                        "segmentIndex": 1,
+                        "assetPreference": "painting",
+                        "durationFraction": 1.0,
+                        "transition": "cut",
+                    }],
+                },
+            }],
+        },
+    }
+    rejections = [
+        _vf_assessment(verdict="REJECT", score=0.1),
+        _vf_assessment(verdict="REJECT", score=0.05),
+    ]
+    executor_result = {
+        "resolvedAssets": [],
+        "unresolvedSegments": [{
+            "segmentIndex": 1,
+            "assetPreference": "painting",
+            "status": "NO_RESULTS",
+            "provider": "wikimedia_commons",
+            "searchQueriesTried": ["test query"],
+            "reason": "no candidate passed minimum filters",
+            "visualFidelityRejections": rejections,
+        }],
+    }
+    result = apply_visual_assets_v2_to_metadata(metadata, executor_result)
+    seg = result["assets"][0]["segments"][0]
+    assert seg["segmentValidationStatus"] == "FAIL"
+    assert seg["_visualFidelityRejections"] == rejections
+    assert seg["_visualFidelityRejections"][0]["verdict"] == "REJECT"
+
+
+def test_bridge_unresolved_without_rejections_empty_list():
+    metadata = {
+        "jobId": "test-job-001",
+        "script": {
+            "scenes": [{
+                "sceneNumber": 1,
+                "visualPlan": {
+                    "_schemaVersion": 2,
+                    "visualSequence": [{
+                        "segmentIndex": 1,
+                        "assetPreference": "painting",
+                        "durationFraction": 1.0,
+                        "transition": "cut",
+                    }],
+                },
+            }],
+        },
+    }
+    executor_result = {
+        "resolvedAssets": [],
+        "unresolvedSegments": [{
+            "segmentIndex": 1,
+            "assetPreference": "painting",
+            "status": "PROVIDER_UNAVAILABLE",
+            "reason": "all candidates unavailable",
+        }],
+    }
+    result = apply_visual_assets_v2_to_metadata(metadata, executor_result)
+    seg = result["assets"][0]["segments"][0]
+    assert seg["_visualFidelityRejections"] == []

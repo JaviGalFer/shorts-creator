@@ -187,6 +187,9 @@ def _map_unresolved_segment(
         "_searchQueriesTried": list(
             unresolved.get("searchQueriesTried", []) or []
         ),
+        "_visualFidelityRejections": list(
+            unresolved.get("visualFidelityRejections", []) or []
+        ),
         "_attemptedProviders": list(
             unresolved.get("providerAttempts",
             unresolved.get("attemptedProviders", [])) or []

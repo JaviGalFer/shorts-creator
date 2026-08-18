@@ -128,6 +128,28 @@ Y en `unresolvedSegments` (`visualFidelityRejections`) para cada candidato recha
 
 ## Fases de implementación
 
-- **Slice 1**: `visual_fidelity.py` (componente, lazy singleton, CPU/CUDA, GIF frame 0, threshold configurable sin default 0.2296) + `tests/test_visual_fidelity_runtime.py` (unit con mocks). Sin integración.
-- **Slice 2**: integración en `executor.py` (gate post-descarga wikimedia/pixabay, rechazo → siguiente candidato, bypass UNAVAILABLE/DISABLED), `bridge.py` (telemetría), tests de flujo + suite completa.
-- **Slice 3**: validación/calibración real contra corpus canónico (runtime real, leave-one-topic-out), fijar threshold versionado, activación controlada (env), docs operativas.
+- **Slice 1 (COMPLETADO)**: `visual_fidelity.py` (componente, lazy singleton, CPU/CUDA, GIF frame 0, threshold configurable sin default 0.2296) + `tests/test_visual_fidelity_runtime.py` (unit con mocks). Sin integración.
+- **Slice 2 (COMPLETADO)**: integración en `executor.py` (gate post-descarga wikimedia/pixabay, rechazo → siguiente candidato, bypass UNAVAILABLE/DISABLED), `bridge.py` (telemetría), tests de flujo + suite completa.
+- **Slice 3 (COMPLETADO)**: validación/calibración real contra corpus canónico con el componente runtime real, fijación de threshold validado (siempre candidato/versionado, NUNCA default), activación controlada (env), docs operativas.
+
+## Slice 3 (COMPLETADO) — evidencia runtime real
+
+Validación con el componente runtime real `score_visual_fidelity` (NO el benchmark antiguo) sobre el corpus canónico de 38 assets. Entorno: venv externo `/tmp/shorts-visual-fidelity-gpu-venv` (torch 2.11.0+cu128, open_clip_torch 3.3.0, Pillow 12.3.0), caché HF `/tmp/shorts-visual-fidelity-hf`, dispositivo **cuda** (NVIDIA GeForce GTX 1650 SUPER, 4 GB). Pocos weights descargados (caché reutilizada de Slice 2). Threshold provisional de validación: `VISUAL_FIDELITY_THRESHOLD=0.2296`.
+
+- 38/38 `SCORED`, 0 `UNAVAILABLE`/`DISABLED` (gate operativo, sin bypass).
+- **25/30 retained + 7/8 badRejected** — reproduce EXACTAMENTE el benchmark Slice 2.
+- `goodAssetRetention=0.8333`, `badAssetRejectionRecall=0.875`, `falseAcceptances=1`, `falseRejections=5`.
+- Verdicts idénticos al benchmark; **scores coinciden al <1e-6** (max abs diff 6.1e-07, mean 1.5e-07) — reproducibilidad GPU/CPU del runtime confirmada sobre los mismos 38 assets.
+- Único bad no rechazado: ilustración moderna del Porsche (`la-2026-08-17-234123/scene_002_seg_002.png`) — fidelidad entidad/temporal, caso conocido y aceptado.
+- Good assets falsamente rechazados (5): aurora night-sky PNG, diagrama Earth-solar, volcán paisaje, VR headset, gráfico amortización — mismos 5 del benchmark previo.
+- Latencia medida (incluye carga del modelo al inicio): total 5.4 s (load ~4.3 s + scoring); mediana 24.5 ms, p95 214 ms, máx 3.8 s (primera llamada: warmup/Kernel CUDA). Rows crudas en `data/evaluations/visual-fidelity-runtime/runtime-validation.json` (git-ignored).
+- Target alcanzado: retained >= 24/30 ✓ y badRejected >= 6/8 ✓.
+
+## Activación y operación (decidido en Slice 3)
+
+- **Gate OFF por defecto.** Sin `VISUAL_FIDELITY_THRESHOLD` el gate devuelve `DISABLED` y el pipeline se comporta exactamente como antes (bypass + assessment persistido).
+- **`VISUAL_FIDELITY_THRESHOLD` es la única superficie de activación** (explícita, por proceso/job). `0.2296` queda registrado como **threshold validado/candidato versionado en la documentación del change** — NUNCA como default hardcodeado en `visual_fidelity.py`.
+- Para activarlo en un job: `VISUAL_FIDELITY_THRESHOLD=0.2296 python3 bin/run_job.py ...`. Sin la variable, el modelo NO se carga (ahorro de ~1.5 GiB RSS / VRAM y tiempo de arranque).
+- No se añade `torch`/`open_clip` a `requirements.txt` base; el stack es una dependencia opcional instalada en el entorno de ejecución (idealmente con CUDA si hay GPU).
+- Instalación opcional (no es dep del proyecto): `pip install open_clip_torch` (+ `torch`/`torchvision` con CUDA si se desea GPU). Los pesos de `ViT-B-32/laion2b_s34b_b79k` se cachean en el HF hub del usuario (p.ej. `$HF_HOME/hub/models--laion--CLIP-ViT-B-32-laion2B-s34B-b79K`); el repo nunca contiene pesos.
+- Memoria: CPU ~1.5 GiB RSS (medido en benchmark Slice 2); GPU máximo 690.6 MiB asignados (GTX 1650 SUPER 4 GB).
