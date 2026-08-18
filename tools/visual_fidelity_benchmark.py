@@ -15,7 +15,12 @@ Behavior contract (Slice 1):
     image files to exist: evaluation is purely label + score driven.
   - Binary interpretation: ACCEPT = CLEARLY_RELEVANT + COARSE_BUT_USABLE,
     REJECT = FALSE_POSITIVE_OR_UNUSABLE.
-  - Numeric-score mode supports deterministic threshold sweeping and selection.
+  - Numeric-score mode supports deterministic threshold sweeping and selection
+    (max badRejected subject to goodAssetRetention >= 0.80, then max
+    acceptableRetained among badRejected ties, strictest threshold only on a
+    full tie). Score values must be finite numeric values (bools, NaN and
+    +inf/-inf model outputs are rejected); the sweep's -inf/+inf boundary
+    thresholds are internal mechanics, not model scores.
   - No production threshold is defined. The experiment eligibility target is
     provisional: bad rejection >= 6/8 AND good retention >= 24/30. All
     underlying counts are always reported so the tiny 8-negative dataset is not
@@ -26,7 +31,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
+from numbers import Real
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -169,13 +176,39 @@ def load_labels(path: str | Path) -> list[dict]:
 # ── Metric evaluation ────────────────────────────────────────────────────────
 
 
+def _validate_score_value(value: Any, index: int) -> None:
+    """Validate a single numeric model score.
+
+    Rejects bools (not a numeric score), non-numeric values and non-finite
+    values (NaN/+inf/-inf) that could leak from a broken model output. The
+    ``-inf``/``+inf`` boundary *thresholds* of the sweep are internal benchmark
+    mechanics and are never confused with model scores.
+    """
+    if isinstance(value, bool):
+        raise ValueError(
+            f"scores[{index}]: bool is not accepted as a numeric score"
+        )
+    if not isinstance(value, Real):
+        raise ValueError(f"scores[{index}]: non-numeric score {value!r}")
+    if not math.isfinite(float(value)):
+        raise ValueError(
+            f"scores[{index}]: non-finite score {value!r} "
+            "(NaN/+inf/-inf not allowed from model output)"
+        )
+
+
 def _resolve_per_entry_values(
     entries: Sequence[dict],
     values: Any,
     *,
     what: str,
+    validate_finite_scores: bool = False,
 ) -> list[Any]:
-    """Normalize ``values`` to a per-entry list (dict keyed by assetPath or list)."""
+    """Normalize ``values`` to a per-entry list (dict keyed by assetPath or list).
+
+    With ``validate_finite_scores=True`` each value must be a finite numeric
+    score (see ``_validate_score_value``).
+    """
     if isinstance(values, dict):
         result: list[Any] = []
         missing: list[str] = []
@@ -189,12 +222,18 @@ def _resolve_per_entry_values(
                 f"{what} missing values for {len(missing)} entries; "
                 f"first missing assetPath: {missing[0]!r}"
             )
+        if validate_finite_scores:
+            for i, value in enumerate(result):
+                _validate_score_value(value, i)
         return result
     if isinstance(values, (list, tuple)):
         if len(values) != len(entries):
             raise ValueError(
                 f"{what} list length {len(values)} != labels length {len(entries)}"
             )
+        if validate_finite_scores:
+            for i, value in enumerate(values):
+                _validate_score_value(value, i)
         return list(values)
     raise ValueError(
         f"{what} must be a list aligned with labels or a dict keyed by assetPath"
@@ -293,9 +332,12 @@ def evaluate_scores(
     """Evaluate metrics at a fixed score threshold.
 
     Higher score means more similar/relevant; an entry is ACCEPT iff
-    ``score >= threshold``.
+    ``score >= threshold``. Scores must be finite numeric values (bools,
+    NaN/inf and non-numeric values are rejected).
     """
-    resolved = _resolve_per_entry_values(entries, scores, what="scores")
+    resolved = _resolve_per_entry_values(
+        entries, scores, what="scores", validate_finite_scores=True
+    )
     accept_mask = [s >= threshold for s in resolved]
     return _metrics_from_accept_verdicts(entries, accept_mask)
 
@@ -322,7 +364,9 @@ def threshold_sweep(
     generalize beyond this labeled dataset and must not be treated as a
     production threshold.
     """
-    resolved = _resolve_per_entry_values(entries, scores, what="scores")
+    resolved = _resolve_per_entry_values(
+        entries, scores, what="scores", validate_finite_scores=True
+    )
     if not isinstance(resolved, list):
         resolved = list(resolved)
     unique = sorted({s for s in resolved})
@@ -350,6 +394,34 @@ def threshold_sweep(
     return points
 
 
+def _select_best_point(
+    points: Sequence[dict],
+    *,
+    min_good_retention: float,
+) -> dict | None:
+    """Deterministic selection among sweep points (documented rule).
+
+    1. Consider only points meeting ``goodAssetRetention >= min_good_retention``.
+    2. Maximize ``badRejected`` (bad-asset rejection; raw count on the tiny
+       8-negative dataset).
+    3. Among ties on ``badRejected``, maximize ``acceptableRetained`` (do NOT
+       reject additional good assets when catching no additional bad asset).
+    4. Only if ``badRejected`` AND ``acceptableRetained`` still tie, choose the
+       STRICTEST (highest) threshold.
+
+    Returns the winning point or ``None`` if no point meets the retention
+    floor.
+    """
+    candidates = [p for p in points if p["meetsMinGoodRetention"]]
+    if not candidates:
+        return None
+    max_bad_rejected = max(p["badRejected"] for p in candidates)
+    by_bad = [p for p in candidates if p["badRejected"] == max_bad_rejected]
+    max_retained = max(p["acceptableRetained"] for p in by_bad)
+    by_retained = [p for p in by_bad if p["acceptableRetained"] == max_retained]
+    return max(by_retained, key=lambda p: p["threshold"])
+
+
 def select_threshold(
     entries: Sequence[dict],
     scores: Any,
@@ -358,14 +430,15 @@ def select_threshold(
 ) -> dict[str, Any]:
     """Deterministically select a score threshold.
 
-    Selection rule (documented, deterministic):
-      1. Consider only thresholds where ``goodAssetRetention >=
+    Selection rule (documented, deterministic, see ``_select_best_point``):
+      1. Consider only thresholds with ``goodAssetRetention >=
          min_good_retention`` (default 0.80).
-      2. Among those, maximize ``badRejected`` (bad-asset rejection recall
-         recall is not a target; the raw count is maximized on this tiny
-         8-negative dataset).
-      3. Tie-break: among thresholds with the maximal ``badRejected``, choose
-         the STRICTEST threshold (highest score threshold -> fewest ACCEPTs).
+      2. Maximize ``badRejected`` (raw count on the 8-negative dataset).
+      3. Among ties on ``badRejected``, maximize ``acceptableRetained`` — do not
+         reject additional good assets when doing so catches no additional bad
+         asset.
+      4. Only if ``badRejected`` AND ``acceptableRetained`` still tie, choose
+         the STRICTEST (highest) threshold.
 
     This threshold is a benchmark calibration result only. It does NOT
     generalize beyond this labeled dataset and is not a production threshold.
@@ -376,9 +449,9 @@ def select_threshold(
     points = threshold_sweep(
         entries, scores, min_good_retention=min_good_retention
     )
-    candidates = [p for p in points if p["meetsMinGoodRetention"]]
+    best = _select_best_point(points, min_good_retention=min_good_retention)
 
-    if not candidates:
+    if best is None:
         return {
             "selected": False,
             "threshold": None,
@@ -388,11 +461,6 @@ def select_threshold(
             ),
         }
 
-    max_bad_rejected = max(p["badRejected"] for p in candidates)
-    best = max(
-        (p for p in candidates if p["badRejected"] == max_bad_rejected),
-        key=lambda p: p["threshold"],
-    )
     return {
         "selected": True,
         "threshold": best["threshold"],
@@ -410,9 +478,10 @@ def select_threshold(
             )
         },
         "reason": (
-            f"maximized badRejected={max_bad_rejected} subject to "
-            f"goodAssetRetention >= {min_good_retention}; tie-break toward the "
-            "strictest threshold"
+            f"maximized badRejected={best['badRejected']} subject to "
+            f"goodAssetRetention >= {min_good_retention}; among badRejected ties "
+            f"maximized acceptableRetained={best['acceptableRetained']}; "
+            "final tie-break toward the strictest threshold"
         ),
     }
 

@@ -23,6 +23,7 @@ from visual_fidelity_benchmark import (  # noqa: E402
     ALLOWED_LABELS,
     REJECT,
     REJECTED_LABELS,
+    _select_best_point,
     evaluate_scores,
     evaluate_verdicts,
     human_label_to_verdict,
@@ -283,10 +284,12 @@ def test_select_threshold_no_viable_threshold() -> None:
 # ── Deterministic tie behavior ───────────────────────────────────────────────
 
 
-def test_select_threshold_tie_breaks_to_stricter() -> None:
+def test_select_threshold_prefers_retained_among_badrejected_ties() -> None:
     entries = _canonical()
-    # One good asset gets an intermediate score. Thresholds between that score
-    # and the bad scores tie on badRejected; the strictest (highest) is chosen.
+    # One good asset gets an intermediate score (0.6). Two thresholds tie on
+    # badRejected (8), but the lower threshold (0.4) retains that good asset
+    # while the higher one (0.75) would reject it for no additional bad-asset
+    # gain. The rule must keep the asset (acceptableRetained 30 > 29).
     scores = _canonical_scores(good_score=0.9, bad_score=0.2)
     tie_key = None
     for e in entries:
@@ -299,12 +302,54 @@ def test_select_threshold_tie_breaks_to_stricter() -> None:
     max_bad = max(p["badRejected"] for p in points)
     tied = [p for p in points if p["badRejected"] == max_bad]
     assert len(tied) > 1  # tie actually occurs
-    expected_strictest = max(p["threshold"] for p in tied)
+    assert {p["acceptableRetained"] for p in tied} == {30, 29}
 
     selected = select_threshold(entries, scores)
     assert selected["selected"] is True
-    assert selected["threshold"] == expected_strictest
-    assert "strictest threshold" in selected["reason"]
+    assert selected["metrics"]["acceptableRetained"] == 30
+    assert selected["metrics"]["badRejected"] == 8
+    # Not the strictest of the tied thresholds: retained wins.
+    assert selected["threshold"] == 0.4
+    assert "maximized acceptableRetained=30" in selected["reason"]
+
+
+def test_select_best_point_strictest_on_full_tie() -> None:
+    # Direct unit test of the final tie-break: when badRejected AND
+    # acceptableRetained are both tied, the strictest (highest) threshold wins.
+    def point(threshold, bad, retained):
+        return {
+            "threshold": threshold,
+            "badRejected": bad,
+            "acceptableRetained": retained,
+            "meetsMinGoodRetention": True,
+        }
+
+    points = [
+        point(0.1, 6, 24),
+        point(0.4, 6, 24),  # full tie with 0.1
+        point(0.7, 6, 22),  # same bad, fewer retained -> loses
+        point(0.9, 5, 24),  # fewer bad -> loses
+    ]
+    best = _select_best_point(points, min_good_retention=0.80)
+    assert best["threshold"] == 0.4
+
+
+def test_select_best_point_retained_beats_strictest() -> None:
+    def point(threshold, bad, retained):
+        return {
+            "threshold": threshold,
+            "badRejected": bad,
+            "acceptableRetained": retained,
+            "meetsMinGoodRetention": True,
+        }
+
+    points = [
+        point(0.3, 7, 24),
+        point(0.8, 7, 23),  # same badRejected but fewer retained -> loses
+        point(0.5, 8, 22),  # more badRejected wins
+    ]
+    best = _select_best_point(points, min_good_retention=0.80)
+    assert best["threshold"] == 0.5
 
 
 def test_select_threshold_is_deterministic() -> None:
@@ -314,6 +359,63 @@ def test_select_threshold_is_deterministic() -> None:
     second = select_threshold(entries, scores)
     assert first == second
     assert first["threshold"] == second["threshold"]
+
+
+# ── Score validation ─────────────────────────────────────────────────────────
+
+
+def test_score_validation_rejects_bool() -> None:
+    entries = _canonical()
+    scores = _canonical_scores(good_score=0.9, bad_score=0.2)
+    scores[entries[0]["assetPath"]] = True
+    try:
+        evaluate_scores(entries, scores, 0.5)
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "bool is not accepted" in str(exc)
+
+
+def test_score_validation_rejects_nan() -> None:
+    entries = _canonical()
+    scores = _canonical_scores(good_score=0.9, bad_score=0.2)
+    scores[entries[0]["assetPath"]] = float("nan")
+    try:
+        threshold_sweep(entries, scores)
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "non-finite score" in str(exc)
+
+
+def test_score_validation_rejects_inf() -> None:
+    entries = _canonical()
+    scores = _canonical_scores(good_score=0.9, bad_score=0.2)
+    scores[entries[0]["assetPath"]] = float("inf")
+    try:
+        select_threshold(entries, scores)
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "non-finite score" in str(exc)
+
+
+def test_score_validation_rejects_non_numeric() -> None:
+    entries = _canonical()
+    scores = _canonical_scores(good_score=0.9, bad_score=0.2)
+    scores[entries[0]["assetPath"]] = "0.9"
+    try:
+        evaluate_scores(entries, scores, 0.5)
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "non-numeric score" in str(exc)
+
+
+def test_score_validation_boundary_thresholds_still_allowed() -> None:
+    # -inf/+inf remain valid internal sweep boundaries even though model scores
+    # themselves are required to be finite.
+    entries = _canonical()
+    scores = _canonical_scores(good_score=0.9, bad_score=0.2)
+    points = threshold_sweep(entries, scores)
+    assert points[0]["threshold"] == float("-inf")
+    assert points[-1]["threshold"] == float("inf")
 
 
 # ── No input mutation ────────────────────────────────────────────────────────
@@ -334,14 +436,32 @@ def test_no_input_mutation() -> None:
 
 
 def test_no_dependency_on_data_videos_assets() -> None:
+    # Real proof: relabeled clones with deliberately nonexistent paths must
+    # evaluate fine. The harness must never require image existence.
     entries = _canonical()
-    for e in entries:
-        assert "data/videos/" in e["assetPath"]
-        assert not Path(e["assetPath"]).exists() or True  # existence must not matter
-    # Evaluation succeeds purely from labels + synthetic scores.
-    scores = _canonical_scores(good_score=0.9, bad_score=0.2)
-    m = evaluate_scores(entries, scores, 0.5)
-    assert m["total"] == 38
+    relabeled = []
+    for i, e in enumerate(entries):
+        clone = copy.deepcopy(e)
+        clone["assetPath"] = f"/definitely/nonexistent/asset_{i:03d}.png"
+        relabeled.append(clone)
+        assert not Path(clone["assetPath"]).exists()
+
+    summary = validate_labels(relabeled)
+    assert summary["total"] == 38
+
+    verdicts = [human_label_to_verdict(e["humanLabel"]) for e in relabeled]
+    m_verdicts = evaluate_verdicts(relabeled, verdicts)
+    assert m_verdicts["acceptableRetained"] == 30
+    assert m_verdicts["badRejected"] == 8
+
+    scores = {
+        e["assetPath"]: (0.9 if human_label_to_verdict(e["humanLabel"]) == ACCEPT else 0.2)
+        for e in relabeled
+    }
+    m_scores = evaluate_scores(relabeled, scores, 0.5)
+    assert m_scores["total"] == 38
+    assert m_scores["acceptableRetained"] == 30
+    assert m_scores["badRejected"] == 8
 
 
 # ── No network / ML imports ──────────────────────────────────────────────────
