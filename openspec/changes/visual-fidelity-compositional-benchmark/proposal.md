@@ -1,5 +1,7 @@
 # Propuesta: visual-fidelity-compositional-benchmark
 
+**Status: COMPLETED / VERIFIED / CLOSED** — investigación benchmark-first, mergeada a `main` (no-ff). Resultado: **TRADEOFF_ONLY**, BLIP ITM no se integra.
+
 ## Contexto
 
 `visual-fidelity-runtime` está **COMPLETADO / VERIFICADO / CLOSED** y `main` usa OpenCLIP `ViT-B-32` / `laion2b_s34b_b79k` como SEGUNDO gate visual (umbral calibrado `0.2296`, política P1 = `queryUsed`) sobre los 38 assets canónicos (benchmark `asset-visual-semantic-fidelity`: 25/30 retained + 7/8 badRejected; API `gpt-5.6-luna`: 17/30 + 8/8; decisión `LOCAL_ENCODER_PREFERRED`).

@@ -1,5 +1,7 @@
 # Design: visual-fidelity-compositional-benchmark
 
+**Status: COMPLETED / VERIFIED / CLOSED** — investigación benchmark-first, sin cambios de runtime. Ver `results.md` para el informe canónico y `tasks.md` para la ejecución/cierre.
+
 ## Arquitectura de evaluación (sin cambios de runtime)
 
 Dos dominios separados, igual que los cambios previos de fidelidad visual:

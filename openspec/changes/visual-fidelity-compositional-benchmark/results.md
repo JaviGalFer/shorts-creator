@@ -1,6 +1,6 @@
 # Informe de resultados: visual-fidelity-compositional-benchmark (CORREGIDO)
 
-**Estado:** investigación benchmark-first — BLIP ITM base **TRADEOFF_ONLY**. Sin integración runtime.
+**Estado:** investigación benchmark-first **COMPLETED / VERIFIED / CLOSED** — BLIP ITM base **TRADEOFF_ONLY**. Sin integración runtime. Mergeada a `main` (no-ff).
 
 > **CORRECCIÓN DE ORIENTACIÓN:** la primera versión de este benchmark puntuó
 > `softmax(itm_score)[0, 0]`, es decir, la probabilidad de la clase 0 =

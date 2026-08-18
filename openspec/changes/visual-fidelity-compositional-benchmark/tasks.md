@@ -1,6 +1,6 @@
 # Tasks: visual-fidelity-compositional-benchmark
 
-**Status: COMPLETED (corregido) — investigación benchmark-first, sin integración de runtime.**
+**Status: COMPLETED / VERIFIED / CLOSED** — investigación benchmark-first, sin integración de runtime. Mergeado a `main` (no-ff).
 
 > **CORRECCIÓN DE ORIENTACIÓN (iteración 2):** la iteración 1 puntuó
 > `softmax(itm_score)[0, 0]` (clase 0 = NOT_MATCH del ITM head de BLIP). La
@@ -11,7 +11,21 @@
 > `softmax(itm_score.float())[0, 1]`, con sanity check de orientación en-run y
 > tests unitarios que fijan el contrato clase-1=MATCH.
 
-## Precondiciones verificadas
+## Conclusión canónica (cerrado)
+
+- BLIP ITM correcto: **clase 1 = MATCH** (`matchProbability = softmax(itm_score.float())[0, 1]`).
+- Calibration (38): **24/30 retained + 6/8 badRejected** (retention 0.80, recall 0.75, FA 2, FR 6) — ELIGIBLE.
+- Threshold experimental BLIP: **0.06636959873139858** (bloqueado en calibration; el holdout NO se usó para seleccionarlo).
+- Fresh holdout (20): **9/13 usable + 2/7 badRejected** (FA 5, FR 4). BLIP rechaza los 2 casos composicionales más difíciles (motor 2T, blockchain vs data-center).
+- OpenCLIP fresh holdout @0.2296: **13/13 + 0/7**.
+- **Decisión: TRADEOFF_ONLY** — mejora rechazo con retención insuficiente; no alcanza STRONG ni PROMISING.
+- **BLIP NO se integra en runtime.** OpenCLIP sigue siendo el pixel gate vigente cuando está activado.
+- `visual-fidelity-runtime` sigue OFF por defecto: solo `VISUAL_FIDELITY_THRESHOLD=0.2296` lo activa.
+- La iteración antigua `[0,0]` (threshold 0.015839167404919863, 27/30 + 1/8, NOT_USEFUL) permanece explícitamente **INVALIDADA**.
+- Commits: `2426016` (benchmark), `4328438` (corrección de orientación), `<close>` (cierre docs). Merge no-ff a `main`.
+- Suite final: **1506 passed, 0 failed**; `git diff --check` limpio.
+
+## Datos (NO tocados)
 
 - [x] `main == dce1624`, working tree limpio, baseline `1494 passed`
 - [x] Rama base: `change/visual-fidelity-compositional-benchmark` (HEAD `2426016`, limpio)
@@ -81,19 +95,25 @@
 
 - [x] **Clasificación BLIP: TRADEOFF_ONLY** — mejora rechazo (2/7 vs 0/7 holdout; calibración 6/8 + 24/30) pero con retención insuficiente (9/13 vs 13/13); no alcanza STRONG ni PROMISING
 - [x] NO integrar BLIP en runtime
-- [x] No merge, no push; rama experimental lista para revisión/cierre
+- [x] OPENCLIP sigue como pixel gate vigente y `visual-fidelity-runtime` sigue OFF por defecto salvo `VISUAL_FIDELITY_THRESHOLD`
 
 ## Validación
 
 - [x] `python3 -m pytest tests/test_visual_fidelity_compositional_benchmark.py -q` — 12 tests verdes
-- [x] `python3 -m pytest -q tests` — suite completa
+- [x] `python3 -m pytest -q tests` — suite completa **1506 passed, 0 failed**
 - [x] `git diff --check` limpio
 - [x] Sin cambios en `visual_fidelity.py`, `executor.py`, `bridge.py`, ni threshold OpenCLIP
-- [x] Commit único de corrección/docs
+
+## Cierre y merge
+
+- [x] Docs marcadas **COMPLETED / VERIFIED / CLOSED** (tasks, agent-context, current-state)
+- [x] Commit de cierre documental
+- [x] Merge no-ff a `main`; suite en main `1506 passed, 0 failed`
+- [x] NO push, NO borrar rama, NO reindexar
 
 ## Fuera de alcance
 
-- Integración runtime de BLIP (queda descriptor a cierre abierto)
+- Integración runtime de BLIP (descartada; BLIP NO se integra)
 - Evaluar `blip-itm-large` u otros checkpoints/métricas
 - Nuevos providers, `search-vs-generation`, cambios de prompts/VisualPlan
 - `deterministic_anchor_coverage_v3` / `asset-entity-fidelity` (research-only)
