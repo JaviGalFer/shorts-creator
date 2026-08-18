@@ -4,8 +4,15 @@
 - Genericity benchmark of the CURRENT generic pipeline completed (Fase 1 offline harness + Fase 2 real 8-topic execution + external pixel visual review). `tools/genericity_matrix.py` (read-only, offline, CLI + module) extracts per-job metrics from persisted `metadata.json` without network, LLM, or provider calls. Contact sheets: `data/evaluations/genericity-phase2-visual-review/` (git-ignored).
 - Result: aggregate **YELLOW**. Script/VisualPlan layer is healthy and topic-agnostic across all 8 unrelated domains (no `QUERY_GEN_FAILURE`, no `VISUAL_PLAN_FAILURE`; 0 queries VAGUE, script retries 0). Per-topic: Volcán HEALTHY; Aurora/Porsche/Spring Boot/Pulpos/Videojuegos/Hipoteca USABLE_WITH_LIMITATIONS; Roma SYSTEMIC_FAILURE (asset layer only, not domain understanding).
 - Visual review of the 38 resolved assets: 16 CLEARLY_RELEVANT / 14 COARSE_BUT_USABLE / 8 FALSE_POSITIVE_OR_UNUSABLE. Repeated downstream candidate-acceptance fidelity gaps across unrelated domains; provider coverage limited for hard-to-stock concepts (SUPPLY, not architecture corruption).
-- DESIGN CONCLUSION: `asset-entity-fidelity` remains research evidence ONLY (paused, non-active). Do NOT implement `deterministic_anchor_coverage_v3` / `FORM_OR_MEDIUM_TERMS`. Future investigation recorded as **`asset-visual-semantic-fidelity`**: generic provider-agnostic SECOND-STAGE visual-semantic validation using image pixels, retaining the current metadata gate as a cheap first stage (not designed yet). Separate future product direction recorded: search-vs-generation fallback for coverage.
+- DESIGN CONCLUSION: `asset-entity-fidelity` remains research evidence ONLY (paused, non-active). Do NOT implement `deterministic_anchor_coverage_v3` / `FORM_OR_MEDIUM_TERMS`. Separate future product direction recorded: search-vs-generation fallback for coverage.
 - See `openspec/changes/generic-content-pipeline-evaluation/`.
+
+## Active Investigation: asset-visual-semantic-fidelity — benchmark-first (Slice 1 active)
+- Follow-up to the CLOSED evaluation: investigate a generic provider-agnostic SECOND-STAGE visual-semantic validation using image pixels, retaining the current metadata gate (`deterministic_anchor_coverage_v2`) as the first cheap stage. Benchmark-first: no production runtime changes until evidence justifies it.
+- Canonical 38-asset human labels tracked by Git at `tests/fixtures/asset_visual_fidelity/labels.json` (16 CLEARLY_RELEVANT / 14 COARSE_BUT_USABLE / 8 FALSE_POSITIVE_OR_UNUSABLE; binary interpretation ACCEPT = CR+CU, REJECT = FP). Images stay under git-ignored `data/videos/`.
+- Offline stdlib-only harness `tools/visual_fidelity_benchmark.py`: validates labels, computes goodAssetRetention / badAssetRejectionRecall / falseAcceptances / falseRejections / confusionMatrix, deterministic threshold sweep + selection (maximize bad rejection subject to good retention >= 0.80, tie-break to strictest). Provisional experiment eligibility target: bad rejection >= 6/8 and good retention >= 24/30 — NOT a production threshold.
+- Slice 1 = harness only (no models, no APIs, no ML deps, no runtime changes). Slice 2 (future) = local encoders CLIP `ViT-B/32` + SigLIP `base-patch16-224` (CPU-first; 4 GB VRAM/CPU measured, not assumed). Slice 3 (future) = multimodal API benchmark (cost measured, not the Plan's provisional estimates).
+- See `openspec/changes/asset-visual-semantic-fidelity/`.
 
 ## Runtime
 - Modular V2 architecture is complete: `bin/run_job.py` orchestrates `script -> assets -> audio -> prepare -> render -> validate`; `bin/` are CLI adapters over `src/shorts_creator/` domains.
@@ -24,8 +31,8 @@
 - Accepted known limitation: "Smosh fan art" produced a generic fan/art Pixabay false positive. The upstream query is concrete/retrievable; the false positive is downstream entity/subject-fidelity behavior in `deterministic_anchor_coverage_v2` (unchanged, out of scope). Initially recorded as future change `asset-entity-fidelity`; after `generic-content-pipeline-evaluation` (CLOSED) the follow-up was broadened into `asset-visual-semantic-fidelity` (visual-semantic pixel validation), with `asset-entity-fidelity` kept as research evidence only.
 
 ## Verified State
-- `main` base: `b7b8d57` (script-visual-specificity merged/closed on main).
-- `script-visual-specificity`: CLOSED. `generic-content-pipeline-evaluation`: COMPLETED / VERIFIED / CLOSED (see Closed Evaluation above). `asset-entity-fidelity`: PAUSED / research evidence only (NOT the active direction). Future investigation recorded: `asset-visual-semantic-fidelity`.
+- `main` base: `296d553` (generic-content-pipeline-evaluation merged/closed on main).
+- `generic-content-pipeline-evaluation`: COMPLETED / VERIFIED / CLOSED (see Closed Evaluation above). `asset-entity-fidelity`: PAUSED / research evidence only (NOT the active direction). Active investigation: `asset-visual-semantic-fidelity` (benchmark-first, Slice 1 harness in progress on branch `change/asset-visual-semantic-fidelity`).
 - `modular-v2-migration`: closed. `AUDIO_DURATION_MISSING`: resolved. Host `ffprobe` remains absent; Docker fallback is used.
 - First complete technical E2E: `cmo-2026-08-16-172847`, through `VALIDATED`; request 30s, range 27-30, timeline 20.813s, MP4 approximately 20.88s.
 - Real E2E attempt `cmo-2026-08-16-184819` was blocked at script: a legacy bootstrap WPM hard gate rejected a V2-valid 67-word candidate (37.9s estimate) before TTS. The gate is now non-blocking; WPM remains bootstrap telemetry only.

@@ -1,0 +1,392 @@
+{
+  "schemaVersion": 1,
+  "dataset": "generic-content-pipeline-evaluation phase 2 visual review",
+  "source": "openspec/changes/generic-content-pipeline-evaluation/phase2-report.md",
+  "allowedLabels": [
+    "CLEARLY_RELEVANT",
+    "COARSE_BUT_USABLE",
+    "FALSE_POSITIVE_OR_UNUSABLE"
+  ],
+  "labels": [
+    {
+      "topic": "Cómo se forma una aurora boreal",
+      "jobId": "cmo-2026-08-17-233901",
+      "sceneNumber": 1,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-233901/assets/scene_001_seg_001.png",
+      "queryUsed": "aurora borealis night sky photograph",
+      "provider": "wikimedia_commons",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Cómo se forma una aurora boreal",
+      "jobId": "cmo-2026-08-17-233901",
+      "sceneNumber": 1,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/cmo-2026-08-17-233901/assets/scene_001_seg_002.jpg",
+      "queryUsed": "aurora borealis solar particles photograph",
+      "provider": "wikimedia_commons",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Cómo se forma una aurora boreal",
+      "jobId": "cmo-2026-08-17-233901",
+      "sceneNumber": 2,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-233901/assets/scene_002_seg_001.jpg",
+      "queryUsed": "solar flares photograph",
+      "provider": "wikimedia_commons",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Cómo se forma una aurora boreal",
+      "jobId": "cmo-2026-08-17-233901",
+      "sceneNumber": 3,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-233901/assets/scene_003_seg_001.png",
+      "queryUsed": "Earth atmosphere solar particles interaction diagram",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Cómo se forma una aurora boreal",
+      "jobId": "cmo-2026-08-17-233901",
+      "sceneNumber": 4,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-233901/assets/scene_004_seg_001.jpg",
+      "queryUsed": "aurora borealis colors photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Cómo se forma una aurora boreal",
+      "jobId": "cmo-2026-08-17-233901",
+      "sceneNumber": 5,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-233901/assets/scene_005_seg_001.gif",
+      "queryUsed": "aurora borealis night sky photograph",
+      "provider": "wikimedia_commons",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "La evolución del Porsche 911",
+      "jobId": "la-2026-08-17-234123",
+      "sceneNumber": 1,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/la-2026-08-17-234123/assets/scene_001_seg_001.jpg",
+      "queryUsed": "Porsche 911 classic car photograph",
+      "provider": "wikimedia_commons",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "La evolución del Porsche 911",
+      "jobId": "la-2026-08-17-234123",
+      "sceneNumber": 1,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/la-2026-08-17-234123/assets/scene_001_seg_002.jpg",
+      "queryUsed": "Porsche 911 classic car photograph",
+      "provider": "wikimedia_commons",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "La evolución del Porsche 911",
+      "jobId": "la-2026-08-17-234123",
+      "sceneNumber": 2,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/la-2026-08-17-234123/assets/scene_002_seg_001.jpg",
+      "queryUsed": "Porsche 911 1964 photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "La evolución del Porsche 911",
+      "jobId": "la-2026-08-17-234123",
+      "sceneNumber": 2,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/la-2026-08-17-234123/assets/scene_002_seg_002.png",
+      "queryUsed": "Porsche 911 original model illustration",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "La evolución del Porsche 911",
+      "jobId": "la-2026-08-17-234123",
+      "sceneNumber": 3,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/la-2026-08-17-234123/assets/scene_003_seg_001.jpg",
+      "queryUsed": "Porsche 911 evolution comparison photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "La evolución del Porsche 911",
+      "jobId": "la-2026-08-17-234123",
+      "sceneNumber": 4,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/la-2026-08-17-234123/assets/scene_004_seg_001.jpg",
+      "queryUsed": "Porsche 911 advanced technology photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "La evolución del Porsche 911",
+      "jobId": "la-2026-08-17-234123",
+      "sceneNumber": 5,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/la-2026-08-17-234123/assets/scene_005_seg_001.jpg",
+      "queryUsed": "Porsche 911 legacy photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "La evolución del Porsche 911",
+      "jobId": "la-2026-08-17-234123",
+      "sceneNumber": 5,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/la-2026-08-17-234123/assets/scene_005_seg_002.png",
+      "queryUsed": "sports cars history diagram",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Cómo funciona Spring Boot",
+      "jobId": "cmo-2026-08-17-234325",
+      "sceneNumber": 1,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/cmo-2026-08-17-234325/assets/scene_001_seg_002.jpg",
+      "queryUsed": "developer programming code editor photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Cómo funciona Spring Boot",
+      "jobId": "cmo-2026-08-17-234325",
+      "sceneNumber": 2,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/cmo-2026-08-17-234325/assets/scene_002_seg_002.jpg",
+      "queryUsed": "Java code snippet photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Cómo funciona Spring Boot",
+      "jobId": "cmo-2026-08-17-234325",
+      "sceneNumber": 3,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-234325/assets/scene_003_seg_001.png",
+      "queryUsed": "Spring Boot project structure diagram",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Por qué cayó el Imperio Romano",
+      "jobId": "por-2026-08-17-234531",
+      "sceneNumber": 1,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/por-2026-08-17-234531/assets/scene_001_seg_002.jpg",
+      "queryUsed": "Roman Empire historical scenes",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Por qué cayó el Imperio Romano",
+      "jobId": "por-2026-08-17-234531",
+      "sceneNumber": 2,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/por-2026-08-17-234531/assets/scene_002_seg_002.png",
+      "queryUsed": "Roman Empire conflicts illustration",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Por qué cayó el Imperio Romano",
+      "jobId": "por-2026-08-17-234531",
+      "sceneNumber": 3,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/por-2026-08-17-234531/assets/scene_003_seg_001.jpg",
+      "queryUsed": "Germanic tribes invasion photograph",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Por qué cayó el Imperio Romano",
+      "jobId": "por-2026-08-17-234531",
+      "sceneNumber": 4,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/por-2026-08-17-234531/assets/scene_004_seg_002.png",
+      "queryUsed": "fall of Roman Empire illustration",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Cómo cazan los pulpos",
+      "jobId": "cmo-2026-08-17-234735",
+      "sceneNumber": 2,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-234735/assets/scene_002_seg_001.jpg",
+      "queryUsed": "octopus camouflage reef photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Cómo cazan los pulpos",
+      "jobId": "cmo-2026-08-17-234735",
+      "sceneNumber": 2,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/cmo-2026-08-17-234735/assets/scene_002_seg_002.jpg",
+      "queryUsed": "octopus hiding in coral photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Cómo cazan los pulpos",
+      "jobId": "cmo-2026-08-17-234735",
+      "sceneNumber": 3,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-234735/assets/scene_003_seg_001.jpg",
+      "queryUsed": "octopus tentacles catching prey photograph",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Cómo cazan los pulpos",
+      "jobId": "cmo-2026-08-17-234735",
+      "sceneNumber": 4,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-234735/assets/scene_004_seg_001.jpg",
+      "queryUsed": "blue ringed octopus venom photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Cómo cazan los pulpos",
+      "jobId": "cmo-2026-08-17-234735",
+      "sceneNumber": 5,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-234735/assets/scene_005_seg_001.jpg",
+      "queryUsed": "octopus underwater environment photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Qué ocurre dentro de un volcán",
+      "jobId": "qu-2026-08-17-234954",
+      "sceneNumber": 1,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/qu-2026-08-17-234954/assets/scene_001_seg_001.jpg",
+      "queryUsed": "volcano eruption lava flow photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Qué ocurre dentro de un volcán",
+      "jobId": "qu-2026-08-17-234954",
+      "sceneNumber": 2,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/qu-2026-08-17-234954/assets/scene_002_seg_002.png",
+      "queryUsed": "earth crust diagram",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Qué ocurre dentro de un volcán",
+      "jobId": "qu-2026-08-17-234954",
+      "sceneNumber": 3,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/qu-2026-08-17-234954/assets/scene_003_seg_002.jpg",
+      "queryUsed": "volcano explosion photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Qué ocurre dentro de un volcán",
+      "jobId": "qu-2026-08-17-234954",
+      "sceneNumber": 4,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/qu-2026-08-17-234954/assets/scene_004_seg_001.jpg",
+      "queryUsed": "volcanic ash eruption photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Qué ocurre dentro de un volcán",
+      "jobId": "qu-2026-08-17-234954",
+      "sceneNumber": 4,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/qu-2026-08-17-234954/assets/scene_004_seg_002.jpg",
+      "queryUsed": "lava flow photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Qué ocurre dentro de un volcán",
+      "jobId": "qu-2026-08-17-234954",
+      "sceneNumber": 5,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/qu-2026-08-17-234954/assets/scene_005_seg_001.jpg",
+      "queryUsed": "volcano landscape photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Cómo evolucionaron los videojuegos 3D",
+      "jobId": "cmo-2026-08-17-235250",
+      "sceneNumber": 3,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-235250/assets/scene_003_seg_001.jpg",
+      "queryUsed": "PlayStation Nintendo 64 comparison photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Cómo evolucionaron los videojuegos 3D",
+      "jobId": "cmo-2026-08-17-235250",
+      "sceneNumber": 4,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-235250/assets/scene_004_seg_001.jpg",
+      "queryUsed": "modern 3D video games immersive experience photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Cómo funciona una hipoteca",
+      "jobId": "cmo-2026-08-17-235456",
+      "sceneNumber": 1,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-235456/assets/scene_001_seg_001.jpg",
+      "queryUsed": "house mortgage signing contract photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Cómo funciona una hipoteca",
+      "jobId": "cmo-2026-08-17-235456",
+      "sceneNumber": 2,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-235456/assets/scene_002_seg_001.jpg",
+      "queryUsed": "person mortgage office agent photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Cómo funciona una hipoteca",
+      "jobId": "cmo-2026-08-17-235456",
+      "sceneNumber": 3,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-235456/assets/scene_003_seg_001.jpg",
+      "queryUsed": "mortgage interest calculator photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Cómo funciona una hipoteca",
+      "jobId": "cmo-2026-08-17-235456",
+      "sceneNumber": 4,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-17-235456/assets/scene_004_seg_001.png",
+      "queryUsed": "amortization chart graph photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    }
+  ]
+}
