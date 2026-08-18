@@ -71,7 +71,7 @@ class _OpenClipBackend:
         """Normalized cosine similarity between the image and the text."""
         import torch
 
-        text_tokens = self.tokenizer([text])
+        text_tokens = self.tokenizer([text]).to(self.device)
         with torch.no_grad():
             text_features = self.model.encode_text(text_tokens)
             text_features = text_features / text_features.norm(dim=-1, keepdim=True)
@@ -152,12 +152,12 @@ def _load_image(image_path: Path) -> tuple[Any, int | None]:
     """Load an image in memory; GIFs are pinned to frame 0 (file never mutated)."""
     from PIL import Image
 
-    image = Image.open(image_path)
-    gif_frame: int | None = None
-    if getattr(image, "is_animated", False):
-        image.seek(GIF_FRAME)
-        gif_frame = GIF_FRAME
-    return image.convert("RGB"), gif_frame
+    with Image.open(image_path) as image:
+        gif_frame: int | None = None
+        if getattr(image, "is_animated", False):
+            image.seek(GIF_FRAME)
+            gif_frame = GIF_FRAME
+        return image.convert("RGB"), gif_frame
 
 
 def score_visual_fidelity(image_path: str | Path, text: str) -> dict:
@@ -214,6 +214,17 @@ def score_visual_fidelity(image_path: str | Path, text: str) -> dict:
             "device": backend.device,
             "gifFrame": None,
             "reason": f"scoring failed: {type(exc).__name__}: {exc}",
+            "latencyMs": round((time.monotonic() - start) * 1000),
+        }
+    if isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score):
+        return {
+            **base,
+            "status": UNAVAILABLE,
+            "score": None,
+            "verdict": BYPASS,
+            "device": backend.device,
+            "gifFrame": gif_frame,
+            "reason": f"non-finite or non-numeric score: {score!r}",
             "latencyMs": round((time.monotonic() - start) * 1000),
         }
     latency_ms = round((time.monotonic() - start) * 1000)

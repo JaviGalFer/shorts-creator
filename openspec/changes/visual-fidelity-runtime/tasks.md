@@ -1,6 +1,6 @@
 # Tasks: visual-fidelity-runtime
 
-**Status: SLICE 1 COMPLETADO — Slice 2 y Slice 3 pendientes.**
+**Status: SLICE 1 COMPLETADO — SLICE 2 COMPLETADO — Slice 3 pendiente.**
 
 ## Precondiciones (verificadas)
 
@@ -38,14 +38,18 @@
 - [x] Commit: **feat(assets): add optional visual fidelity scorer**
 - [x] Sin integración en executor/bridge (Slice 2), sin deps base, sin instalar torch/open_clip, sin descargar pesos
 
-## Slice 2 — Integración executor + telemetría (PENDIENTE)
+## Slice 2 — Integración executor + telemetría (COMPLETADO)
 
-- [ ] Gate post-descarga / pre-RESOLVED en `_resolve_wikimedia` y `_resolve_pixabay`
-- [ ] Rechazo: borrar archivo, registrar `visualFidelityRejections`, continuar siguiente candidato
-- [ ] Todos rechazados → `NO_RESULTS` con `visualFidelityRejections`
-- [ ] Bypass `UNAVAILABLE` / `DISABLED` con warning y telemetría
-- [ ] Bridge: propagar `visualFidelityAssessment` a metadata `assets[].segments[]`
-- [ ] Tests de flujo + suite completa verde
+- [x] Gate post-descarga / pre-RESOLVED en `_resolve_wikimedia` y `_resolve_pixabay` (provider-agnostic: archivo + `queryUsed` vía `_apply_visual_fidelity_gate`)
+- [x] Rechazo (`SCORED + REJECT`): borrar archivo, registrar `visualFidelityRejections`, continuar siguiente candidato
+- [x] Todos rechazados → `NO_RESULTS` con `visualFidelityRejections` (también en `DOWNLOAD_FAILED`)
+- [x] Bypass `UNAVAILABLE` / `DISABLED` con warning `VISUAL_FIDELITY_BYPASS:{status}` y assessment persistido, sin bloquear
+- [x] Bridge: propagar `visualFidelityAssessment` a metadata `assets[].segments[]`
+- [x] Hardening del componente: `text_tokens` al mismo device; score no-finito/no-numérico → `UNAVAILABLE`; carga de imagen con context manager (GIF frame 0 intacto)
+- [x] Tests: `tests/test_visual_fidelity_runtime.py` extendido a **32 tests** (ACCEPT/REJECT/NO_RESULTS/DISABLED/UNAVAILABLE/telemetría bridge/device move/no-finito/sin-threshold)
+- [x] Suite completa: `python3 -m pytest -q tests` → **`1492 passed, 0 failed, 0 skipped`** (1481 baseline + 11 nuevos)
+- [x] `git diff --check` limpio
+- [x] Commit: **feat(assets): integrate visual fidelity gate**
 
 ## Slice 3 — Validación/calibración y activación (PENDIENTE)
 

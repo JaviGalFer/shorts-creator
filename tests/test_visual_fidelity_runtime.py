@@ -1,9 +1,10 @@
-"""Focused tests for src/shorts_creator/assets/visual_fidelity.py (Slice 1).
+"""Focused tests for the visual fidelity pixel gate (Slice 1 component + Slice 2 integration).
 
-Component-only. Never imports torch/open_clip, never downloads weights, never
-touches the network, never runs real model inference. Backends are faked; the
-only third-party module exercised is PIL (already a test-suite dependency) for
-synthetic images/GIFs.
+Never imports torch/open_clip, never downloads weights, never touches the
+network, never runs real model inference. Backends are faked; the only
+third-party module exercised is PIL (already a test-suite dependency) for
+synthetic images/GIFs. Executor/bridge integration is covered by mocking the
+scorer and provider search/download functions.
 """
 
 from __future__ import annotations
@@ -385,3 +386,402 @@ def test_importing_module_does_not_pull_optional_stack():
     assert "open_clip" not in sys.modules
     assert "open_clip_torch" not in sys.modules
     assert "torch" not in sys.modules
+
+
+# ── Slice 2 hardening: device move + non-finite score ─────────────────────────
+
+
+class _FakeTensor:
+    def __init__(self) -> None:
+        self.device = "cpu"
+        self.to_calls: list[str] = []
+
+    def to(self, device: str) -> "_FakeTensor":
+        self.to_calls.append(device)
+        self.device = device
+        return self
+
+    def unsqueeze(self, dim: int) -> "_FakeTensor":
+        return self
+
+    def norm(self, dim=None, keepdim: bool = False) -> "_FakeTensor":
+        return self
+
+    def __truediv__(self, other) -> "_FakeTensor":
+        return self
+
+    def __matmul__(self, other) -> "_FakeTensor":
+        return self
+
+    @property
+    def T(self) -> "_FakeTensor":
+        return self
+
+    def item(self) -> float:
+        return 1.0
+
+
+class _ScoreModel:
+    def __init__(self) -> None:
+        self.encode_text_tokens: _FakeTensor | None = None
+        self.encode_image_tensor: _FakeTensor | None = None
+
+    def encode_text(self, tokens: _FakeTensor) -> _FakeTensor:
+        self.encode_text_tokens = tokens
+        return _FakeTensor()
+
+    def encode_image(self, tensor: _FakeTensor) -> _FakeTensor:
+        self.encode_image_tensor = tensor
+        return _FakeTensor()
+
+
+class _NoGrad:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_score_moves_text_tokens_to_device(monkeypatch):
+    model = _ScoreModel()
+    backend = vf._OpenClipBackend(
+        model=model,
+        tokenizer=lambda texts: _FakeTensor(),
+        preprocess=lambda image: _FakeTensor(),
+        device="cuda",
+    )
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(no_grad=_NoGrad))
+
+    score = backend.score(object(), "query")
+
+    assert score == 1.0
+    assert model.encode_text_tokens is not None
+    assert model.encode_text_tokens.to_calls == ["cuda"]
+
+
+def test_non_finite_score_is_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setattr(vf, "_create_backend", lambda: _FakeBackend(score=float("nan"), device="cpu"))
+    monkeypatch.setenv(THRESHOLD, "0.25")
+    result = vf.score_visual_fidelity(_write_image(tmp_path / "a.png"), "q")
+    assert result["status"] == vf.UNAVAILABLE
+    assert result["verdict"] == vf.BYPASS
+    assert result["score"] is None
+    assert "non-finite" in result["reason"]
+
+
+def test_infinite_score_is_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setattr(vf, "_create_backend", lambda: _FakeBackend(score=float("inf"), device="cpu"))
+    monkeypatch.setenv(THRESHOLD, "0.25")
+    result = vf.score_visual_fidelity(_write_image(tmp_path / "a.png"), "q")
+    assert result["status"] == vf.UNAVAILABLE
+    assert result["verdict"] == vf.BYPASS
+
+
+def test_non_numeric_score_is_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setattr(vf, "_create_backend", lambda: _FakeBackend(score=None, device="cpu"))
+    monkeypatch.setenv(THRESHOLD, "0.25")
+    result = vf.score_visual_fidelity(_write_image(tmp_path / "a.png"), "q")
+    assert result["status"] == vf.UNAVAILABLE
+    assert result["verdict"] == vf.BYPASS
+    assert "non-finite or non-numeric" in result["reason"]
+
+
+# ── Slice 2: executor integration ─────────────────────────────────────────────
+
+
+from unittest.mock import patch  # noqa: E402
+
+from shorts_creator.assets.executor import execute_visual_sourcing_plan_v2  # noqa: E402
+from shorts_creator.assets.bridge import apply_visual_assets_v2_to_metadata  # noqa: E402
+
+
+WIKIMEDIA_LIVE = {
+    "wikimedia_commons": {
+        "enabled": True, "implemented": True, "requiresApiKey": False, "live": True,
+    },
+}
+
+
+def _candidate(title="Test query painting", description="test scene", mime="image/jpeg"):
+    return {
+        "provider": "wikimedia_commons",
+        "title": title,
+        "description": description,
+        "tags": "",
+        "sourceUrl": f"https://upload.wikimedia.org/wikipedia/commons/a/ab/{title}.jpg",
+        "fileUrl": f"https://upload.wikimedia.org/wikipedia/commons/a/ab/{title}.jpg",
+        "thumbnailUrl": "",
+        "license": "Public Domain",
+        "author": "Test Author",
+        "width": 1200,
+        "height": 800,
+        "mimeType": mime,
+        "queryUsed": "test query",
+        "score": 0.0,
+    }
+
+
+def _segment():
+    return {
+        "segmentIndex": 1,
+        "assetPreference": "painting",
+        "searchQueries": [{"text": "test query", "source": "segment.searchQuery"}],
+        "generationPrompts": [],
+        "providerCandidates": [{
+            "provider": "wikimedia_commons",
+            "priority": 1,
+            "queryStrategy": "search",
+            "candidateStatus": "included",
+            "availability": "available",
+            "requiresApiKey": False,
+            "supportStrength": "medium",
+            "reason": "painting — medium support",
+            "exclusionReason": None,
+            "warnings": [],
+        }],
+        "excludedProviders": [],
+        "routingStatus": "ROUTABLE_WITH_WARNINGS",
+        "warnings": [],
+        "unsupportedReasons": [],
+    }
+
+
+def _plan(segments):
+    return {
+        "schemaVersion": 1,
+        "segments": segments,
+        "summary": {
+            "totalSegments": len(segments),
+            "routable": 0,
+            "routableWithWarnings": len(segments),
+            "unroutable": 0,
+        },
+    }
+
+
+def _vf_assessment(verdict="ACCEPT", score=0.9, status="SCORED"):
+    return {
+        "status": status,
+        "method": "openclip_vit_b32_p1",
+        "architecture": "ViT-B-32",
+        "pretrained": "laion2b_s34b_b79k",
+        "textPolicy": "p1",
+        "textUsed": "test query",
+        "threshold": 0.25,
+        "score": score,
+        "verdict": verdict,
+        "device": "cpu",
+        "gifFrame": None,
+        "reason": None,
+        "latencyMs": 1,
+    }
+
+
+def _write_download(resolved, absolute_path, **kwargs):
+    absolute_path.parent.mkdir(parents=True, exist_ok=True)
+    absolute_path.write_bytes(b"x")
+    return {"ok": True, "size": 1, "mimeType": resolved.get("mimeType"), "error": None}
+
+
+def test_executor_accept_persists_assessment(tmp_path):
+    plan = _plan([_segment()])
+    with patch(
+        "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
+        return_value=_candidate(),
+    ), patch(
+        "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
+        side_effect=_write_download,
+    ), patch(
+        "shorts_creator.assets.executor.score_visual_fidelity",
+        return_value=_vf_assessment(verdict="ACCEPT", score=0.9),
+    ):
+        result = execute_visual_sourcing_plan_v2(
+            plan, WIKIMEDIA_LIVE, dry_run=False, job_dir=str(tmp_path),
+        )
+    assert len(result["resolvedAssets"]) == 1
+    ra = result["resolvedAssets"][0]
+    assert ra["status"] == "RESOLVED"
+    assert ra["visualFidelityAssessment"]["status"] == "SCORED"
+    assert ra["visualFidelityAssessment"]["verdict"] == "ACCEPT"
+    codes = [w["code"] for w in result["diagnostics"]["warnings"]]
+    assert not any("VISUAL_FIDELITY_BYPASS" in c for c in codes)
+
+
+def test_executor_reject_deletes_and_tries_next(tmp_path):
+    plan = _plan([_segment()])
+    candidates = iter([
+        _candidate(title="Test query first", mime="image/jpeg"),
+        _candidate(title="Test query second", mime="image/png"),
+    ])
+
+    def resolve(*args, **kwargs):
+        return next(candidates, None)
+
+    def score(image_path, text):
+        if str(image_path).endswith(".jpg"):
+            return _vf_assessment(verdict="REJECT", score=0.1)
+        return _vf_assessment(verdict="ACCEPT", score=0.9)
+
+    with patch(
+        "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
+        side_effect=resolve,
+    ), patch(
+        "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
+        side_effect=_write_download,
+    ), patch(
+        "shorts_creator.assets.executor.score_visual_fidelity",
+        side_effect=score,
+    ):
+        result = execute_visual_sourcing_plan_v2(
+            plan, WIKIMEDIA_LIVE, dry_run=False, job_dir=str(tmp_path),
+        )
+
+    assert len(result["resolvedAssets"]) == 1
+    assert result["resolvedAssets"][0]["assetPath"] == "assets/seg_001.png"
+    assert result["resolvedAssets"][0]["visualFidelityAssessment"]["verdict"] == "ACCEPT"
+    assert not (tmp_path / "assets" / "seg_001.jpg").exists()
+    assert (tmp_path / "assets" / "seg_001.png").exists()
+
+
+def test_executor_all_rejected_no_results(tmp_path):
+    plan = _plan([_segment()])
+    candidates = iter([_candidate(title="Test query one"), _candidate(title="Test query two")])
+
+    def resolve(*args, **kwargs):
+        return next(candidates, None)
+
+    with patch(
+        "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
+        side_effect=resolve,
+    ), patch(
+        "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
+        side_effect=_write_download,
+    ), patch(
+        "shorts_creator.assets.executor.score_visual_fidelity",
+        return_value=_vf_assessment(verdict="REJECT", score=0.1),
+    ):
+        result = execute_visual_sourcing_plan_v2(
+            plan, WIKIMEDIA_LIVE, dry_run=False, job_dir=str(tmp_path),
+        )
+
+    assert len(result["resolvedAssets"]) == 0
+    assert len(result["unresolvedSegments"]) == 1
+    us = result["unresolvedSegments"][0]
+    assert us["status"] == "NO_RESULTS"
+    rej = us.get("visualFidelityRejections") or []
+    assert len(rej) == 2
+    assert all(r["verdict"] == "REJECT" for r in rej)
+
+
+def test_executor_disabled_bypass(tmp_path):
+    plan = _plan([_segment()])
+    with patch(
+        "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
+        return_value=_candidate(),
+    ), patch(
+        "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
+        side_effect=_write_download,
+    ), patch(
+        "shorts_creator.assets.executor.score_visual_fidelity",
+        return_value=_vf_assessment(status="DISABLED", verdict="BYPASS", score=None),
+    ):
+        result = execute_visual_sourcing_plan_v2(
+            plan, WIKIMEDIA_LIVE, dry_run=False, job_dir=str(tmp_path),
+        )
+    assert len(result["resolvedAssets"]) == 1
+    ra = result["resolvedAssets"][0]
+    assert ra["visualFidelityAssessment"]["status"] == "DISABLED"
+    codes = [w["code"] for w in result["diagnostics"]["warnings"]]
+    assert any("VISUAL_FIDELITY_BYPASS:DISABLED" in c for c in codes)
+
+
+def test_executor_unavailable_bypass(tmp_path):
+    plan = _plan([_segment()])
+    with patch(
+        "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
+        return_value=_candidate(),
+    ), patch(
+        "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
+        side_effect=_write_download,
+    ), patch(
+        "shorts_creator.assets.executor.score_visual_fidelity",
+        return_value=_vf_assessment(status="UNAVAILABLE", verdict="BYPASS", score=None),
+    ):
+        result = execute_visual_sourcing_plan_v2(
+            plan, WIKIMEDIA_LIVE, dry_run=False, job_dir=str(tmp_path),
+        )
+    assert len(result["resolvedAssets"]) == 1
+    ra = result["resolvedAssets"][0]
+    assert ra["visualFidelityAssessment"]["status"] == "UNAVAILABLE"
+    codes = [w["code"] for w in result["diagnostics"]["warnings"]]
+    assert any("VISUAL_FIDELITY_BYPASS:UNAVAILABLE" in c for c in codes)
+
+
+def test_executor_default_no_threshold_unchanged(tmp_path):
+    # Real scorer (torch absent, no threshold) → DISABLED bypass; RESOLVED still
+    # happens exactly as before, just with a persisted DISABLED assessment.
+    plan = _plan([_segment()])
+    with patch(
+        "shorts_creator.assets.providers.wikimedia.resolve_wikimedia_candidate_v2",
+        return_value=_candidate(),
+    ), patch(
+        "shorts_creator.assets.providers.wikimedia.download_wikimedia_asset_v2",
+        side_effect=_write_download,
+    ):
+        result = execute_visual_sourcing_plan_v2(
+            plan, WIKIMEDIA_LIVE, dry_run=False, job_dir=str(tmp_path),
+        )
+    assert len(result["resolvedAssets"]) == 1
+    ra = result["resolvedAssets"][0]
+    assert ra["status"] == "RESOLVED"
+    assert ra["visualFidelityAssessment"]["status"] == "DISABLED"
+    assert ra["visualFidelityAssessment"]["verdict"] == "BYPASS"
+
+
+# ── Slice 2: bridge telemetry ─────────────────────────────────────────────────
+
+
+def test_bridge_propagates_visual_fidelity_assessment():
+    metadata = {
+        "jobId": "test-job-001",
+        "script": {
+            "scenes": [{
+                "sceneNumber": 1,
+                "visualPlan": {
+                    "_schemaVersion": 2,
+                    "visualSequence": [{
+                        "segmentIndex": 1,
+                        "assetPreference": "painting",
+                        "durationFraction": 1.0,
+                        "transition": "cut",
+                    }],
+                },
+            }],
+        },
+    }
+    executor_result = {
+        "resolvedAssets": [{
+            "segmentIndex": 1,
+            "assetPreference": "painting",
+            "status": "RESOLVED",
+            "provider": "wikimedia_commons",
+            "assetPath": "assets/seg_001.jpg",
+            "sourceUrl": "",
+            "fileUrl": "",
+            "license": "Public Domain",
+            "author": "Test Author",
+            "mimeType": "image/jpeg",
+            "width": 1200,
+            "height": 800,
+            "searchQueryUsed": "test query",
+            "generationPromptUsed": None,
+            "semanticAssessment": {"verdict": "RELEVANT", "method": "deterministic_anchor_coverage_v2"},
+            "visualFidelityAssessment": _vf_assessment(verdict="ACCEPT", score=0.9),
+        }],
+        "unresolvedSegments": [],
+    }
+    result = apply_visual_assets_v2_to_metadata(metadata, executor_result)
+    seg = result["assets"][0]["segments"][0]
+    assert seg["visualFidelityAssessment"]["verdict"] == "ACCEPT"
+    assert seg["visualFidelityAssessment"]["method"] == "openclip_vit_b32_p1"
