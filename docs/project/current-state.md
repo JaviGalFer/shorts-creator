@@ -1,6 +1,40 @@
 # Estado actual del proyecto
 
-**Última actualización:** 2026-08-18
+**Última actualización:** 2026-08-19
+
+## Investigación cerrada: `visual-fidelity-vlm-judge-v2` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
+
+- Evaluación benchmark-first de un judge multimodal API **menos conservador**
+  (`gpt-5.6-luna`, Responses API, una request independiente por asset) frente a
+  OpenCLIP y BLIP como segunda etapa visual-semántica. Sin cambios de runtime.
+- Contrato del judge: 3 vías `verdict: ACCEPT | REJECT | UNCERTAIN` +
+  `reasonCode` + `shortReason`, Structured Output estricto, imagen
+  `detail=high`, `reasoning none`, sin tools, SIN `humanLabel`/scores/verdicts
+  previos/expected. Input semántico: `queryUsed` + `assetPreference` solo si
+  forma parte del contrato persistido del segmento. REJECT solo en mismatch
+  material; métrica operativa **UNCERTAIN ⇒ ACCEPT** (fail-open).
+- Harness evaluation-only `tools/visual_fidelity_vlm_judge_v2.py` (lazy-import
+  openai). Semántica autoritativa de reasonCode = `REASON_CODE_VERDICTS`:
+  `INSUFFICIENT_VISUAL_EVIDENCE` puede acompañar ACCEPT, REJECT o UNCERTAIN.
+- Preflight de tokens + hard cap `$0.10` (58 assets = 38 canonical + 20 dev).
+  Proyección total `$0.030613` (READY); coste real persistido **`$0.013051`**;
+  latencia mediana ~1.58-1.59 s, p95 2.6-6.0 s. Sin API key ni base64 en outputs.
+- Datasets reutilizados SIN relabel: 38 canónicos y 20 fresh. Los 20 NO cuentan
+  como holdout nuevo; son **development evidence**, sin afirmar generalización.
+- Resultados: canonical-38 **21/30 retained + 8/8 badRejected** (FA 0, FR 9, 0
+  UNCERTAIN); development-20 **4/13 usableRetained + 5/7 badRejected** (FA 2,
+  FR 9, 0 UNCERTAIN). El fail-open no llegó a activarse (0 UNCERTAIN).
+- Casos críticos: resuelve 4/5 (data-center vs blockchain art, castillo final
+  vs construcción, castillo vs planos, castillo vs construction-time diagram);
+  falla **motor 2T vs 4T** (lo acepta, mismo punto ciego que OpenCLIP).
+- **DECISIÓN: `VLM_JUDGE_V2_NOT_USEFUL`** — falla canonical (21/30<24/30) y
+  development (4/13<11/13). Mejor rechazo de bad assets que OpenCLIP/BLIP pero
+  peor retención de buenos. **No integración runtime, sin holdout nuevo.**
+  OpenCLIP ViT-B-32 @0.2296 sigue como pixel gate vigente cuando está activado;
+  `visual-fidelity-runtime` sigue OFF por defecto salvo `VISUAL_FIDELITY_THRESHOLD`.
+- Tests: `tests/test_visual_fidelity_vlm_judge_v2.py` (20 passed). Suite en
+  cierre: `1526 passed, 0 failed`. Commit cierre documental; merge no-ff a `main`.
+- Ver `openspec/changes/visual-fidelity-vlm-judge-v2/`.
 
 ## Investigación cerrada: `visual-fidelity-compositional-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 

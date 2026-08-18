@@ -1,6 +1,7 @@
 # Design: visual-fidelity-vlm-judge-v2
 
-**Status: EN PROGRESO** — investigación benchmark-first, sin cambios de runtime.
+**Status: COMPLETED / VERIFIED / CLOSED** — investigación benchmark-first, sin
+cambios de runtime. Resultado: **`VLM_JUDGE_V2_NOT_USEFUL`**; no se integra.
 Ver `results.md` para el informe y `tasks.md` para la ejecución.
 
 ## Arquitectura de evaluación (sin cambios de runtime)
@@ -64,7 +65,7 @@ tiene, NO se envía (nunca se inventa).
 - `REASON_CODES`: `MATCH`, `WRONG_ENTITY`, `WRONG_VARIANT_OR_ERA`,
   `WRONG_ACTION_OR_SCENE`, `WRONG_CONTENT_TYPE`, `MISSING_ESSENTIAL_RELATION`,
   `FACTUAL_CONTRADICTION`, `IRRELEVANT`, `INSUFFICIENT_VISUAL_EVIDENCE`
-  (ver mapping REJECT/UNCERTAIN abajo).
+  (ver tabla de mapping abajo).
 - `shortReason` máx. 180 caracteres, texto legible (no afecta métricas).
 
 ### Semántica
@@ -83,10 +84,11 @@ tiene, NO se envía (nunca se inventa).
 ### Validación y resiliencia
 
 - `parse_judge_output`: valida set exacto de claves, `verdict` en enum y
-  `reasonCode` coherente con verdict:
-  - `ACCEPT` ⇒ reasonCode ∈ ACCEPT_CODES + INSUFFICIENT_VISUAL_EVIDENCE
-  - `REJECT` ⇒ reasonCode ∈ REJECT_CODES
-  - `UNCERTAIN` ⇒ reasonCode == `INSUFFICIENT_VISUAL_EVIDENCE`
+  `reasonCode` coherente con verdict. La semántica autoritativa es
+  **`REASON_CODE_VERDICTS`** del harness (misma tabla de abajo): cada
+  `reasonCode` admite exactamente los verdicts listados. En particular
+  `INSUFFICIENT_VISUAL_EVIDENCE` puede acompañar **ACCEPT, REJECT o UNCERTAIN**;
+  el reasonCode es descriptivo y NO gatea el verdict para las métricas.
 - Errores por asset independientes: se registran (`status=ERROR`,
   `errorType`, `error` truncado a 500) y no abortan la fase.
 - Nunca levanta con excepción del modelo; fail-fast solo para
