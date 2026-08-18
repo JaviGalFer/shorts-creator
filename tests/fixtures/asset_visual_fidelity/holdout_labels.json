@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 1,
+  "dataset": "visual-fidelity-fresh-e2e human label review",
+  "source": "manual human labels on 3 out-of-corpus E2E runs (manifest: data/evaluations/visual-fidelity-fresh-e2e/manifest.txt)",
+  "allowedLabels": [
+    "CLEARLY_RELEVANT",
+    "COARSE_BUT_USABLE",
+    "FALSE_POSITIVE_OR_UNUSABLE"
+  ],
+  "labels": [
+    {
+      "topic": "Cómo funciona un motor de cuatro tiempos",
+      "jobId": "cmo-2026-08-18-210827",
+      "sceneNumber": 1,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-18-210827/assets/scene_001_seg_001.jpg",
+      "queryUsed": "four stroke engine in car photograph",
+      "provider": "wikimedia_commons",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Cómo funciona un motor de cuatro tiempos",
+      "jobId": "cmo-2026-08-18-210827",
+      "sceneNumber": 1,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/cmo-2026-08-18-210827/assets/scene_001_seg_002.jpg",
+      "queryUsed": "four stroke engine automobile photograph",
+      "provider": "wikimedia_commons",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Cómo funciona un motor de cuatro tiempos",
+      "jobId": "cmo-2026-08-18-210827",
+      "sceneNumber": 4,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-18-210827/assets/scene_004_seg_001.jpg",
+      "queryUsed": "engine explosion in piston photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Cómo funciona un motor de cuatro tiempos",
+      "jobId": "cmo-2026-08-18-210827",
+      "sceneNumber": 5,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/cmo-2026-08-18-210827/assets/scene_005_seg_002.jpg",
+      "queryUsed": "four stroke engine parts photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Cómo se construían los castillos medievales",
+      "jobId": "cmo-2026-08-18-211151",
+      "sceneNumber": 1,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-18-211151/assets/scene_001_seg_001.jpg",
+      "queryUsed": "medieval castle construction photograph",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Cómo se construían los castillos medievales",
+      "jobId": "cmo-2026-08-18-211151",
+      "sceneNumber": 1,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/cmo-2026-08-18-211151/assets/scene_001_seg_002.png",
+      "queryUsed": "medieval workers building castle illustration",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Cómo se construían los castillos medievales",
+      "jobId": "cmo-2026-08-18-211151",
+      "sceneNumber": 3,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-18-211151/assets/scene_003_seg_001.png",
+      "queryUsed": "medieval castle architectural plans illustration",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Cómo se construían los castillos medievales",
+      "jobId": "cmo-2026-08-18-211151",
+      "sceneNumber": 4,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-18-211151/assets/scene_004_seg_001.jpg",
+      "queryUsed": "completed medieval castle photograph",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Cómo se construían los castillos medievales",
+      "jobId": "cmo-2026-08-18-211151",
+      "sceneNumber": 4,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/cmo-2026-08-18-211151/assets/scene_004_seg_002.png",
+      "queryUsed": "medieval castle construction time diagram",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Cómo se construían los castillos medievales",
+      "jobId": "cmo-2026-08-18-211151",
+      "sceneNumber": 5,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/cmo-2026-08-18-211151/assets/scene_005_seg_001.jpg",
+      "queryUsed": "medieval castle historical significance photograph",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Cómo se construían los castillos medievales",
+      "jobId": "cmo-2026-08-18-211151",
+      "sceneNumber": 5,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/cmo-2026-08-18-211151/assets/scene_005_seg_002.png",
+      "queryUsed": "history of medieval castles diagram",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Qué ocurre dentro de un centro de datos",
+      "jobId": "qu-2026-08-18-211511",
+      "sceneNumber": 1,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/qu-2026-08-18-211511/assets/scene_001_seg_001.png",
+      "queryUsed": "data center layout diagram",
+      "provider": "wikimedia_commons",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Qué ocurre dentro de un centro de datos",
+      "jobId": "qu-2026-08-18-211511",
+      "sceneNumber": 1,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/qu-2026-08-18-211511/assets/scene_001_seg_002.jpg",
+      "queryUsed": "data center infrastructure diagram",
+      "provider": "pixabay",
+      "humanLabel": "FALSE_POSITIVE_OR_UNUSABLE"
+    },
+    {
+      "topic": "Qué ocurre dentro de un centro de datos",
+      "jobId": "qu-2026-08-18-211511",
+      "sceneNumber": 2,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/qu-2026-08-18-211511/assets/scene_002_seg_001.jpg",
+      "queryUsed": "servers processing data photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Qué ocurre dentro de un centro de datos",
+      "jobId": "qu-2026-08-18-211511",
+      "sceneNumber": 2,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/qu-2026-08-18-211511/assets/scene_002_seg_002.png",
+      "queryUsed": "application hosting architecture diagram",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Qué ocurre dentro de un centro de datos",
+      "jobId": "qu-2026-08-18-211511",
+      "sceneNumber": 3,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/qu-2026-08-18-211511/assets/scene_003_seg_001.jpg",
+      "queryUsed": "data center cooling system photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Qué ocurre dentro de un centro de datos",
+      "jobId": "qu-2026-08-18-211511",
+      "sceneNumber": 4,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/qu-2026-08-18-211511/assets/scene_004_seg_001.jpg",
+      "queryUsed": "data center security systems photograph",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Qué ocurre dentro de un centro de datos",
+      "jobId": "qu-2026-08-18-211511",
+      "sceneNumber": 4,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/qu-2026-08-18-211511/assets/scene_004_seg_002.jpg",
+      "queryUsed": "data center security architecture diagram",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    },
+    {
+      "topic": "Qué ocurre dentro de un centro de datos",
+      "jobId": "qu-2026-08-18-211511",
+      "sceneNumber": 5,
+      "segmentIndex": 1,
+      "assetPath": "data/videos/qu-2026-08-18-211511/assets/scene_005_seg_001.jpg",
+      "queryUsed": "data center overview photograph",
+      "provider": "pixabay",
+      "humanLabel": "CLEARLY_RELEVANT"
+    },
+    {
+      "topic": "Qué ocurre dentro de un centro de datos",
+      "jobId": "qu-2026-08-18-211511",
+      "sceneNumber": 5,
+      "segmentIndex": 2,
+      "assetPath": "data/videos/qu-2026-08-18-211511/assets/scene_005_seg_002.jpg",
+      "queryUsed": "data center technology diagram",
+      "provider": "pixabay",
+      "humanLabel": "COARSE_BUT_USABLE"
+    }
+  ]
+}
