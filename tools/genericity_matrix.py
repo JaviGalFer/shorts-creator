@@ -162,6 +162,22 @@ def _visual_plan_metrics(metadata: dict) -> dict:
 # ── ASSETS level ─────────────────────────────────────────────────────────────
 
 
+def _expected_visual_segments(metadata: dict) -> int:
+    """Total planned segments across all scenes' visualSequence (v2 plans)."""
+    script = metadata.get("script")
+    scenes = script.get("scenes") if isinstance(script, dict) else []
+    if not isinstance(scenes, list):
+        return 0
+    total = 0
+    for scene in scenes:
+        if not isinstance(scene, dict):
+            continue
+        vp = scene.get("visualPlan")
+        if isinstance(vp, dict) and isinstance(vp.get("visualSequence"), list):
+            total += len(vp["visualSequence"])
+    return total
+
+
 def _asset_metrics(metadata: dict) -> dict:
     assets = metadata.get("assets")
     segments: list[dict] = []
@@ -169,11 +185,12 @@ def _asset_metrics(metadata: dict) -> dict:
         for entry in assets:
             if not isinstance(entry, dict):
                 continue
+            scene_number = entry.get("sceneNumber")
             segs = entry.get("segments")
             if isinstance(segs, list):
                 for seg in segs:
                     if isinstance(seg, dict):
-                        segments.append(seg)
+                        segments.append({**seg, "_sceneNumber": scene_number})
 
     resolved = 0
     unresolved = 0
@@ -183,6 +200,7 @@ def _asset_metrics(metadata: dict) -> dict:
     semantic_verdict_counts: Counter = Counter()
     executor_status: Counter = Counter()
     unresolved_reasons: list[Any] = []
+    resolved_details: list[dict] = []
 
     for seg in segments:
         status = seg.get("segmentValidationStatus")
@@ -195,6 +213,7 @@ def _asset_metrics(metadata: dict) -> dict:
             if isinstance(qu, str) and qu:
                 query_used.append(qu)
             sa = seg.get("semanticAssessment")
+            sa_verdict = sa.get("verdict") if isinstance(sa, dict) else None
             if isinstance(sa, dict):
                 semantic_assessments.append({
                     "verdict": sa.get("verdict"),
@@ -204,6 +223,20 @@ def _asset_metrics(metadata: dict) -> dict:
                 verdict = sa.get("verdict")
                 if isinstance(verdict, str):
                     semantic_verdict_counts[verdict] += 1
+            resolved_details.append({
+                "sceneNumber": seg.get("_sceneNumber"),
+                "segmentIndex": seg.get("segmentIndex"),
+                "assetPreference": seg.get("assetPreference"),
+                "provider": seg.get("provider"),
+                "queryUsed": seg.get("queryUsed"),
+                "path": seg.get("path"),
+                "sourceUrl": seg.get("sourceUrl"),
+                "semanticAssessment": {
+                    "verdict": sa_verdict,
+                    "anchorTerms": sa.get("anchorTerms") if isinstance(sa, dict) else None,
+                    "matchedAnchors": sa.get("matchedAnchors") if isinstance(sa, dict) else None,
+                },
+            })
         else:
             unresolved += 1
             es = seg.get("_executorStatus")
@@ -218,14 +251,22 @@ def _asset_metrics(metadata: dict) -> dict:
     total_counted = resolved + unresolved
     ratio = round(resolved / total_counted, 4) if total_counted else None
 
+    expected = _expected_visual_segments(metadata)
+    persisted_asset_segments = len(segments)
+    coverage = round(persisted_asset_segments / expected, 4) if expected else None
+
     has_assets_field = "assets" in metadata
     return {
         "hasAssetsField": has_assets_field,
         "resolved": resolved,
         "unresolvedOrFailed": unresolved,
         "resolutionRatio": ratio,
+        "persistedAssetSegments": persisted_asset_segments,
+        "expectedVisualSegments": expected,
+        "assetSegmentCoverage": coverage,
         "providerDistribution": dict(sorted(provider_counter.items())),
         "queryUsedForResolved": query_used,
+        "resolvedDetails": resolved_details,
         "semanticAssessments": semantic_assessments,
         "semanticVerdictCounts": dict(sorted(semantic_verdict_counts.items())),
         "executorStatusCounts": dict(sorted(executor_status.items())),

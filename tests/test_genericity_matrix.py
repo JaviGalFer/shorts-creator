@@ -154,6 +154,10 @@ def test_valid_extraction_job_and_visual_plan() -> None:
     assert a["resolved"] == 0
     assert a["unresolvedOrFailed"] == 0
     assert a["resolutionRatio"] is None
+    assert a["persistedAssetSegments"] == 0
+    assert a["expectedVisualSegments"] == 1
+    assert a["assetSegmentCoverage"] == 0.0
+    assert a["resolvedDetails"] == []
 
 
 def test_assest_partial_resolved_plus_unresolved_mix() -> None:
@@ -174,6 +178,25 @@ def test_assest_partial_resolved_plus_unresolved_mix() -> None:
     assert a["executorStatusCounts"] == {"NO_RESULTS": 1, "DOWNLOAD_FAILED": 1}
     assert len(a["unresolvedReasons"]) == 2
 
+    assert len(a["resolvedDetails"]) == 1
+    detail = a["resolvedDetails"][0]
+    assert detail["sceneNumber"] == 1
+    assert detail["segmentIndex"] == 1
+    assert detail["assetPreference"] == "photograph"
+    assert detail["provider"] == "wikimedia_commons"
+    assert detail["queryUsed"] == "aurora borealis solar particles photograph"
+    assert detail["path"] == "assets/scene_001_seg_001.jpg"
+    assert detail["sourceUrl"] == "https://example.org/aurora.jpg"
+    assert detail["semanticAssessment"]["verdict"] == "RELEVANT"
+    assert detail["semanticAssessment"]["anchorTerms"] == ["aurora", "borealis", "particles"]
+    assert detail["semanticAssessment"]["matchedAnchors"] == ["aurora", "borealis", "solar"]
+
+    # 3 persisted segments against 1 expected visual-sequence segment (this
+    # synthetic scene has 1 planned segment); coverage = persisted / expected.
+    assert a["persistedAssetSegments"] == 3
+    assert a["expectedVisualSegments"] == 1
+    assert a["assetSegmentCoverage"] == 3.0
+
 
 def test_missing_optional_semantic_assessment() -> None:
     segments = [_resolved_segment(semantic=False), _resolved_segment(semantic=False)]
@@ -183,6 +206,11 @@ def test_missing_optional_semantic_assessment() -> None:
     assert a["resolved"] == 2
     assert a["semanticAssessments"] == []
     assert a["semanticVerdictCounts"] == {}
+    assert all(
+        d["semanticAssessment"]["verdict"] is None
+        and d["semanticAssessment"]["anchorTerms"] is None
+        for d in a["resolvedDetails"]
+    )
 
 
 def test_no_assets() -> None:
@@ -194,6 +222,8 @@ def test_no_assets() -> None:
     assert a["resolved"] == 0
     assert a["unresolvedOrFailed"] == 0
     assert a["resolutionRatio"] is None
+    assert a["persistedAssetSegments"] == 0
+    assert a["assetSegmentCoverage"] == 0.0
 
 
 def test_bootstrap_fail_is_telemetry_not_failure() -> None:
