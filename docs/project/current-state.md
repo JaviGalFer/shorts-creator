@@ -2,7 +2,7 @@
 
 **Última actualización:** 2026-08-19
 
-## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED
+## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED
 
 - Slice puro y aditivo: contrato `visualSequence[].mediaPreference`, policy
   `request.visuals.visualMode`, `MediaStrategyDecision` y registry estático de
@@ -30,7 +30,8 @@
   top-N helper preserves discovery order and does not rerank by score.
 - No router/executor/provider/semantic/fidelity/bridge/CLI/render change. Slice
   2B runtime wiring remains pending. Validation: focales `66 passed`, VisualPlan
-  `106 passed`, suite completa `1692 passed, 0 failed`; commit pending.
+  `106 passed`, suite completa `1692 passed, 0 failed`; `git diff --check`
+  limpio. Commit `c0449f6` (`feat(assets): add candidate selection contracts`).
 
 ## Investigación cerrada: `pexels-provider-fit-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 

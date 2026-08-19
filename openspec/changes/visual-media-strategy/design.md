@@ -1,6 +1,6 @@
 # Design: visual-media-strategy
 
-**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED**
+**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED**
 
 ## Contratos
 
