@@ -37,7 +37,7 @@
 - Slice 1 and Slice 2 are complete: shared Pexels infrastructure, Photos
   candidate adapter, explicit opt-in routing, existing lifecycle/gates,
   provenance bridge and bounded real smoke. No Pexels Video implementation.
-- Pending closure only: final review and separate authorized merge. Smoke A used
+- Closure complete; pending separate authorized merge only. Smoke A used
   one search request and resolved one asset; Smoke B used five search requests,
   resolved five of seven segments and ended `ASSETS_PARTIAL` for explainable
   provider-fit/gate outcomes. OpenCLIP was not activated; pixel gate bypass was
