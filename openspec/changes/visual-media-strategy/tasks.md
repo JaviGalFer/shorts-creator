@@ -1,6 +1,6 @@
 # Tasks: visual-media-strategy
 
-**Status: IN PROGRESS — Slice 1 COMPLETED**
+**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED**
 
 ## Slice 1: contratos, policy y registry
 
@@ -19,7 +19,7 @@
       capability registry).
 - [x] Suite completa: `1650 passed` (`python3 -m pytest -q tests`).
 - [x] `git diff --check` limpio.
-- [ ] Commit `feat(visual): add media strategy contracts`.
+- [x] Commit `57479c1` `feat(visual): add media strategy contracts`.
 
 ## Slices posteriores (no implementados)
 

@@ -1,6 +1,6 @@
 # Agent Context
 
-## Active Change: visual-media-strategy — Slice 1 COMPLETED / VERIFIED / pending commit
+## Active Change: visual-media-strategy — Slice 1 COMPLETED / VERIFIED / COMMITTED
 - Scope limited to additive pure contracts, request policy normalization and a
   static provider capability registry. No productive routing, Pexels runtime,
   VIDEO runtime, executor, prepare, renderer, CLI or prompt changes.
@@ -19,6 +19,7 @@
   CONDITIONAL (`ELIGIBLE_CANDIDATE` evidence); exact forms are UNSUPPORTED.
 - Validation: focused `130 passed`; full suite `1650 passed, 0 failed`;
   `git diff --check` clean.
+- Commit: `57479c1` (`feat(visual): add media strategy contracts`).
 
 ## Closed Investigation: pexels-provider-fit-benchmark — COMPLETED / VERIFIED / CLOSED (merged into `main`, no-ff)
 - Benchmark-first del PROVIDER FIT de Pexels Photos/Video y de `query-adapt-v1`, sin runtime Pexels, rendering, VisualPlan/schema, OpenCLIP/BLIP/VLM, generación de imágenes ni perceptual hash. Base `main` `cf391c5`; commits `6b18d01` (benchmark), `d948300` (hardening) y cierre documental.

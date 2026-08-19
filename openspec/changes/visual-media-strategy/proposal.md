@@ -1,6 +1,6 @@
 # Propuesta: visual-media-strategy
 
-**Status: IN PROGRESS — Slice 1 COMPLETED**
+**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED**
 
 ## Contexto
 

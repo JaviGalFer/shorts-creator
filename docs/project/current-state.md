@@ -2,7 +2,7 @@
 
 **Última actualización:** 2026-08-19
 
-## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / pendiente commit
+## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / COMMITTED
 
 - Slice puro y aditivo: contrato `visualSequence[].mediaPreference`, policy
   `request.visuals.visualMode`, `MediaStrategyDecision` y registry estático de
@@ -21,6 +21,7 @@
   runtime ni secretos en registry.
 - Validación: focales `130 passed`; suite completa `1650 passed, 0 failed`;
   `git diff --check` limpio.
+- Commit: `57479c1` (`feat(visual): add media strategy contracts`).
 
 ## Investigación cerrada: `pexels-provider-fit-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
