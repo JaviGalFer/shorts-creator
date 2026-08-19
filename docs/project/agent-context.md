@@ -1,6 +1,6 @@
 # Agent Context
 
-## Active Change: visual-media-strategy — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED
+## Active Change: visual-media-strategy — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED / COMMITTED
 - Scope limited to additive pure contracts, request policy normalization and a
   static provider capability registry. No productive routing, Pexels runtime,
   VIDEO runtime, executor, prepare, renderer, CLI or prompt changes.
@@ -37,7 +37,8 @@
   20-attempt limit; semantic-before-download, fidelity-after-download,
   provider failover and OFF-by-default fidelity bypass. No reranking/diversity.
 - Validation: affected tests `331 passed`; full suite `1699 passed, 0 failed`;
-  `git diff --check` clean; commit pending.
+  `git diff --check` clean.
+- Commit: `9381435` (`refactor(assets): unify candidate selection lifecycle`).
 
 ## Closed Investigation: pexels-provider-fit-benchmark — COMPLETED / VERIFIED / CLOSED (merged into `main`, no-ff)
 - Benchmark-first del PROVIDER FIT de Pexels Photos/Video y de `query-adapt-v1`, sin runtime Pexels, rendering, VisualPlan/schema, OpenCLIP/BLIP/VLM, generación de imágenes ni perceptual hash. Base `main` `cf391c5`; commits `6b18d01` (benchmark), `d948300` (hardening) y cierre documental.

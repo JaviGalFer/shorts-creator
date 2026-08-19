@@ -1,6 +1,6 @@
 # Tasks: visual-media-strategy
 
-**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED**
+**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED / COMMITTED**
 
 ## Slice 1: contratos, policy y registry
 
@@ -34,6 +34,7 @@
       de Wikimedia/Pixabay, sin runtime Pexels.
 - [x] Slice 2B: tests afectados `331 passed`; suite completa `1699 passed`;
       `git diff --check` limpio.
+- [x] Slice 2B commit `9381435` `refactor(assets): unify candidate selection lifecycle`.
 - [ ] Runtime `pexels-photos` image-only.
 - [ ] Evolución `VisualAsset.kind = IMAGE | VIDEO`.
 - [ ] Playback contract y rendering VIDEO local.

@@ -2,7 +2,7 @@
 
 **Última actualización:** 2026-08-19
 
-## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED
+## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED / COMMITTED
 
 - Slice puro y aditivo: contrato `visualSequence[].mediaPreference`, policy
   `request.visuals.visualMode`, `MediaStrategyDecision` y registry estático de
@@ -39,7 +39,8 @@
   viable, orden API/rank y límite 20 de Pixabay; semantic antes de download y
   fidelity después. No hay reranking, pool cross-provider, diversity, Pexels ni
   VIDEO runtime. Afectados: `331 passed`; suite completa `1699 passed, 0 failed`;
-  `git diff --check` limpio; commit pendiente.
+  `git diff --check` limpio. Commit `9381435`
+  (`refactor(assets): unify candidate selection lifecycle`).
 
 ## Investigación cerrada: `pexels-provider-fit-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
