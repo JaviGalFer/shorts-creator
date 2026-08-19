@@ -1,8 +1,8 @@
 # Agent Context
 
-## Active Change: pexels-photo-selection-benchmark — IN PROGRESS
-- Evaluation-only investigation that freezes a candidate-ordering benchmark before
-  any candidate-level human preferences were supplied. It does not touch Pexels
+## Closed Change: pexels-photo-selection-benchmark — COMPLETED / VERIFIED / CLOSED
+- Evaluation-only investigation that froze a candidate-ordering benchmark before
+  any candidate-level human preferences were supplied. It did not touch Pexels
   runtime, providers, routing, executor, config, contracts, semantic scoring, or
   visual-fidelity runtime.
 - Phase A implementation is frozen: A0 raw Pexels order, A1 exact lexical query
@@ -16,8 +16,20 @@
   does not move PlayStation raw #3 ahead of #1; A2 does, but cannot bypass
   insufficiency. Phase B is neither run nor eligible. Artifact is git-ignored
   at `data/evaluations/pexels-photo-selection-benchmark/phase-a.json`.
-- Pexels Photos remains `PLANNED`. The historical pairwise evidence PlayStation
-  raw #3 > raw #1 stays external to the blinded review and cannot order aliases.
+- Evidence hardening: human top-3 metrics use local `reviewWindowRank`; field
+  `bestPreferredReviewWindowRank`; `selectorRank` stays global diagnostic. No
+  material metric/sufficiency/verdict changed. A1/A2 NOT VALIDATED and not
+  NOT_USEFUL; A2 shows a promising PlayStation signal only.
+- Pexels Photos remains `PLANNED`; `pexels-photos-runtime` remains blocked only
+  w.r.t. a validated metadata top-N policy. The historical pairwise evidence
+  PlayStation raw #3 > raw #1 stays external to the blinded review.
+
+## Next Research Direction: pexels-photo-selection-evidence-extension
+- Separate pre-registered evaluation change (NOT implemented) to obtain
+  additional candidate-level evidence, reusing local top-3 Pexels when possible:
+  do not modify this benchmark retroactively, do not lower the 8-query minimum,
+  do not re-label the current 10 queries, do not run Phase B without sufficient
+  evidence.
 
 ## Closed Change: visual-media-strategy — COMPLETED / VERIFIED / CLOSED
 - Slice 1 scope was limited to additive pure contracts, request policy

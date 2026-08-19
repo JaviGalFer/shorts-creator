@@ -341,7 +341,7 @@ def test_human_metrics_use_local_review_window_not_global_selector_rank():
     )
     first = result["queries"][0]
     assert result["metrics"]["top1PreferredRate"] == 1.0
-    assert first["bestPreferredSelectorRank"] == 1
+    assert first["bestPreferredReviewWindowRank"] == 1
     assert first["pairwiseAccuracy"] == 1.0
     preferred = next(candidate for candidate in first["candidates"] if candidate["candidateId"] == 20_002)
     assert preferred["selectorRank"] == 13

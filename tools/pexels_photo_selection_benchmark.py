@@ -496,7 +496,7 @@ def evaluate_against_preferences(
             "allUnusable": all_unusable_query,
             "top1Preferred": top1_preferred,
             "pairwiseAccuracy": pairwise_accuracy,
-            "bestPreferredSelectorRank": best_preferred_rank,
+            "bestPreferredReviewWindowRank": best_preferred_rank,
             "selectorTie": selector_tie,
         })
 

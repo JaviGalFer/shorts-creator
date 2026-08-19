@@ -120,7 +120,34 @@ Evidence hardening corrected a metric-window bug: `selectorRank` remains the
 global top-15 diagnostic rank, while every human top-3 metric now uses an
 explicit local `reviewWindowRank` from 1..3. This affects preferred rank and
 pairwise comparisons only; top-1, reorder counts, selector ties, sufficiency,
-and verdict criteria are unchanged.
+and verdict criteria are unchanged. No legacy alias was kept for the evidence
+naming fix.
+
+## Investigation Conclusion
+
+- A0 RAW remains the baseline.
+- A1 is NOT VALIDATED.
+- A2 is NOT VALIDATED.
+- A1/A2 are not declared NOT_USEFUL either.
+- A2 shows a promising signal on PlayStation (raw #3 ranked before raw #1), but
+  the evidence is insufficient.
+- There is no authorized metadata selector for runtime.
+- Do not run the OpenCLIP Phase B with this dataset.
+- Pexels Photos continues `PLANNED`.
+- `pexels-photos-runtime` remains blocked only with respect to a validated
+  top-N policy.
+- The 1.0 top-1 / 1.0 pairwise figures are not reinterpreted as general
+  accuracy; they describe only the two discriminating queries.
+
+## Future Direction
+
+A separate, pre-registered evaluation change
+`pexels-photo-selection-evidence-extension` is required to obtain additional
+candidate-level evidence, preferably reusing the already-locally-available
+top-3 Pexels candidates and without new requests when possible. It must not:
+modify this benchmark retrospectively, lower the minimum 8 discriminating
+queries, re-label the current 10 queries, or introduce Phase B before
+sufficient evidence exists. It is not implemented in this change.
 
 Phase B is not run and is not currently eligible: a pixel ranker cannot repair
 insufficient candidate-level human discrimination.

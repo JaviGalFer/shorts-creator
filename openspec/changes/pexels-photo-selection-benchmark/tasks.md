@@ -19,10 +19,13 @@
 
 ## Conditional Slice 2: Pixel Ranking
 
-- [ ] Run only if Phase A is not validated and candidate-level labels are sufficient.
-  Blocked: Phase A is `METADATA_SELECTION_EVIDENCE_INSUFFICIENT` (2/8 minimum
-  discriminating queries), so a pixel ranker is not currently evaluable.
+- [x] NOT RUN / BLOCKED BY INSUFFICIENT EVIDENCE. Phase A is
+  `METADATA_SELECTION_EVIDENCE_INSUFFICIENT` (2/8 minimum discriminating
+  queries), so a pixel ranker is not currently evaluable. Phase B therefore is
+  not eligible.
 
 ## Slice 3: Decision And Closure
 
-- [ ] Record final evidence and decision without modifying Pexels runtime.
+- [x] Record final evidence and decision without modifying Pexels runtime.
+- [x] Close: `COMPLETED / VERIFIED / CLOSED`, verdict
+  `METADATA_SELECTION_EVIDENCE_INSUFFICIENT`, no selected strategy.

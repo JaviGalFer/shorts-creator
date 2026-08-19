@@ -2,6 +2,17 @@
 
 **Última actualización:** 2026-08-19
 
+## Cambio cerrado: `pexels-photo-selection-benchmark` — COMPLETED / VERIFIED / CLOSED
+
+- Investigación evaluation-only de selectores metadata para ordenar top-3 de
+  Pexels Photos. Verdict **`METADATA_SELECTION_EVIDENCE_INSUFFICIENT`**, sin
+  selected strategy, `phaseBRequired=false`. Solo 2 queries discriminating (min
+  8); A1 no valida, A2 no valida ni NOT_USEFUL (señal PlayStation prometedora).
+  Sin runtime, sin Phase B/OpenCLIP. Pexels Photos sigue `PLANNED`;
+  `pexels-photos-runtime` bloqueado solo por política top-N validada.
+- Queda registrada la siguiente investigación separada
+  `pexels-photo-selection-evidence-extension` (no implementada).
+
 ## Change activo: `visual-media-strategy` — COMPLETED / VERIFIED / CLOSED
 
 - Slice 1 fue puro y aditivo: contrato `visualSequence[].mediaPreference`, policy
