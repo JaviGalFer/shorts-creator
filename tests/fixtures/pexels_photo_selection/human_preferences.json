@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "status": "LABELED",
+  "preferences": [
+    {"queryUsed": "four stroke engine automobile photograph", "preferredAliases": [], "allUnusable": true, "notes": "Las imagenes muestran fotos de coches pero no del motor de un coche ni de un motor de cuatro tiempos"},
+    {"queryUsed": "completed medieval castle photograph", "preferredAliases": ["A", "B", "C"], "allUnusable": false, "notes": "Mustra fotos de tres castillos ya construidos aunque desconozco si son medieval"},
+    {"queryUsed": "medieval castle construction photograph", "preferredAliases": ["A", "B", "C"], "allUnusable": false, "notes": "Mustra fotos de tres castillos ya construidos aunque desconozco si son medieval"},
+    {"queryUsed": "medieval castle historical significance photograph", "preferredAliases": ["A", "B", "C"], "allUnusable": false, "notes": "Mustra fotos de tres castillos ya construidos aunque desconozco si son medieval"},
+    {"queryUsed": "four stroke engine parts photograph", "preferredAliases": ["A"], "allUnusable": false, "notes": "La A muestra un motor desarmado pero no se puede apreciar bien si es 4 tiempos"},
+    {"queryUsed": "blue ringed octopus venom photograph", "preferredAliases": ["C"], "allUnusable": false, "notes": "La C no es muy buena pero al menos muestra un pulpo con anillas más bien moradas que azules"},
+    {"queryUsed": "PlayStation Nintendo 64 comparison photograph", "preferredAliases": ["A", "B", "C"], "allUnusable": false, "notes": "No es muy buena ya que solo muestra el mando de cada consola pero es aceptable"},
+    {"queryUsed": "Java code snippet photograph", "preferredAliases": [], "allUnusable": true, "notes": "En la A se muestra código html + css, en la B una persona prograamndo, se desconoce el lenguaje y el C muestra una taza de café con un portátil de fondo con el VS abierto pero no se aprecia el código"},
+    {"queryUsed": "engine explosion in piston photograph", "preferredAliases": [], "allUnusable": true, "notes": "Son fotos de motores pero en ninguna está mostrando la combustión interna del motor"},
+    {"queryUsed": "amortization chart graph photograph", "preferredAliases": ["A", "B", "C"], "allUnusable": false, "notes": "Las tres muestran un gráfico relacionado con financias"}
+  ]
+}

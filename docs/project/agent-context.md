@@ -1,6 +1,47 @@
 # Agent Context
 
-## Active Change: visual-media-strategy — COMPLETED / VERIFIED / CLOSED
+## Closed Change: pexels-photo-selection-benchmark — COMPLETED / VERIFIED / CLOSED
+- Evaluation-only investigation that froze a candidate-ordering benchmark before
+  any candidate-level human preferences were supplied. It did not touch Pexels
+  runtime, providers, routing, executor, config, contracts, semantic scoring, or
+  visual-fidelity runtime.
+- Phase A implementation is frozen: A0 raw Pexels order, A1 exact lexical query
+  recall and A2 fixed-parameter BM25 over the persisted page-1 top-15. The blind
+  review manifest maps the ten persisted top-3 sets to deterministic A/B/C aliases.
+- Human preferences are `LABELED` and sealed in `ff64aef` (SHA-256
+  `9ade45a5da70b1538a516c4100ce5bbbae4bf56d4dd625def9242b8fbaa5144f`).
+  Frozen Phase A evaluated A0/A1/A2 offline: 10 labels, 6 topics, but only 2
+  discriminating queries (<8 required), yielding
+  `METADATA_SELECTION_EVIDENCE_INSUFFICIENT`; selected strategy is null. A1
+  does not move PlayStation raw #3 ahead of #1; A2 does, but cannot bypass
+  insufficiency. Phase B is neither run nor eligible. Artifact is git-ignored
+  at `data/evaluations/pexels-photo-selection-benchmark/phase-a.json`.
+- Evidence hardening: human top-3 metrics use local `reviewWindowRank`; field
+  `bestPreferredReviewWindowRank`; `selectorRank` stays global diagnostic. No
+  material metric/sufficiency/verdict changed. A1/A2 NOT VALIDATED and not
+  NOT_USEFUL; A2 shows a promising PlayStation signal only.
+- Pexels Photos remains `PLANNED`; `pexels-photos-runtime` remains blocked only
+  w.r.t. a validated metadata top-N policy. The historical pairwise evidence
+  PlayStation raw #3 > raw #1 stays external to the blinded review.
+
+## Next Product Change: pexels-photos-runtime
+- Image-only Pexels Photos provider runtime. First version uses Pexels Photos as
+  explicit opt-in (never default). A2 BM25 is usable as a PROVISIONAL top-N
+  heuristic, explicitly documented as NOT VALIDATED — a reversible engineering
+  decision based on best available evidence, not a benchmark conclusion.
+- Preserve the raw `pexelsQueryRank`; the future final lifecycle `providerRank`
+  stays separate. Existing semantic gate and pixel gate remain the acceptance
+  authority. Provider fallback remains. Runtime must leave sufficient
+  provenance/telemetry to detect real ordering problems.
+
+## Deferred (Optional) Research: pexels-photo-selection-evidence-extension
+- DEFERRED / OPTIONAL, NOT the next change. Only reconsidered if real runtime
+  evidence shows candidate ordering needs more investigation. If run, it must be
+  a separate pre-registered evaluation change that: does not modify this
+  benchmark retroactively, does not lower the 8-query minimum, does not re-label
+  the current 10 queries, and does not run Phase B without sufficient evidence.
+
+## Closed Change: visual-media-strategy — COMPLETED / VERIFIED / CLOSED
 - Slice 1 scope was limited to additive pure contracts, request policy
   normalization and a static provider capability registry. It made no executor,
   prepare, renderer, CLI or prompt changes. Slice 2B later wired the existing
