@@ -2,6 +2,47 @@
 
 **Última actualización:** 2026-08-19
 
+## Investigación cerrada: `pexels-visual-supply-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
+
+- Benchmark-first del SUPPLY visual de Pexels (**Video + Photos**) frente al
+  stack Wikimedia/Pixabay. Sin integración runtime; sin tocar rendering/
+  OpenCLIP/BLIP/VLM/VisualPlan; sin relabel. Base real del benchmark:
+  **`de570fa`** (no `321da8a`).
+- Datasets reutilizados sin relabel: canonical-38 + development-20 = 58 rows →
+  56 queryUsed únicas (dedup exacto; se conserva mapping query→rows y
+  `assetPath`).
+- **Pexels Video** (fase previa): cobertura **56/56, HIGH_SUPPLY** (>=720x1280
+  y >=1080x1920 = 1.0); requests 56/100; 12 clips rank#1 (720x1280); contact
+  sheets `01-...-temporal-...` (corregido: aspectos, sin solapamiento) y
+  `02-...-top3-...`.
+- **Pexels Photos** (extensión): cobertura **56/56, HIGH_SUPPLY** —
+  fracción >=720x1280 y >=1080x1920 = **1.0** (originales portrait alta res);
+  requests **56/70** (main 56, diag 0); `candidatesReturned=840`,
+  `originalPortraitCount=840`; diagnóstico 0 (56/56 `PORTRAIT_SUPPLY_OK`);
+  rate-limit `remaining=24888/25000`; 12 rank#1 originales descargados, 0
+  fallos.
+- Revisión humana externa: Pexels prometedor para fotografía/sujetos físicos/
+  ubicaciones/personas/objetos/B-roll tech/server; **no** fiable para visual
+  forms explícitos (diagram/infographic/illustration/plan/construction-time);
+  raw rank #1 no siempre es el mejor candidato; overlap/repetición en
+  castillos/data-center (diversity/dedup futuro); Photos CURRENT vs Pexels:
+  **complementarios**.
+- **Decisión: `PEXELS_CONDITIONAL_PROVIDER_PROMISING`** — supply validado;
+  continuar hacia integración; NO sustituto global; NO integrar todavía; en
+  cierre `1586 passed, 0 failed`. Dirección siguiente (separada, NO
+  implementada): `pexels-provider-fit-benchmark`.
+- Contact sheets en `data/evaluations/pexels-visual-supply-benchmark/`
+  (git-ignored): `01-pexels-video-temporal-contact-sheet.png`,
+  `02-pexels-top3-search-results.png` y
+  `03-pexels-photo-vs-current-contact-sheet.png` (CURRENT vs PEXELS #1/#2/#3).
+  Evidencia de vídeo en `data/evaluations/pexels-video-supply-benchmark/`.
+- Harness `tools/pexels_photo_supply_benchmark.py` + `tools/pexels_video_supply_benchmark.py`
+  (evaluation-only, stdlib urllib, import-safe/offline, User-Agent, key no
+  leak). Tests `tests/test_pexels_photo_supply_benchmark.py` (**30 passed**) +
+  `tests/test_pexels_video_supply_benchmark.py` (**30 passed**), sin llamadas
+  reales.
+- Ver `openspec/changes/pexels-visual-supply-benchmark/`.
+
 ## Investigación cerrada: `visual-fidelity-vlm-judge-v2` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
 - Evaluación benchmark-first de un judge multimodal API **menos conservador**
