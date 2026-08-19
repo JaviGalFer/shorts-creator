@@ -47,7 +47,8 @@
   progresión semantic/download/pixel, cleanup, cap de 20 y precedence
   `DOWNLOAD_FAILED`; la evidencia es parity-preserving, no equivalencia formal
   before/after. Validación: focales `257 passed`; suite `1703 passed, 0 failed`;
-  `git diff --check` limpio; commit pendiente.
+  `git diff --check` limpio. Commit `c2d66f8`
+  (`fix(assets): harden candidate lifecycle parity`).
 
 ## Investigación cerrada: `pexels-provider-fit-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 

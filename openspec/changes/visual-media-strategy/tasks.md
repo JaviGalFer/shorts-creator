@@ -39,6 +39,7 @@
       final; wiring real, límite 20 y precedence `DOWNLOAD_FAILED` verificados.
 - [x] Hardening validation: focused `257 passed`; full suite `1703 passed`;
       `git diff --check` limpio.
+- [x] Hardening commit `c2d66f8` `fix(assets): harden candidate lifecycle parity`.
 - [ ] FINAL READ-ONLY REVIEW antes de cierre/merge.
 - [ ] Runtime `pexels-photos` image-only.
 - [ ] Evolución `VisualAsset.kind = IMAGE | VIDEO`.

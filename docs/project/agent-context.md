@@ -47,7 +47,8 @@
   semantic/download/pixel progression, cleanup, the 20-candidate cap and
   `DOWNLOAD_FAILED` precedence. Evidence is parity-preserving, not formal
   before/after equivalence. Validation: focused `257 passed`; full suite
-  `1703 passed, 0 failed`; `git diff --check` clean; commit pending.
+  `1703 passed, 0 failed`; `git diff --check` clean.
+- Commit: `c2d66f8` (`fix(assets): harden candidate lifecycle parity`).
 
 ## Closed Investigation: pexels-provider-fit-benchmark — COMPLETED / VERIFIED / CLOSED (merged into `main`, no-ff)
 - Benchmark-first del PROVIDER FIT de Pexels Photos/Video y de `query-adapt-v1`, sin runtime Pexels, rendering, VisualPlan/schema, OpenCLIP/BLIP/VLM, generación de imágenes ni perceptual hash. Base `main` `cf391c5`; commits `6b18d01` (benchmark), `d948300` (hardening) y cierre documental.
