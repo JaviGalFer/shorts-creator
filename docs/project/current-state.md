@@ -2,6 +2,28 @@
 
 **Última actualización:** 2026-08-19
 
+## Investigación activa: `pexels-video-supply-benchmark` — READY_FOR_HUMAN_REVIEW (rama `change/pexels-video-supply-benchmark`)
+
+- Benchmark-first del SUPPLY de Pexels Video (`GET /v1/videos/search`, RAW,
+  `orientation=portrait`, `locale=en-US`, `per_page=15`, sin filtro `size`, sin
+  reranking ML/LLM ni judges) sobre las queryUsed ya usadas por el pipeline.
+  Sin integración runtime; sin tocar rendering/OpenCLIP/BLIP/VLM/VisualPlan.
+- Datasets reutilizados sin relabel: canonical-38 + development-20 = 58 rows →
+  56 queryUsed únicas (dedup exacto, mapping query→rows conservado).
+- Resultado técnico: cobertura **56/56**, **HIGH_SUPPLY** (portrait >=720x1280
+  y >=1080x1920 = **1.0**); zero results 0; portraitMp4 838/838;
+  medianTotalResults 6856.5; duration mediana 12s. Requests **56/100**;
+  diagnóstico landscape **0** (todo `PORTRAIT_SUPPLY_OK`, sin NO_CONTENT ni
+  CONTENT_EXISTS_BUT_NOT_PORTRAIT). Rate-limit `remaining=24944/25000`.
+- Review humano: 12 clips rank#1 descargados **12/12, 0 fallos** (720x1280); 2
+  contact sheets PNG (`01-...-temporal-...`, `02-...-top3-...`) en
+  `data/evaluations/pexels-video-supply-benchmark/` (git-ignored). Sin juicio
+  automático; **no se afirma `PEXELS_BETTER`**; pendiente de revisión humana.
+- Harness `tools/pexels_video_supply_benchmark.py` (stdlib urllib, import-safe/
+  offline, lazy network) + tests `tests/test_pexels_video_supply_benchmark.py`
+  (**30 passed**, sin llamadas reales).
+- Ver `openspec/changes/pexels-video-supply-benchmark/`.
+
 ## Investigación cerrada: `visual-fidelity-vlm-judge-v2` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
 - Evaluación benchmark-first de un judge multimodal API **menos conservador**

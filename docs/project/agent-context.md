@@ -1,5 +1,15 @@
 # Agent Context
 
+## Active Investigation: pexels-video-supply-benchmark — READY_FOR_HUMAN_REVIEW (branch `change/pexels-video-supply-benchmark`)
+- Benchmark-first del SUPPLY de Pexels Video frente al stack Wikimedia/Pixabay. **No runtime integration.** Medir el resultado RAW `GET /v1/videos/search` (`query=queryUsed`, `orientation=portrait`, `locale=en-US`, `per_page=15`; sin filtrar por `size`, sin reranking ML, sin LLM). NO tocar rendering/OpenCLIP/BLIP/VLM/VisualPlan; NO relabel.
+- Datasets reutilizados sin relabel: canonical-38 + development-20 = 58 rows → 56 queryUsed únicas tras dedup exacto (conserva mapping query→rows).
+- Resultado: **cobertura 56/56, HIGH_SUPPLY** — fracción queries con portrait >=720x1280 = **1.0** y >=1080x1920 = **1.0**. `queriesWithZeroResults=0`, `portraitMp4Count=838/838`, `medianTotalResults=6856.5`, duration mediana 12s. Requests usadas **56/100**; diagnóstico landscape **0** (todas `PORTRAIT_SUPPLY_OK`; sin `NO_CONTENT` ni `CONTENT_EXISTS_BUT_NOT_PORTRAIT`). Rate-limit final `remaining=24944/25000`. Sin clave persistida.
+- Revisión humana: 12 clips rank#1 (7 dev-bad + 4 buenos que BLIP falso-rechazó + 1 control CR) descargados **12/12, 0 fallos** (720x1280). Contact sheets en `data/evaluations/pexels-video-supply-benchmark/` (git-ignored): `01-pexels-video-temporal-contact-sheet.png` (frames 20/50/80 % vía Docker ffmpeg) y `02-pexels-top3-search-results.png` (previews rank 1/2/3). Sin juicio automático de píxeles.
+- Clasificación técnica provisional: `HIGH_SUPPLY`; **NO se afirma `PEXELS_BETTER`** — decisión semántica pendiente de revisión humana externa (NO CLOSED).
+- Tests: `tests/test_pexels_video_supply_benchmark.py` **30 passed** (parsing API, dedup, rate-limit, selección MP4, request cap, landscape diagnostic, no key leak, import-safe/offline; sin llamadas reales).
+- Harness: `tools/pexels_video_supply_benchmark.py` (evaluation-only, stdlib urllib, lazy network; Docker `linuxserver/ffmpeg` para contact sheets, entrada ffmpeg default y `--entrypoint ffprobe`).
+- Commits: `test(evaluation): benchmark Pexels video supply`. Sin merge, sin push. Ver `openspec/changes/pexels-video-supply-benchmark/`.
+
 ## Closed Investigation: visual-fidelity-vlm-judge-v2 — COMPLETED / VERIFIED / CLOSED (merged into `main`, no-ff)
 - Benchmark-first de un judge multimodal API **menos conservador** (`gpt-5.6-luna`, Responses API, 1 request/asset) frente a OpenCLIP y BLIP como segunda etapa visual-semántica. **No runtime integration.** Resultado: **`VLM_JUDGE_V2_NOT_USEFUL`**.
 - Contract: 3 vías `verdict: ACCEPT|REJECT|UNCERTAIN` + `reasonCode` + `shortReason`, Structured Output estricto, `detail=high`, `reasoning none`, sin tools; SIN `humanLabel`/scores previos/expected; input `queryUsed` + `assetPreference` solo si está en el contrato persistido del segmento; REJECT solo en mismatch material; métrica operativa **UNCERTAIN ⇒ ACCEPT** (fail-open).
