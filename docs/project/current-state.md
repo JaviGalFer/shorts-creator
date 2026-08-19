@@ -2,7 +2,7 @@
 
 **Última actualización:** 2026-08-19
 
-## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / COMMITTED
+## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED
 
 - Slice puro y aditivo: contrato `visualSequence[].mediaPreference`, policy
   `request.visuals.visualMode`, `MediaStrategyDecision` y registry estático de
@@ -22,6 +22,15 @@
 - Validación: focales `130 passed`; suite completa `1650 passed, 0 failed`;
   `git diff --check` limpio.
 - Commit: `57479c1` (`feat(visual): add media strategy contracts`).
+- Slice 2A hardens only pure contracts: form support is distinct from runtime
+  availability in `MediaStrategyDecision`; enums live authoritatively in
+  `contracts.visual_media`; absent fit is `UNDECLARED`, not unsupported; and
+  capability fit mappings are immutable. `CandidateEnvelope`, Attempt and
+  SelectionResult model discovery, gate outcomes and selection invariants; the
+  top-N helper preserves discovery order and does not rerank by score.
+- No router/executor/provider/semantic/fidelity/bridge/CLI/render change. Slice
+  2B runtime wiring remains pending. Validation: focales `66 passed`, VisualPlan
+  `106 passed`, suite completa `1692 passed, 0 failed`; commit pending.
 
 ## Investigación cerrada: `pexels-provider-fit-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 

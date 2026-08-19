@@ -1,6 +1,6 @@
 # Tasks: visual-media-strategy
 
-**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED**
+**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED**
 
 ## Slice 1: contratos, policy y registry
 
@@ -23,7 +23,14 @@
 
 ## Slices posteriores (no implementados)
 
-- [ ] Candidate envelope y selección top-N para Photos.
+- [x] Slice 2A: separar form support de runtime availability en la decisión
+      pura, unificar enums de medio y añadir `UNDECLARED` para fit ausente.
+- [x] Slice 2A: añadir `CandidateEnvelope`, `CandidateAttempt`,
+      `CandidateSelectionResult` y helper puro top-N sin wiring productivo.
+- [x] Slice 2A: focales `66 passed`; regresión VisualPlan `106 passed`; suite
+      completa `1692 passed`; `git diff --check` pendiente de ejecución final.
+- [ ] Slice 2B: cablear lifecycle común candidate-first-accepted con paridad
+      de Wikimedia/Pixabay, sin runtime Pexels.
 - [ ] Runtime `pexels-photos` image-only.
 - [ ] Evolución `VisualAsset.kind = IMAGE | VIDEO`.
 - [ ] Playback contract y rendering VIDEO local.

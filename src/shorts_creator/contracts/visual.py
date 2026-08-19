@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from shorts_creator.contracts.visual_media import ALLOWED_MEDIA_PREFERENCES
+
 # ── Schema constants ────────────────────────────────────────────────────────
 
 SCHEMA_VERSION = 2
@@ -22,10 +24,6 @@ ALLOWED_VISUAL_INTENTS: frozenset[str] = frozenset({
 ALLOWED_ASSET_PREFERENCES: frozenset[str] = frozenset({
     "diagram", "illustration", "photograph", "painting",
     "archive", "map", "document", "stock", "generated",
-})
-
-ALLOWED_MEDIA_PREFERENCES: frozenset[str] = frozenset({
-    "IMAGE_PREFERRED", "VIDEO_PREFERRED", "EITHER",
 })
 
 ALLOWED_TRANSITIONS: frozenset[str] = frozenset({"cut", "fade"})

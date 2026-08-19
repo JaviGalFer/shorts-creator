@@ -17,6 +17,7 @@ from shorts_creator.contracts.visual_media import (
     IMAGE_PREFERRED,
     IMAGES_ONLY,
     MEDIA_PREFERENCE_OVERRIDDEN_BY_USER,
+    MEDIA_PREFERENCE_UNAVAILABLE,
     MEDIA_PREFERENCE_UNSATISFIABLE_FOR_VISUAL_FORM,
     MIXED,
     VIDEO,
@@ -118,7 +119,8 @@ def test_mixed_is_best_effort_not_a_hard_both_kinds_requirement():
     decision = resolve_media_strategy(
         policy=policy,
         editorial_preference=IMAGE_PREFERRED,
-        supported_kinds={IMAGE},
+        form_supported_kinds={IMAGE},
+        runtime_available_kinds={IMAGE},
     )
     assert decision.resolved_kind == IMAGE
     assert decision.degradations == ()
@@ -129,7 +131,8 @@ def test_case_a_mixed_photograph_prefers_video_with_image_fallback_allowed():
     decision = resolve_media_strategy(
         policy=normalize_visual_mode({"visualMode": MIXED}),
         editorial_preference=VIDEO_PREFERRED,
-        supported_kinds={IMAGE, VIDEO},
+        form_supported_kinds={IMAGE, VIDEO},
+        runtime_available_kinds={IMAGE, VIDEO},
     )
     assert decision.resolved_kind == VIDEO
     assert decision.allowed_kinds == (IMAGE, VIDEO)
@@ -141,7 +144,8 @@ def test_case_b_images_only_overrides_video_preference():
     decision = resolve_media_strategy(
         policy=normalize_visual_mode({"visualMode": IMAGES_ONLY}),
         editorial_preference=VIDEO_PREFERRED,
-        supported_kinds={IMAGE, VIDEO},
+        form_supported_kinds={IMAGE, VIDEO},
+        runtime_available_kinds={IMAGE, VIDEO},
     )
     assert decision.resolved_kind == IMAGE
     assert decision.preference_status == "OVERRIDDEN_BY_USER"
@@ -152,7 +156,8 @@ def test_case_c_video_preference_unsatisfiable_for_diagram_falls_back_to_image()
     decision = resolve_media_strategy(
         policy=normalize_visual_mode({"visualMode": MIXED}),
         editorial_preference=VIDEO_PREFERRED,
-        supported_kinds={IMAGE},
+        form_supported_kinds={IMAGE},
+        runtime_available_kinds={IMAGE, VIDEO},
     )
     assert decision.resolved_kind == IMAGE
     assert decision.preference_status == "FALLBACK_FOR_VISUAL_FORM"
@@ -165,12 +170,65 @@ def test_case_d_videos_only_diagram_is_unresolved():
     decision = resolve_media_strategy(
         policy=normalize_visual_mode({"visualMode": VIDEOS_ONLY}),
         editorial_preference=VIDEO_PREFERRED,
-        supported_kinds={IMAGE},
+        form_supported_kinds={IMAGE},
+        runtime_available_kinds={IMAGE, VIDEO},
     )
     assert decision.resolved_kind is None
     assert decision.unresolved is True
     assert decision.preference_status == "UNRESOLVED"
     assert decision.degradations == (VISUAL_FORM_UNSUPPORTED_FOR_ALLOWED_MEDIA,)
+
+
+def test_runtime_unavailable_is_distinct_from_visual_form_mismatch():
+    decision = resolve_media_strategy(
+        policy=normalize_visual_mode({"visualMode": MIXED}),
+        editorial_preference=VIDEO_PREFERRED,
+        form_supported_kinds={IMAGE, VIDEO},
+        runtime_available_kinds={IMAGE},
+    )
+    assert decision.resolved_kind == IMAGE
+    assert decision.degradations == (MEDIA_PREFERENCE_UNAVAILABLE,)
+    assert decision.form_supported_kinds == (IMAGE, VIDEO)
+    assert decision.runtime_available_kinds == (IMAGE,)
+
+
+def test_no_runtime_media_is_explicitly_unresolved():
+    decision = resolve_media_strategy(
+        policy=normalize_visual_mode({"visualMode": MIXED}),
+        editorial_preference=VIDEO_PREFERRED,
+        form_supported_kinds={IMAGE, VIDEO},
+        runtime_available_kinds=set(),
+    )
+    assert decision.unresolved is True
+    assert decision.degradations == (MEDIA_PREFERENCE_UNAVAILABLE,)
+
+
+@pytest.mark.parametrize("invalid", [[], "", 0, False])
+def test_falsy_non_mapping_visual_inputs_are_rejected(invalid):
+    with pytest.raises(ValueError, match="INVALID_REQUEST_VISUALS"):
+        normalize_visual_mode(invalid)
+
+
+@pytest.mark.parametrize(
+    ("form_kinds", "runtime_kinds", "error"),
+    [({"ANIMATION"}, {IMAGE}, "INVALID_FORM_SUPPORTED_KINDS"),
+     ({IMAGE}, {"ANIMATION"}, "INVALID_RUNTIME_AVAILABLE_KINDS")],
+)
+def test_invalid_media_kinds_are_rejected(form_kinds, runtime_kinds, error):
+    with pytest.raises(ValueError, match=error):
+        resolve_media_strategy(
+            policy=normalize_visual_mode(None),
+            editorial_preference=IMAGE_PREFERRED,
+            form_supported_kinds=form_kinds,
+            runtime_available_kinds=runtime_kinds,
+        )
+
+
+def test_visual_plan_uses_authoritative_media_preference_constant():
+    from shorts_creator.contracts import visual
+    import shorts_creator.contracts.visual_media as visual_media
+
+    assert visual.ALLOWED_MEDIA_PREFERENCES is visual_media.ALLOWED_MEDIA_PREFERENCES
 
 
 def test_media_strategy_module_is_import_safe_and_pure():

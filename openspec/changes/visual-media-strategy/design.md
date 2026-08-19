@@ -1,6 +1,6 @@
 # Design: visual-media-strategy
 
-**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED**
+**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED**
 
 ## Contratos
 
@@ -73,3 +73,30 @@ El registry no cambia `assets/router.py`: no existe routing productivo por
 capability todavía. Tampoco se añaden `providerHint`, `provider` ni
 `preferredProvider` al VisualPlan. `sourceProviders` seguirá siendo la policy
 explícita que un slice posterior intersectará con capabilities.
+
+## Slice 2A: candidate contracts and hardening
+
+`resolve_media_strategy` now receives independent `form_supported_kinds` and
+`runtime_available_kinds`. This makes `MEDIA_PREFERENCE_UNAVAILABLE` reachable
+without conflating a form mismatch with runtime availability. Both sets are
+persisted in the pure decision; routing still does not consume it.
+
+`contracts.visual_media` is the authoritative source for media kind and media
+preference enums. `visual.py` and `capabilities.py` import those constants.
+
+Capability fit adds `UNDECLARED`: absent evidence is neither a positive fit nor
+an exclusion. Only `UNSUPPORTED` is a hard exclusion. Existing Wikimedia and
+Pixabay empty fit maps therefore preserve legacy eligibility. Capability fit
+mappings are immutable.
+
+`assets.candidates` defines pure, immutable pre-selection contracts:
+
+- `CandidateEnvelope` contains discovered provider metadata, provenance URLs,
+  optional rank/score, dimensions and attribution. It is not a `VisualAsset`.
+- `CandidateAttempt` records a later gate/download outcome separately.
+- `CandidateSelectionResult` enforces `SELECTED`/`EXHAUSTED` invariants.
+- `take_top_n` preserves discovery order and never ranks by provider score.
+
+No runtime wires these contracts in Slice 2A. A future Pexels Photos runtime
+may choose `N=3` from its own policy, but no global limit belongs in this
+contract.

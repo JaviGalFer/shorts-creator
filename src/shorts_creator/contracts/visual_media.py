@@ -11,6 +11,7 @@ from typing import Any, Mapping
 
 IMAGE = "IMAGE"
 VIDEO = "VIDEO"
+MEDIA_KINDS: frozenset[str] = frozenset({IMAGE, VIDEO})
 
 AUTO = "AUTO"
 IMAGES_ONLY = "IMAGES_ONLY"
@@ -53,6 +54,8 @@ class MediaStrategyDecision:
     visual_mode: str
     editorial_preference: str
     allowed_kinds: tuple[str, ...]
+    form_supported_kinds: tuple[str, ...]
+    runtime_available_kinds: tuple[str, ...]
     resolved_kind: str | None
     preference_status: str
     degradations: tuple[str, ...]
@@ -77,9 +80,12 @@ def normalize_visual_mode(request_visuals: Mapping[str, Any] | None) -> VisualMo
     Historical jobs used ``mode: images``. Its absence, and absence of the new
     ``visualMode``, intentionally preserve the image-only contract.
     """
-    visuals = request_visuals or {}
-    if not isinstance(visuals, Mapping):
+    if request_visuals is None:
+        visuals: Mapping[str, Any] = {}
+    elif not isinstance(request_visuals, Mapping):
         raise ValueError("INVALID_REQUEST_VISUALS: expected mapping")
+    else:
+        visuals = request_visuals
 
     raw_mode = visuals.get("mode")
     raw_visual_mode = visuals.get("visualMode")
@@ -118,13 +124,14 @@ def resolve_media_strategy(
     *,
     policy: VisualModePolicy,
     editorial_preference: str | None,
-    supported_kinds: frozenset[str] | set[str] | tuple[str, ...],
+    form_supported_kinds: frozenset[str] | set[str] | tuple[str, ...],
+    runtime_available_kinds: frozenset[str] | set[str] | tuple[str, ...],
 ) -> MediaStrategyDecision:
-    """Resolve policy and editorial preference against form-supported media.
+    """Resolve policy, form support, and runtime availability.
 
-    ``supported_kinds`` is a pure capability/form input. A future router will
-    derive it by intersecting registered provider capabilities, fit policy, and
-    runtime availability. The resolver deliberately does not perform that I/O.
+    Both kind collections are pure inputs. A future router will derive form
+    support from capability fit and runtime availability from implementation,
+    credentials, and provider state. The resolver deliberately does not do I/O.
     """
     preference = (
         IMAGE_PREFERRED
@@ -135,50 +142,95 @@ def resolve_media_strategy(
             field="MEDIA_PREFERENCE",
         )
     )
-    supported = frozenset(supported_kinds)
-    invalid_kinds = supported - {IMAGE, VIDEO}
-    if invalid_kinds:
-        raise ValueError(f"INVALID_SUPPORTED_MEDIA_KINDS: {sorted(invalid_kinds)}")
+    form_supported = frozenset(form_supported_kinds)
+    runtime_available = frozenset(runtime_available_kinds)
+    invalid_form_kinds = form_supported - MEDIA_KINDS
+    if invalid_form_kinds:
+        raise ValueError(f"INVALID_FORM_SUPPORTED_KINDS: {sorted(invalid_form_kinds)}")
+    invalid_runtime_kinds = runtime_available - MEDIA_KINDS
+    if invalid_runtime_kinds:
+        raise ValueError(f"INVALID_RUNTIME_AVAILABLE_KINDS: {sorted(invalid_runtime_kinds)}")
 
-    eligible = tuple(kind for kind in policy.allowed_kinds if kind in supported)
-    if not eligible:
+    form_eligible = tuple(
+        kind for kind in policy.allowed_kinds if kind in form_supported
+    )
+    if not form_eligible:
         return MediaStrategyDecision(
             visual_mode=policy.visual_mode,
             editorial_preference=preference,
             allowed_kinds=policy.allowed_kinds,
+            form_supported_kinds=tuple(
+                kind for kind in (IMAGE, VIDEO) if kind in form_supported
+            ),
+            runtime_available_kinds=tuple(
+                kind for kind in (IMAGE, VIDEO) if kind in runtime_available
+            ),
             resolved_kind=None,
             preference_status="UNRESOLVED",
             degradations=(VISUAL_FORM_UNSUPPORTED_FOR_ALLOWED_MEDIA,),
         )
 
+    runtime_eligible = tuple(
+        kind for kind in form_eligible if kind in runtime_available
+    )
+
     preferred_kind = {
         IMAGE_PREFERRED: IMAGE,
         VIDEO_PREFERRED: VIDEO,
     }.get(preference)
+
+    if not runtime_eligible:
+        return MediaStrategyDecision(
+            visual_mode=policy.visual_mode,
+            editorial_preference=preference,
+            allowed_kinds=policy.allowed_kinds,
+            form_supported_kinds=tuple(
+                kind for kind in (IMAGE, VIDEO) if kind in form_supported
+            ),
+            runtime_available_kinds=tuple(
+                kind for kind in (IMAGE, VIDEO) if kind in runtime_available
+            ),
+            resolved_kind=None,
+            preference_status="UNRESOLVED",
+            degradations=(MEDIA_PREFERENCE_UNAVAILABLE,),
+        )
+
     if preferred_kind is None:
         return MediaStrategyDecision(
             visual_mode=policy.visual_mode,
             editorial_preference=preference,
             allowed_kinds=policy.allowed_kinds,
-            resolved_kind=eligible[0],
+            form_supported_kinds=tuple(
+                kind for kind in (IMAGE, VIDEO) if kind in form_supported
+            ),
+            runtime_available_kinds=tuple(
+                kind for kind in (IMAGE, VIDEO) if kind in runtime_available
+            ),
+            resolved_kind=runtime_eligible[0],
             preference_status="EITHER",
             degradations=(),
         )
-    if preferred_kind in eligible:
+    if preferred_kind in runtime_eligible:
         return MediaStrategyDecision(
             visual_mode=policy.visual_mode,
             editorial_preference=preference,
             allowed_kinds=policy.allowed_kinds,
+            form_supported_kinds=tuple(
+                kind for kind in (IMAGE, VIDEO) if kind in form_supported
+            ),
+            runtime_available_kinds=tuple(
+                kind for kind in (IMAGE, VIDEO) if kind in runtime_available
+            ),
             resolved_kind=preferred_kind,
             preference_status="PREFERRED",
             degradations=(),
         )
 
-    resolved_kind = eligible[0]
+    resolved_kind = runtime_eligible[0]
     if preferred_kind not in policy.allowed_kinds:
         degradation = MEDIA_PREFERENCE_OVERRIDDEN_BY_USER
         status = "OVERRIDDEN_BY_USER"
-    elif preferred_kind not in supported:
+    elif preferred_kind not in form_supported:
         degradation = MEDIA_PREFERENCE_UNSATISFIABLE_FOR_VISUAL_FORM
         status = "FALLBACK_FOR_VISUAL_FORM"
     else:
@@ -188,6 +240,12 @@ def resolve_media_strategy(
         visual_mode=policy.visual_mode,
         editorial_preference=preference,
         allowed_kinds=policy.allowed_kinds,
+        form_supported_kinds=tuple(
+            kind for kind in (IMAGE, VIDEO) if kind in form_supported
+        ),
+        runtime_available_kinds=tuple(
+            kind for kind in (IMAGE, VIDEO) if kind in runtime_available
+        ),
         resolved_kind=resolved_kind,
         preference_status=status,
         degradations=(degradation,),

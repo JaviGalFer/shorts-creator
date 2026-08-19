@@ -7,10 +7,10 @@ credentials and provider implementation status remain outside this pure module.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Mapping
 
-IMAGE = "IMAGE"
-VIDEO = "VIDEO"
-MEDIA_KINDS: frozenset[str] = frozenset({IMAGE, VIDEO})
+from shorts_creator.contracts.visual_media import IMAGE, MEDIA_KINDS, VIDEO
 
 STOCK = "STOCK"
 GENERATED = "GENERATED"
@@ -33,8 +33,9 @@ RUNTIME_STATUSES: frozenset[str] = frozenset({
 DIRECT = "DIRECT"
 CONDITIONAL_FIT = "CONDITIONAL"
 UNSUPPORTED = "UNSUPPORTED"
+UNDECLARED = "UNDECLARED"
 VISUAL_FORM_FITS: frozenset[str] = frozenset({
-    DIRECT, CONDITIONAL_FIT, UNSUPPORTED,
+    DIRECT, CONDITIONAL_FIT, UNSUPPORTED, UNDECLARED,
 })
 
 EXACT_FORMS: frozenset[str] = frozenset({
@@ -51,15 +52,22 @@ class ProviderCapability:
     query_strategy: str
     runtime_status: str
     requires_api_key: bool
-    visual_form_fit: dict[str, str]
+    visual_form_fit: Mapping[str, str]
     evidence_version: str | None
 
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "visual_form_fit",
+            MappingProxyType(dict(self.visual_form_fit)),
+        )
 
-def _pexels_form_fit(*, photograph_fit: str) -> dict[str, str]:
-    return {
+
+def _pexels_form_fit(*, photograph_fit: str) -> Mapping[str, str]:
+    return MappingProxyType({
         "photograph": photograph_fit,
         **{form: UNSUPPORTED for form in EXACT_FORMS},
-    }
+    })
 
 
 PROVIDER_CAPABILITIES: tuple[ProviderCapability, ...] = (
@@ -116,3 +124,11 @@ def get_provider_capability(capability_id: str) -> ProviderCapability | None:
         if capability.capability_id == capability_id:
             return capability
     return None
+
+
+def get_visual_form_fit(
+    capability: ProviderCapability,
+    visual_form: str,
+) -> str:
+    """Return declared fit, without treating absent evidence as unsupported."""
+    return capability.visual_form_fit.get(visual_form, UNDECLARED)
