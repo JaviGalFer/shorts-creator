@@ -1,6 +1,20 @@
 # Agent Context
 
-## Active Change: visual-media-strategy — COMPLETED / VERIFIED / CLOSED
+## Active Change: pexels-photo-selection-benchmark — IN PROGRESS
+- Evaluation-only investigation that freezes a candidate-ordering benchmark before
+  any candidate-level human preferences are supplied. It does not touch Pexels
+  runtime, providers, routing, executor, config, contracts, semantic scoring, or
+  visual-fidelity runtime.
+- Phase A implementation is frozen: A0 raw Pexels order, A1 exact lexical query
+  recall and A2 fixed-parameter BM25 over the persisted page-1 top-15. The blind
+  review manifest maps the ten persisted top-3 sets to deterministic A/B/C aliases.
+- Human preferences remain explicitly `UNLABELED`; no Phase A selector verdict has
+  been computed. Review material is git-ignored under
+  `data/evaluations/pexels-photo-selection-benchmark/review/`.
+- Pexels Photos remains `PLANNED`. The historical pairwise evidence PlayStation
+  raw #3 > raw #1 stays external to the blinded review and cannot order aliases.
+
+## Closed Change: visual-media-strategy — COMPLETED / VERIFIED / CLOSED
 - Slice 1 scope was limited to additive pure contracts, request policy
   normalization and a static provider capability registry. It made no executor,
   prepare, renderer, CLI or prompt changes. Slice 2B later wired the existing
