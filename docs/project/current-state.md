@@ -8,10 +8,16 @@
   Pexels Photos. Verdict **`METADATA_SELECTION_EVIDENCE_INSUFFICIENT`**, sin
   selected strategy, `phaseBRequired=false`. Solo 2 queries discriminating (min
   8); A1 no valida, A2 no valida ni NOT_USEFUL (señal PlayStation prometedora).
-  Sin runtime, sin Phase B/OpenCLIP. Pexels Photos sigue `PLANNED`;
-  `pexels-photos-runtime` bloqueado solo por política top-N validada.
-- Queda registrada la siguiente investigación separada
-  `pexels-photo-selection-evidence-extension` (no implementada).
+  Sin runtime, sin Phase B/OpenCLIP.
+- **Siguiente change de producto: `pexels-photos-runtime`** (Pexels Photos
+  opt-in, nunca default). A2 BM25 usable como top-N PROVISIONAL (documentado
+  NOT VALIDATED, decisión de ingeniería reversible, no conclusión del
+  benchmark); preservar `pexelsQueryRank`, separar futuro `providerRank`;
+  semantic/pixel gates siguen siendo autoridad de acceptance; fallback
+  permanece; telemetry/provenance para detectar problemas reales. Pexels Photos
+  continúa `PLANNED` hasta runtime implementado y probado.
+- `pexels-photo-selection-evidence-extension`: DEFERRED / OPTIONAL, revisit solo
+  si evidencia real del runtime lo requiere (no es el siguiente change).
 
 ## Change activo: `visual-media-strategy` — COMPLETED / VERIFIED / CLOSED
 

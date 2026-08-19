@@ -24,12 +24,22 @@
   w.r.t. a validated metadata top-N policy. The historical pairwise evidence
   PlayStation raw #3 > raw #1 stays external to the blinded review.
 
-## Next Research Direction: pexels-photo-selection-evidence-extension
-- Separate pre-registered evaluation change (NOT implemented) to obtain
-  additional candidate-level evidence, reusing local top-3 Pexels when possible:
-  do not modify this benchmark retroactively, do not lower the 8-query minimum,
-  do not re-label the current 10 queries, do not run Phase B without sufficient
-  evidence.
+## Next Product Change: pexels-photos-runtime
+- Image-only Pexels Photos provider runtime. First version uses Pexels Photos as
+  explicit opt-in (never default). A2 BM25 is usable as a PROVISIONAL top-N
+  heuristic, explicitly documented as NOT VALIDATED — a reversible engineering
+  decision based on best available evidence, not a benchmark conclusion.
+- Preserve the raw `pexelsQueryRank`; the future final lifecycle `providerRank`
+  stays separate. Existing semantic gate and pixel gate remain the acceptance
+  authority. Provider fallback remains. Runtime must leave sufficient
+  provenance/telemetry to detect real ordering problems.
+
+## Deferred (Optional) Research: pexels-photo-selection-evidence-extension
+- DEFERRED / OPTIONAL, NOT the next change. Only reconsidered if real runtime
+  evidence shows candidate ordering needs more investigation. If run, it must be
+  a separate pre-registered evaluation change that: does not modify this
+  benchmark retroactively, does not lower the 8-query minimum, does not re-label
+  the current 10 queries, and does not run Phase B without sufficient evidence.
 
 ## Closed Change: visual-media-strategy — COMPLETED / VERIFIED / CLOSED
 - Slice 1 scope was limited to additive pure contracts, request policy

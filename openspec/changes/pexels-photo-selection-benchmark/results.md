@@ -102,8 +102,10 @@ remains blocked only with respect to a validated metadata top-N policy.
 
 ## Future Evidence Extension
 
-Recorded as separate pre-registered investigation
-`pexels-photo-selection-evidence-extension` (not implemented here): obtain
-additional candidate-level evidence, preferably reusing local top-3 Pexels and
-avoiding new requests; do not lower the 8-query minimum, do not re-label the
-current 10 queries, do not introduce Phase B without sufficient evidence.
+Recorded as DEFERRED / OPTIONAL (not the next change) — only reconsidered if
+real runtime evidence shows candidate ordering needs more investigation. It is a
+separate pre-registered investigation `pexels-photo-selection-evidence-extension`
+(not implemented here): obtain additional candidate-level evidence, preferably
+reusing local top-3 Pexels and avoiding new requests; do not lower the 8-query
+minimum, do not re-label the current 10 queries, do not introduce Phase B
+without sufficient evidence.

@@ -142,12 +142,14 @@ naming fix.
 ## Future Direction
 
 A separate, pre-registered evaluation change
-`pexels-photo-selection-evidence-extension` is required to obtain additional
-candidate-level evidence, preferably reusing the already-locally-available
-top-3 Pexels candidates and without new requests when possible. It must not:
-modify this benchmark retrospectively, lower the minimum 8 discriminating
-queries, re-label the current 10 queries, or introduce Phase B before
-sufficient evidence exists. It is not implemented in this change.
+`pexels-photo-selection-evidence-extension` is DEFERRED / OPTIONAL (NOT the
+next change) to obtain additional candidate-level evidence, preferably reusing
+the already-locally-available top-3 Pexels candidates and without new requests
+when possible. It would only be reconsidered if real runtime evidence shows
+candidate ordering needs more investigation. It must not: modify this benchmark
+retrospectively, lower the minimum 8 discriminating queries, re-label the
+current 10 queries, or introduce Phase B before sufficient evidence exists.
+It is not implemented in this change.
 
 Phase B is not run and is not currently eligible: a pixel ranker cannot repair
 insufficient candidate-level human discrimination.
