@@ -1,4 +1,4 @@
-"""Offline parity evidence for native image candidates and envelope lifecycle."""
+"""Candidate lifecycle adapter invariants without legacy equivalence claims."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def _select(envelopes):
     )
 
 
-def test_wikimedia_adapter_preserves_native_progression_without_inventing_rank():
+def test_wikimedia_adapter_keeps_rank_undeclared():
     natives = [
         _native("wikimedia_commons", query="first"),
         _native("wikimedia_commons", query="second"),
@@ -59,7 +59,7 @@ def test_wikimedia_adapter_preserves_native_progression_without_inventing_rank()
     assert all(envelope.provider_rank is None for envelope in envelopes)
 
 
-def test_pixabay_adapter_preserves_hit_order_and_provider_ranks():
+def test_pixabay_adapter_uses_final_discovery_stream_rank():
     natives = [
         _native("pixabay", query="first", rank=1),
         _native("pixabay", query="second", rank=2),
@@ -68,15 +68,36 @@ def test_pixabay_adapter_preserves_hit_order_and_provider_ranks():
     envelopes = [
         _native_to_candidate_envelope(
             native, capability_id="pixabay.image.stock",
-            query_texts=["first", "second", "third"], provider_rank=native["providerRank"],
+            query_texts=["first", "second", "third"], provider_rank=index,
         )
-        for native in natives
+        for index, native in enumerate(natives, start=1)
     ]
     result = _select(envelopes)
     assert result.selected is not None
     assert result.selected.status == ACCEPTED
     assert [envelope.provider_rank for envelope in envelopes] == [1, 2, 3]
     assert [attempt.candidate.query_used for attempt in result.attempts] == ["first", "second", "third"]
+
+
+def test_pixabay_illustration_vector_final_stream_rank_is_unique():
+    # The provider has already filtered/deduplicated its illustration and vector
+    # sub-searches. Candidate rank is only the final stream position.
+    final_pool = [
+        _native("pixabay", query="illustration-a"),
+        _native("pixabay", query="illustration-b"),
+        _native("pixabay", query="vector-c"),
+        _native("pixabay", query="vector-d"),
+    ]
+    envelopes = [
+        _native_to_candidate_envelope(
+            native,
+            capability_id="pixabay.image.stock",
+            query_texts=[native["queryUsed"] for native in final_pool],
+            provider_rank=index,
+        )
+        for index, native in enumerate(final_pool, start=1)
+    ]
+    assert [envelope.provider_rank for envelope in envelopes] == [1, 2, 3, 4]
 
 
 def test_exhausted_native_and_envelope_lifecycle_have_same_candidate_order():

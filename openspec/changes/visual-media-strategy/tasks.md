@@ -1,6 +1,6 @@
 # Tasks: visual-media-strategy
 
-**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED / COMMITTED**
+**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED; Slice 2A COMPLETED / VERIFIED; Slice 2B HARDENED / VERIFIED; FINAL READ-ONLY REVIEW pending**
 
 ## Slice 1: contratos, policy y registry
 
@@ -21,7 +21,7 @@
 - [x] `git diff --check` limpio.
 - [x] Commit `57479c1` `feat(visual): add media strategy contracts`.
 
-## Slices posteriores (no implementados)
+## Slices de evolución del change
 
 - [x] Slice 2A: separar form support de runtime availability en la decisión
       pura, unificar enums de medio y añadir `UNDECLARED` para fit ausente.
@@ -35,6 +35,11 @@
 - [x] Slice 2B: tests afectados `331 passed`; suite completa `1699 passed`;
       `git diff --check` limpio.
 - [x] Slice 2B commit `9381435` `refactor(assets): unify candidate selection lifecycle`.
+- [x] Hardening final: rank Pixabay = posición 1-based del discovery stream
+      final; wiring real, límite 20 y precedence `DOWNLOAD_FAILED` verificados.
+- [x] Hardening validation: focused `257 passed`; full suite `1703 passed`;
+      `git diff --check` limpio.
+- [ ] FINAL READ-ONLY REVIEW antes de cierre/merge.
 - [ ] Runtime `pexels-photos` image-only.
 - [ ] Evolución `VisualAsset.kind = IMAGE | VIDEO`.
 - [ ] Playback contract y rendering VIDEO local.

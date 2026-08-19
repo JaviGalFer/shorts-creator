@@ -1,9 +1,10 @@
 # Agent Context
 
-## Active Change: visual-media-strategy — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED / COMMITTED
-- Scope limited to additive pure contracts, request policy normalization and a
-  static provider capability registry. No productive routing, Pexels runtime,
-  VIDEO runtime, executor, prepare, renderer, CLI or prompt changes.
+## Active Change: visual-media-strategy — Slice 1 COMPLETED / VERIFIED; Slice 2A COMPLETED / VERIFIED; Slice 2B HARDENED / VERIFIED; FINAL READ-ONLY REVIEW pending
+- Slice 1 scope was limited to additive pure contracts, request policy
+  normalization and a static provider capability registry. It made no executor,
+  prepare, renderer, CLI or prompt changes. Slice 2B later wired the existing
+  IMAGE lifecycle conservatively inside executor/provider internals.
 - `visualSequence[].mediaPreference` is optional in VisualPlan v2 with
   `IMAGE_PREFERRED` default for historical plans; schema version remains 2 and
   historical metadata is not rewritten.
@@ -24,10 +25,11 @@
   form support from runtime availability; media enums have one authority;
   registry fit has `UNDECLARED` for absent evidence and immutable mappings.
   `CandidateEnvelope`/Attempt/SelectionResult plus order-preserving top-N are
-  pure and not wired to router/executor/providers. Slice 2B remains pending.
+  pure and not wired to router/executor/providers.
 - Validation: focused `66 passed`; VisualPlan regression `106 passed`; full
   suite `1692 passed, 0 failed`; `git diff --check` clean.
 - Commit: `c0449f6` (`feat(assets): add candidate selection contracts`).
+- Docs commit: `90d825f` (`docs(project): record candidate contracts slice`).
 - Slice 2B wires CandidateEnvelope/Attempt/SelectionResult to the existing
   Wikimedia/Pixabay first-accepted lifecycle without changing router policy,
   bridge/metadata shape, Pexels status or rendering. The lifecycle is lazy and
@@ -39,6 +41,13 @@
 - Validation: affected tests `331 passed`; full suite `1699 passed, 0 failed`;
   `git diff --check` clean.
 - Commit: `9381435` (`refactor(assets): unify candidate selection lifecycle`).
+- Docs commit: `b8edc18` (`docs(project): record candidate lifecycle slice`).
+- Hardening final: Pixabay `provider_rank` is now the 1-based final candidate
+  stream position, never a remote API/subquery rank. Real executor tests cover
+  semantic/download/pixel progression, cleanup, the 20-candidate cap and
+  `DOWNLOAD_FAILED` precedence. Evidence is parity-preserving, not formal
+  before/after equivalence. Validation: focused `257 passed`; full suite
+  `1703 passed, 0 failed`; `git diff --check` clean; commit pending.
 
 ## Closed Investigation: pexels-provider-fit-benchmark — COMPLETED / VERIFIED / CLOSED (merged into `main`, no-ff)
 - Benchmark-first del PROVIDER FIT de Pexels Photos/Video y de `query-adapt-v1`, sin runtime Pexels, rendering, VisualPlan/schema, OpenCLIP/BLIP/VLM, generación de imágenes ni perceptual hash. Base `main` `cf391c5`; commits `6b18d01` (benchmark), `d948300` (hardening) y cierre documental.

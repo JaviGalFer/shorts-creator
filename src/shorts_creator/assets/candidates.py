@@ -216,8 +216,11 @@ def select_first_accepted(
 ) -> CandidateSelectionResult:
     """Evaluate candidates progressively and select the first accepted one.
 
-    Callbacks own all provider and filesystem behavior. Exceptions intentionally
-    propagate to preserve the executor's existing provider-error policy.
+    Callbacks own all provider and filesystem behavior. ``downloader`` must
+    clean a partial file before it returns ``None``; ``rejection_cleanup`` runs
+    after a pixel rejection. A PIXEL_REJECTED attempt's ``local_path`` records
+    the attempted path and may no longer exist after cleanup. Exceptions
+    intentionally propagate to preserve the executor's provider-error policy.
     """
     if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
         raise ValueError("INVALID_CANDIDATE_LIMIT")

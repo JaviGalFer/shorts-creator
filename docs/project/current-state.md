@@ -2,12 +2,13 @@
 
 **Última actualización:** 2026-08-19
 
-## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED / COMMITTED
+## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED; Slice 2A COMPLETED / VERIFIED; Slice 2B HARDENED / VERIFIED; FINAL READ-ONLY REVIEW pendiente
 
-- Slice puro y aditivo: contrato `visualSequence[].mediaPreference`, policy
+- Slice 1 fue puro y aditivo: contrato `visualSequence[].mediaPreference`, policy
   `request.visuals.visualMode`, `MediaStrategyDecision` y registry estático de
   capabilities. Sin router productivo, runtime Pexels/VIDEO, executor, prepare,
-  renderer, prompt o CLI.
+  renderer, prompt o CLI. Slice 2B posteriormente cableó internals de executor
+  y Pixabay, sin cambiar routing, bridge ni metadata pública.
 - `mediaPreference` usa `IMAGE_PREFERRED | VIDEO_PREFERRED | EITHER`; ausencia
   histórica canonicaliza a `IMAGE_PREFERRED` bajo VisualPlan schema v2, sin
   reescribir metadata ni elevar versión.
@@ -41,6 +42,12 @@
   VIDEO runtime. Afectados: `331 passed`; suite completa `1699 passed, 0 failed`;
   `git diff --check` limpio. Commit `9381435`
   (`refactor(assets): unify candidate selection lifecycle`).
+- Hardening final: `provider_rank` de Pixabay es la posición 1-based del stream
+  final de candidates y no rank remoto/subquery. Tests reales de executor cubren
+  progresión semantic/download/pixel, cleanup, cap de 20 y precedence
+  `DOWNLOAD_FAILED`; la evidencia es parity-preserving, no equivalencia formal
+  before/after. Validación: focales `257 passed`; suite `1703 passed, 0 failed`;
+  `git diff --check` limpio; commit pendiente.
 
 ## Investigación cerrada: `pexels-provider-fit-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 

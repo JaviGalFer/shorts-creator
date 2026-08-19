@@ -1,6 +1,6 @@
 # Design: visual-media-strategy
 
-**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED / COMMITTED**
+**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED; Slice 2A COMPLETED / VERIFIED; Slice 2B HARDENED / VERIFIED; FINAL READ-ONLY REVIEW pending**
 
 ## Contratos
 
@@ -106,7 +106,9 @@ contract.
 `select_first_accepted` is callback-driven and owns no provider or filesystem
 I/O. It consumes envelopes lazily in discovery order, applies metadata before
 download, applies pixel fidelity after download, cleans only pixel-rejected
-files, stops at the first accepted candidate and returns ordered attempts.
+files, stops at the first accepted candidate and returns ordered attempts. The
+downloader cleans partial files on failure; a pixel-rejected attempt path may no
+longer exist after lifecycle cleanup.
 `take_top_n` now accepts an iterable and consumes no item after its limit.
 
 The executor adapts provider-native candidates after the router has already
@@ -121,13 +123,17 @@ Parity intentionally retained:
   20 candidate attempts. Its batch response does not guarantee rank, so
   `provider_rank=None`.
 - Pixabay keeps its provider-returned candidate order, first-query-with-valid-
-  candidates behavior and historical limit of 20 attempts. The provider now
-  records its API hit position as `providerRank`; no likes/downloads scoring is
-  used.
+  candidates behavior and historical limit of 20 attempts. Its envelope
+  `provider_rank` is the 1-based final discovery-stream position delivered to
+  the lifecycle, not a remote API/subquery rank. No likes/downloads scoring is
+  used. Wikimedia batch ordering is not guaranteed, so `provider_rank=None`.
 - Provider/source policy order, provider failover, semantic postcondition,
   filename generation, status/reason semantics and visual-fidelity bypasses are
   unchanged.
 
-This is first accepted, not human-best candidate selection. It does not resolve
+Evidence is a parity-preserving refactor backed by existing regression tests
+plus focused provider wiring and lifecycle invariants; it is not formal
+before-vs-after equivalence proof. This is first accepted, not human-best
+candidate selection. It does not resolve
 the Pexels Photo PlayStation/N64 rank-3 evidence: no reranking, multi-download,
 cross-provider pool or diversity policy is present.

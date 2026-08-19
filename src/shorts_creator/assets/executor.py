@@ -1114,7 +1114,7 @@ def _resolve_pixabay(
                     pix_candidate,
                     capability_id="pixabay.image.stock",
                     query_texts=query_texts,
-                    provider_rank=pix_candidate.get("providerRank", discovery_rank),
+                    provider_rank=discovery_rank,
                 )
                 native_by_envelope[id(envelope)] = pix_candidate
                 yield envelope

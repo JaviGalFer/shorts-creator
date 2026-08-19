@@ -479,7 +479,6 @@ class TestResolveResultShape:
         assert c["author"] == "TestUser"
         assert c["license"] == "Pixabay Content License"
         assert c["queryUsed"] == "test"
-        assert c["providerRank"] == 1
 
     def test_source_url_comes_from_page_url(self):
         hit = _mock_hit(pageURL="https://pixabay.com/photos/my-photo-42/")

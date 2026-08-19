@@ -1,6 +1,6 @@
 # Propuesta: visual-media-strategy
 
-**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED**
+**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED; Slice 2A COMPLETED / VERIFIED; Slice 2B HARDENED / VERIFIED; FINAL READ-ONLY REVIEW pending**
 
 ## Contexto
 
@@ -26,7 +26,7 @@ El provider no lo decide el LLM. `request.visuals.sourceProviders` permanece
 como policy explícita de usuario/operación y se intersectará con capabilities
 en un routing posterior.
 
-## Slice 1: alcance
+## Slice 1: foundation pura
 
 - Añadir `visualSequence[].mediaPreference` opcional al VisualPlan v2:
   `IMAGE_PREFERRED | VIDEO_PREFERRED | EITHER`.
@@ -39,12 +39,31 @@ en un routing posterior.
 - Registrar capabilities estáticas conocidas sin secretos ni claims de runtime.
 - Documentar y probar compatibilidad image-only.
 
-## Fuera de alcance
+## Slice 2A: candidate contracts
+
+- Separar soporte de forma visual de disponibilidad runtime en
+  `MediaStrategyDecision`.
+- Crear `CandidateEnvelope`, `CandidateAttempt`, `CandidateSelectionResult` y
+  top-N puro, sin I/O ni routing productivo.
+
+## Slice 2B: wiring conservador
+
+- Adaptar Wikimedia/Pixabay al lifecycle IMAGE first-accepted existente.
+- Mantener provider/query order, gates, failover, shapes públicos y semántica
+  legacy de status.
+
+## Fuera de alcance original de Slice 1
 
 - Routing productivo, executor, providers, candidate selection o diversity.
+- Estos puntos quedaron limitados a contracts en Slice 1; el wiring conservador
+  de candidate selection se realizó solo en Slice 2B.
+
+## Fuera de alcance total del change
+
 - Runtime Pexels, clips VIDEO, probing, prepare o renderer.
-- Nueva CLI pública o cambios al prompt/generador.
-- Generated/manual como capabilities ejecutables.
+- Capability routing productivo, prompt LLM produciendo `mediaPreference` y
+  CLI/UI para `visualMode`.
+- Reranking, diversity, pools cross-provider y generated/manual ejecutables.
 
 ## Criterios de éxito
 
