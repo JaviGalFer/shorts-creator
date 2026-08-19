@@ -32,6 +32,22 @@ LEXICAL_RECALL = "A1_EXACT_LEXICAL_QUERY_RECALL"
 BM25 = "A2_BM25"
 STRATEGIES = frozenset({RAW, LEXICAL_RECALL, BM25})
 ALIASES = ("A", "B", "C")
+UNLABELED = "UNLABELED"
+LABELED = "LABELED"
+AWAITING_HUMAN_REVIEW = "AWAITING_HUMAN_REVIEW"
+HUMAN_REVIEW_READY = "HUMAN_REVIEW_READY"
+CANONICAL_REVIEW_QUERIES: tuple[str, ...] = (
+    "four stroke engine automobile photograph",
+    "completed medieval castle photograph",
+    "medieval castle construction photograph",
+    "medieval castle historical significance photograph",
+    "four stroke engine parts photograph",
+    "blue ringed octopus venom photograph",
+    "PlayStation Nintendo 64 comparison photograph",
+    "Java code snippet photograph",
+    "engine explosion in piston photograph",
+    "amortization chart graph photograph",
+)
 TOKEN_RE = re.compile(r"[a-z0-9]+")
 GENERIC_FILLER = frozenset({
     "image", "images", "photo", "photos", "photograph", "photographs",
@@ -207,27 +223,102 @@ def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
     return manifest
 
 
-def preferences_status(path: Path = PREFERENCES_PATH) -> str:
-    preferences = load_json(path)
-    entries = preferences.get("preferences")
-    if preferences.get("status") != "UNLABELED" or not isinstance(entries, list) or len(entries) != 10:
-        raise ValueError("INVALID_PREFERENCES_TEMPLATE")
-    for entry in entries:
-        if not isinstance(entry, dict) or entry.get("preferredAliases") != [] or entry.get("allUnusable") is not None:
-            raise ValueError("PREFERENCES_ARE_NOT_UNLABELED")
-    return "AWAITING_HUMAN_REVIEW"
+def preferences_status(path: Path | str = PREFERENCES_PATH) -> str:
+    """Return the frozen status key for the preference fixture at path.
+
+    Delegates to the authoritative pure validator: valid UNLABELED fixtures map
+    to AWAITING_HUMAN_REVIEW, valid LABELED fixtures map to HUMAN_REVIEW_READY,
+    and invalid fixtures raise a coherent ValueError. No Phase A verdict is
+    computed here.
+    """
+    validation = validate_preferences(path)
+    if validation["status"] == UNLABELED:
+        return AWAITING_HUMAN_REVIEW
+    if validation["status"] == LABELED:
+        return HUMAN_REVIEW_READY
+    raise ValueError(validation.get("reason", "INVALID_PREFERENCES"))
+
+
+def validate_preferences(path: Path | str = PREFERENCES_PATH) -> dict[str, str]:
+    """Validate the human preference fixture at path. Pure: reads and validates.
+
+    The path is resolved against ROOT when relative, so validation does not
+    depend on the process working directory. Only the frozen UNLABELED / LABELED
+    contract is enforced; aliases, allUnusable rules, and the 10 canonical
+    queries are unchanged.
+    """
+    fixture_path = Path(path)
+    if not fixture_path.is_absolute():
+        fixture_path = ROOT / fixture_path
+    data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return {"status": "INVALID", "reason": "not a JSON object"}
+    if data.get("schemaVersion") != 1:
+        return {"status": "INVALID", "reason": "bad schemaVersion"}
+    status = data.get("status")
+    if status == UNLABELED:
+        entries = data.get("preferences")
+        if not isinstance(entries, list) or len(entries) != 10:
+            return {"status": "INVALID", "reason": "expected 10 entries"}
+        for i, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                return {"status": "INVALID", "reason": f"entry {i}: not an object"}
+            if not isinstance(entry.get("queryUsed"), str) or not entry.get("queryUsed"):
+                return {"status": "INVALID", "reason": f"entry {i}: missing queryUsed"}
+            if entry.get("preferredAliases") != []:
+                return {"status": "INVALID", "reason": f"entry {i}: preferredAliases must be []"}
+            if entry.get("allUnusable") is not None:
+                return {"status": "INVALID", "reason": f"entry {i}: allUnusable must be null"}
+            if not isinstance(entry.get("notes"), str):
+                return {"status": "INVALID", "reason": f"entry {i}: notes must be string"}
+        return {"status": UNLABELED, "description": "10 queries, all preferences empty, awaiting review"}
+    if status == LABELED:
+        entries = data.get("preferences")
+        if not isinstance(entries, list) or len(entries) != 10:
+            return {"status": "INVALID", "reason": "expected 10 entries"}
+        present: list[str] = []
+        for i, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                return {"status": "INVALID", "reason": f"entry {i}: not an object"}
+            query = entry.get("queryUsed")
+            if not isinstance(query, str) or not query:
+                return {"status": "INVALID", "reason": f"entry {i}: missing queryUsed"}
+            present.append(query)
+            if not isinstance(entry.get("notes"), str):
+                return {"status": "INVALID", "reason": f"entry {i}: notes must be string"}
+            aliases = entry.get("preferredAliases")
+            if not isinstance(aliases, list):
+                return {"status": "INVALID", "reason": f"entry {i}: preferredAliases must be a list"}
+            all_unusable = entry.get("allUnusable")
+            if len(aliases) == 0:
+                if all_unusable is not True:
+                    return {"status": "INVALID", "reason": f"entry {i}: allUnusable must be true when no aliases"}
+            else:
+                if all_unusable is not False:
+                    return {"status": "INVALID", "reason": f"entry {i}: allUnusable must be false when aliases present"}
+                if len(set(aliases)) != len(aliases):
+                    return {"status": "INVALID", "reason": f"entry {i}: duplicate alias"}
+                if any(alias not in set(ALIASES) for alias in aliases):
+                    return {"status": "INVALID", "reason": f"entry {i}: alias outside A/B/C"}
+        if len(set(present)) != len(present) or set(present) != set(CANONICAL_REVIEW_QUERIES):
+            return {"status": "INVALID", "reason": "queries missing, duplicated, or outside canonical 10"}
+        return {"status": LABELED, "description": "10 queries labeled by human review"}
+    return {"status": "INVALID", "reason": f"unknown status: {status!r}"}
 
 
 def validate_result_schema(result: dict[str, Any]) -> None:
     if not isinstance(result, dict) or not isinstance(result.get("status"), str):
         raise ValueError("INVALID_RESULT_SCHEMA")
     if result["status"] not in {
-        "AWAITING_HUMAN_REVIEW", "METADATA_SELECTOR_VALIDATED",
-        "METADATA_SELECTOR_NOT_USEFUL", "METADATA_SELECTION_EVIDENCE_INSUFFICIENT",
+        AWAITING_HUMAN_REVIEW, HUMAN_REVIEW_READY,
+        "METADATA_SELECTOR_VALIDATED", "METADATA_SELECTOR_NOT_USEFUL",
+        "METADATA_SELECTION_EVIDENCE_INSUFFICIENT",
     }:
         raise ValueError("INVALID_RESULT_STATUS")
     if not isinstance(result.get("sourceArtifactSha256"), str):
         raise ValueError("MISSING_SOURCE_HASH")
+    if not isinstance(result.get("reviewManifestSha256"), str):
+        raise ValueError("MISSING_REVIEW_MANIFEST_HASH")
 
 
 def prepare_review_package(output_dir: Path = REVIEW_DIR) -> list[Path]:
@@ -264,89 +355,7 @@ def prepare_review_package(output_dir: Path = REVIEW_DIR) -> list[Path]:
 
 def manifest_hash() -> str:
     """Return SHA-256 hex digest of the reviewed manifest bytes."""
-    return hashlib.sha256((ROOT / "tests/fixtures/pexels_photo_selection/review_manifest.json").read_bytes()).hexdigest()
-
-
-def validate_preferences() -> dict[str, str]:
-    """Validate the human_preferences.json schema.
-
-    Returns a status key and human-readable description.
-    Does not modify score_candidates or any ranking logic.
-    """
-    from pathlib import Path
-    p = Path("tests/fixtures/pexels_photo_selection/human_preferences.json")
-    data = json.loads(p.read_text(encoding="utf-8"))
-    entries = data.get("preferences", [])
-    status = data.get("status")
-    if status == "UNLABELED":
-        if data.get("schemaVersion") != 1:
-            return {"status": "INVALID", "reason": "bad schemaVersion"}
-        if len(entries) != 10:
-            return {"status": "INVALID", "reason": "expected 10 entries"}
-        for i, entry in enumerate(entries):
-            q = entry.get("queryUsed")
-            if q is None or not isinstance(q, str):
-                return {"status": "INVALID", "reason": f"entry {i}: missing queryUsed"}
-            if list(entry.get("preferredAliases", [])) != []:
-                return {"status": "INVALID", "reason": f"entry {i}: preferredAliases must be []"}
-            if entry.get("allUnusable") is not None:
-                return {"status": "INVALID", "reason": f"entry {i}: allUnusable must be null/None"}
-            if not isinstance(entry.get("notes"), str):
-                return {"status": "INVALID", "reason": f"entry {i}: notes must be string"}
-        return {"status": "UNLABELED", "description": "10 queries, all preferences empty, awaiting review"}
-    elif status == "LABELED":
-        if data.get("schemaVersion") != 1:
-            return {"status": "INVALID", "reason": "bad schemaVersion"}
-        if len(entries) != 10:
-            return {"status": "INVALID", "reason": "expected 10 entries"}
-        valid_aliases = frozenset({"A", "B", "C"})
-        pending = False
-        for i, entry in enumerate(entries):
-            q = entry.get("queryUsed")
-            if q is None or not isinstance(q, str):
-                return {"status": "INVALID", "reason": f"entry {i}: missing queryUsed"}
-            aliases = entry.get("preferredAliases", [])
-            # Validate aliases are A/B/C with no duplicates
-            if len(aliases) > 0:
-                alias_set = set()
-                for a in aliases:
-                    if a not in valid_aliases:
-                        return {"status": "INVALID", "reason": f"entry {i}: alias {a} not in A/B/C"}
-                    if a in alias_set:
-                        return {"status": "INVALID", "reason": f"entry {i}: duplicate alias {a}"}
-                    alias_set.add(a)
-                if entry.get("allUnusable") is not False:
-                    return {"status": "INVALID", "reason": f"entry {i}: allUnusable must be false when aliases present"}
-            else:
-                if entry.get("allUnusable") is not True:
-                    return {"status": "INVALID", "reason": f"entry {i}: allUnusable must be true when no aliases"}
-            if not isinstance(entry.get("notes"), str):
-                return {"status": "INVALID", "reason": f"entry {i}: notes must be string"}
-            # Track query uniqueness
-            if i == 0:
-                first_query = q
-            elif q != first_query:
-                # Ensure all queries are from the canonical 10
-                pass
-        # Verify all 10 canonical queries present
-        canonical = [
-            "four stroke engine automobile photograph",
-            "completed medieval castle photograph",
-            "medieval castle construction photograph",
-            "medieval castle historical significance photograph",
-            "four stroke engine parts photograph",
-            "blue ringed octopus venom photograph",
-            "PlayStation Nintendo 64 comparison photograph",
-            "Java code snippet photograph",
-            "engine explosion in piston photograph",
-            "amortization chart graph photograph",
-        ]
-        present = [entry.get("queryUsed") for entry in entries]
-        if sorted(present) != sorted(canonical):
-            return {"status": "INVALID", "reason": "not all 10 canonical queries present or duplicates/extra"}
-        return {"status": "LABELED", "description": "10 queries labeled by human review"}
-    else:
-        return {"status": "INVALID", "reason": f"unknown status: {status}"}
+    return hashlib.sha256(MANIFEST_PATH.read_bytes()).hexdigest()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -357,7 +366,11 @@ def main(argv: list[str] | None = None) -> int:
         generated = prepare_review_package()
         print(f"prepared {len(generated)} blinded review sheets in {REVIEW_DIR}")
     else:
-        result = {"status": preferences_status(), "sourceArtifactSha256": source_hash()}
+        result = {
+            "status": preferences_status(),
+            "sourceArtifactSha256": source_hash(),
+            "reviewManifestSha256": manifest_hash(),
+        }
         validate_result_schema(result)
         print(json.dumps(result, sort_keys=True))
     return 0
