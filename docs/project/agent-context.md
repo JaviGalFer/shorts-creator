@@ -24,7 +24,7 @@
   w.r.t. a validated metadata top-N policy. The historical pairwise evidence
   PlayStation raw #3 > raw #1 stays external to the blinded review.
 
-## Next Product Change: pexels-photos-runtime
+## Active Product Change: pexels-photos-runtime
 - Image-only Pexels Photos provider runtime. First version uses Pexels Photos as
   explicit opt-in (never default). A2 BM25 is usable as a PROVISIONAL top-N
   heuristic, explicitly documented as NOT VALIDATED — a reversible engineering
@@ -33,6 +33,9 @@
   stays separate. Existing semantic gate and pixel gate remain the acceptance
   authority. Provider fallback remains. Runtime must leave sufficient
   provenance/telemetry to detect real ordering problems.
+- Slice 1 is active: shared Pexels infrastructure, Photos candidate adapter and
+  offline tests only. No runtime routing/executor/bridge/fetcher wiring, no
+  capability flip, no real Pexels request and no Video implementation.
 
 ## Deferred (Optional) Research: pexels-photo-selection-evidence-extension
 - DEFERRED / OPTIONAL, NOT the next change. Only reconsidered if real runtime
