@@ -2,6 +2,43 @@
 
 **Última actualización:** 2026-08-19
 
+## Investigación activa: `pexels-provider-fit-benchmark` — IN_PROGRESS / READY_FOR_HUMAN_REVIEW (rama `change/pexels-provider-fit-benchmark`, NO mergeada)
+
+- Benchmark-first del **PROVIDER FIT** de Pexels Photos/Video y de la
+  adaptación determinista de query para Pexels Video. **Research-only; sin
+  integración runtime.** NO tocar rendering/OpenCLIP/BLIP/VLM/VisualPlan; NO
+  generación de imágenes; NO perceptual hash. Base `main` == `cf391c5`.
+- Datasets reutilizados sin relabel (58 rows → 56 queryUsed); **evidencia RAW
+  reutilizada** de los benchmarks previos. **Solo requests nuevas: 39/40**
+  Pexels Video adaptadas (`orientation=portrait`, `locale=en-US`,
+  `per_page=15`; rate-limit final `remaining=24849/25000`).
+- Contrato persistido resuelto por `(jobId, sceneNumber, segmentIndex)` desde
+  `data/videos/<jobId>/metadata.json`: 58/58, `missingRows=0`, 4 rows con
+  `searchQueryMismatch`. Distribuciones: assetPreference {photograph 39,
+  diagram 14, illustration 5}; visualIntent {explain 27, show 10,
+  contextualize 9, emphasize 9, compare 2, immerse 1}.
+- Política provisional `provider-fit-policy-v1`: exactform →
+  `INELIGIBLE_EXACT_FORM` (16 rows); photograph → Photos `ELIGIBLE` / Video
+  `ELIGIBLE_CANDIDATE` (42); resto `UNDECIDED` (0). Adaptación `query-adapt-v1`
+  (elimina solo photograph/photo/photography): 39 adaptaciones únicas, sin
+  colisiones, ninguna igual a una queryUsed RAW.
+- RAW vs ADAPTED (39): total_results 29/39 disminuye (mediana 6439→6026), pero
+  supply portrait intacto (39/39 en 720 y 1080). Overlap exact-ID top15 base
+  justa: RAW 456 unique/92 repet./56 pares (J med .124) vs ADAPTED 461/88/50
+  (J med .138) — diversifica ligeramente; duplicados within-job/topic persisten
+  (Photos el peor: 278).
+- Review sample determinista 10 queries (5 mandatory + 5 por round-robin de
+  topics; 6 topics); 20 clips (10 RAW con reutilización + 10 ADAPTED, 0 fallos).
+- Evidencia visual: `data/evaluations/pexels-provider-fit-benchmark/`
+  (`01-provider-fit-photo-current-top3.png`, `02-provider-fit-video-raw-vs-
+  adapted-top3.png`, `03-provider-fit-video-temporal.png`).
+- **Estado: `READY_FOR_HUMAN_REVIEW`** — pendiente la revisión humana externa
+  (Photos CURRENT/PEXELS/TIE; Video RAW/ADAPTED/TIE/BOTH_UNUSABLE). NO se
+  afirma `PROVIDER_FIT_VALIDATED`/`ADAPTED_BETTER`/Pexels default.
+- Suite en rama: **`1625 passed, 0 failed`** (1586 previos + 39 nuevos). Comun
+  `test(evaluation): benchmark Pexels provider fit` (sin merge/push/reindex).
+  Marcador `PEXELS_PROVIDER_FIT_BENCHMARK_READY_FOR_HUMAN_REVIEW`.
+
 ## Investigación cerrada: `pexels-visual-supply-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
 - Benchmark-first del SUPPLY visual de Pexels (**Video + Photos**) frente al
