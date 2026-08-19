@@ -99,7 +99,7 @@ def test_pixabay_illustration_vector_final_stream_rank_is_unique():
     assert [envelope.provider_rank for envelope in envelopes] == [1, 2, 3, 4]
 
 
-def test_exhausted_native_and_envelope_lifecycle_have_same_candidate_order():
+def test_exhausted_adapter_lifecycle_preserves_candidate_order():
     natives = [_native("wikimedia_commons", query="first"), _native("wikimedia_commons", query="second")]
     envelopes = [
         _native_to_candidate_envelope(

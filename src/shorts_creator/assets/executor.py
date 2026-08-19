@@ -327,7 +327,7 @@ def execute_visual_sourcing_plan_v2(
         request_visuals: Optional request-level config (stored for
             traceability only; not re-applied).
         dry_run: If ``True`` (default), returns dry-run attempt plan.
-            If ``False``, attempts live Wikimedia resolution.
+            If ``False``, attempts live Wikimedia/Pixabay resolution.
         job_dir: Job directory path for asset downloads (required in
             live mode).
         asset_namespace: Optional namespace prefix for asset filenames.

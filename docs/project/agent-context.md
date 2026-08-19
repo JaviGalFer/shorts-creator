@@ -1,6 +1,6 @@
 # Agent Context
 
-## Active Change: visual-media-strategy — Slice 1 COMPLETED / VERIFIED; Slice 2A COMPLETED / VERIFIED; Slice 2B HARDENED / VERIFIED; FINAL READ-ONLY REVIEW pending
+## Active Change: visual-media-strategy — COMPLETED / VERIFIED / CLOSED
 - Slice 1 scope was limited to additive pure contracts, request policy
   normalization and a static provider capability registry. It made no executor,
   prepare, renderer, CLI or prompt changes. Slice 2B later wired the existing
@@ -18,7 +18,7 @@
 - Registry has separate planned Pexels Photos IMAGE/STOCK and Pexels Video
   VIDEO/STOCK capabilities. Photos photograph fit is DIRECT; Video is
   CONDITIONAL (`ELIGIBLE_CANDIDATE` evidence); exact forms are UNSUPPORTED.
-- Validation: focused `130 passed`; full suite `1650 passed, 0 failed`;
+- Validation: focused `130 passed`; full suite `1703 passed, 0 failed`;
   `git diff --check` clean.
 - Commit: `57479c1` (`feat(visual): add media strategy contracts`).
 - Slice 2A is pure contract hardening only: MediaStrategy distinguishes visual
@@ -50,6 +50,9 @@
   before/after equivalence. Validation: focused `257 passed`; full suite
   `1703 passed, 0 failed`; `git diff --check` clean.
 - Commit: `c2d66f8` (`fix(assets): harden candidate lifecycle parity`).
+- Final review: VISUAL_MEDIA_STRATEGY_READY_TO_CLOSE_WITH_MINOR_FIXES. Minor fixes:
+  executor docstring (`Wikimedia/Pixabay`), test rename (`test_exhausted_adapter_lifecycle_preserves_candidate_order`),
+  tasks.md future work deferred. No behavioral changes.
 
 ## Closed Investigation: pexels-provider-fit-benchmark — COMPLETED / VERIFIED / CLOSED (merged into `main`, no-ff)
 - Benchmark-first del PROVIDER FIT de Pexels Photos/Video y de `query-adapt-v1`, sin runtime Pexels, rendering, VisualPlan/schema, OpenCLIP/BLIP/VLM, generación de imágenes ni perceptual hash. Base `main` `cf391c5`; commits `6b18d01` (benchmark), `d948300` (hardening) y cierre documental.

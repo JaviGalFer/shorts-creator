@@ -2,7 +2,7 @@
 
 **Última actualización:** 2026-08-19
 
-## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED; Slice 2A COMPLETED / VERIFIED; Slice 2B HARDENED / VERIFIED; FINAL READ-ONLY REVIEW pendiente
+## Change activo: `visual-media-strategy` — COMPLETED / VERIFIED / CLOSED
 
 - Slice 1 fue puro y aditivo: contrato `visualSequence[].mediaPreference`, policy
   `request.visuals.visualMode`, `MediaStrategyDecision` y registry estático de

@@ -40,8 +40,21 @@
 - [x] Hardening validation: focused `257 passed`; full suite `1703 passed`;
       `git diff --check` limpio.
 - [x] Hardening commit `c2d66f8` `fix(assets): harden candidate lifecycle parity`.
-- [ ] FINAL READ-ONLY REVIEW antes de cierre/merge.
-- [ ] Runtime `pexels-photos` image-only.
-- [ ] Evolución `VisualAsset.kind = IMAGE | VIDEO`.
-- [ ] Playback contract y rendering VIDEO local.
-- [ ] Runtime Pexels Video RAW+adapted, diversidad y selección posterior.
+### Trabajo diferido a changes independientes
+
+- Runtime `pexels-photos` image-only
+- Evolución `VisualAsset.kind = IMAGE | VIDEO`
+- Playback contract y rendering VIDEO local
+- Runtime Pexels Video RAW+adaptado, diversidad y selección posterior
+
+### Next change:
+`pexels-photos-runtime`
+
+### Deferred (no checkbox de este change):
+- reranking/diversity/dedup
+- generated/manual runtime
+- author_url Pexels
+- telemetría pública CandidateAttempt
+- rank Wikimedia
+- prompt LLM generando `mediaPreference`
+- capability routing productivo
