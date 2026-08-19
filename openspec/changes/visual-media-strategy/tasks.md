@@ -1,6 +1,6 @@
 # Tasks: visual-media-strategy
 
-**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED**
+**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED**
 
 ## Slice 1: contratos, policy y registry
 
@@ -30,8 +30,10 @@
 - [x] Slice 2A: focales `66 passed`; regresión VisualPlan `106 passed`; suite
       completa `1692 passed`; `git diff --check` limpio.
 - [x] Slice 2A commit `c0449f6` `feat(assets): add candidate selection contracts`.
-- [ ] Slice 2B: cablear lifecycle común candidate-first-accepted con paridad
+- [x] Slice 2B: cablear lifecycle común candidate-first-accepted con paridad
       de Wikimedia/Pixabay, sin runtime Pexels.
+- [x] Slice 2B: tests afectados `331 passed`; suite completa `1699 passed`;
+      `git diff --check` limpio.
 - [ ] Runtime `pexels-photos` image-only.
 - [ ] Evolución `VisualAsset.kind = IMAGE | VIDEO`.
 - [ ] Playback contract y rendering VIDEO local.

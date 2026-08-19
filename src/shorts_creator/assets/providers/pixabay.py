@@ -261,7 +261,7 @@ def resolve_pixabay_candidates_v2(
                 if not candidates:
                     break
 
-                for c in candidates:
+                for hit_index, c in enumerate(candidates, start=1):
                     source_url = c.get("pageURL", "")
                     file_url = c.get("largeImageURL", "")
 
@@ -302,6 +302,8 @@ def resolve_pixabay_candidates_v2(
                         "imageType": c.get("type", ""),
                         "likes": c.get("likes", 0),
                         "downloads": c.get("downloads", 0),
+                        # Preserve the API hit position without using it to rank.
+                        "providerRank": (page - 1) * per_page + hit_index,
                     })
 
                 if len(all_candidates) >= max_results:

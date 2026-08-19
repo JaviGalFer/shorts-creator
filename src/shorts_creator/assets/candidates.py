@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import islice
 import math
 from types import MappingProxyType
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping
 
 from shorts_creator.assets.capabilities import SOURCE_TYPES
 from shorts_creator.contracts.visual_media import MEDIA_KINDS
@@ -190,12 +191,81 @@ class CandidateSelectionResult:
 
 
 def take_top_n(
-    candidates: Sequence[CandidateEnvelope],
+    candidates: Iterable[CandidateEnvelope],
     limit: int,
 ) -> tuple[CandidateEnvelope, ...]:
-    """Return the first N candidates in discovery order without re-ranking."""
+    """Return at most N candidates in discovery order without re-ranking."""
     if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
         raise ValueError("INVALID_CANDIDATE_LIMIT")
-    if any(not isinstance(candidate, CandidateEnvelope) for candidate in candidates):
-        raise ValueError("INVALID_CANDIDATE_ENVELOPE")
-    return tuple(candidates[:limit])
+    selected: list[CandidateEnvelope] = []
+    for candidate in islice(candidates, limit):
+        if not isinstance(candidate, CandidateEnvelope):
+            raise ValueError("INVALID_CANDIDATE_ENVELOPE")
+        selected.append(candidate)
+    return tuple(selected)
+
+
+def select_first_accepted(
+    candidates: Iterable[CandidateEnvelope],
+    *,
+    semantic_evaluator: Callable[[CandidateEnvelope], Mapping[str, Any]],
+    downloader: Callable[[CandidateEnvelope], str | None],
+    visual_fidelity_evaluator: Callable[[CandidateEnvelope, str], tuple[bool, Mapping[str, Any] | None]],
+    rejection_cleanup: Callable[[CandidateEnvelope, str], None],
+    limit: int,
+) -> CandidateSelectionResult:
+    """Evaluate candidates progressively and select the first accepted one.
+
+    Callbacks own all provider and filesystem behavior. Exceptions intentionally
+    propagate to preserve the executor's existing provider-error policy.
+    """
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+        raise ValueError("INVALID_CANDIDATE_LIMIT")
+
+    attempts: list[CandidateAttempt] = []
+    for candidate in islice(candidates, limit):
+        if not isinstance(candidate, CandidateEnvelope):
+            raise ValueError("INVALID_CANDIDATE_ENVELOPE")
+        semantic_assessment = semantic_evaluator(candidate)
+        if semantic_assessment.get("verdict") != "RELEVANT":
+            attempts.append(CandidateAttempt(
+                candidate=candidate,
+                status=METADATA_REJECTED,
+                semantic_assessment=semantic_assessment,
+            ))
+            continue
+
+        local_path = downloader(candidate)
+        if local_path is None:
+            attempts.append(CandidateAttempt(
+                candidate=candidate,
+                status=DOWNLOAD_FAILED,
+                semantic_assessment=semantic_assessment,
+                error_code=DOWNLOAD_FAILED,
+            ))
+            continue
+
+        allow, visual_fidelity_assessment = visual_fidelity_evaluator(candidate, local_path)
+        if not allow:
+            rejection_cleanup(candidate, local_path)
+            attempts.append(CandidateAttempt(
+                candidate=candidate,
+                status=PIXEL_REJECTED,
+                semantic_assessment=semantic_assessment,
+                visual_fidelity_assessment=visual_fidelity_assessment,
+                local_path=local_path,
+                error_code=PIXEL_REJECTED,
+            ))
+            continue
+
+        accepted = CandidateAttempt(
+            candidate=candidate,
+            status=ACCEPTED,
+            semantic_assessment=semantic_assessment,
+            visual_fidelity_assessment=visual_fidelity_assessment,
+            local_path=local_path,
+        )
+        attempts.append(accepted)
+        return CandidateSelectionResult(SELECTED, accepted, tuple(attempts))
+
+    return CandidateSelectionResult(EXHAUSTED, None, tuple(attempts))

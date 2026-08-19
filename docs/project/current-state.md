@@ -2,7 +2,7 @@
 
 **Última actualización:** 2026-08-19
 
-## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED
+## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED
 
 - Slice puro y aditivo: contrato `visualSequence[].mediaPreference`, policy
   `request.visuals.visualMode`, `MediaStrategyDecision` y registry estático de
@@ -28,10 +28,18 @@
   capability fit mappings are immutable. `CandidateEnvelope`, Attempt and
   SelectionResult model discovery, gate outcomes and selection invariants; the
   top-N helper preserves discovery order and does not rerank by score.
-- No router/executor/provider/semantic/fidelity/bridge/CLI/render change. Slice
-  2B runtime wiring remains pending. Validation: focales `66 passed`, VisualPlan
-  `106 passed`, suite completa `1692 passed, 0 failed`; `git diff --check`
-  limpio. Commit `c0449f6` (`feat(assets): add candidate selection contracts`).
+- Slice 2A made no router/executor/provider/semantic/fidelity/bridge/CLI/render
+  change. Validation: focales `66 passed`, VisualPlan `106 passed`, suite
+  completa `1692 passed, 0 failed`; `git diff --check` limpio. Commit `c0449f6`
+  (`feat(assets): add candidate selection contracts`).
+- Slice 2B cablea los contratos candidate al lifecycle first-accepted actual de
+  Wikimedia/Pixabay mediante callbacks, sin serializar envelopes/attempts ni
+  modificar bridge/metadata pública. Mantiene el orden de provider y queries,
+  cache/exclusions y límite 20 de Wikimedia; el comportamiento de primera query
+  viable, orden API/rank y límite 20 de Pixabay; semantic antes de download y
+  fidelity después. No hay reranking, pool cross-provider, diversity, Pexels ni
+  VIDEO runtime. Afectados: `331 passed`; suite completa `1699 passed, 0 failed`;
+  `git diff --check` limpio; commit pendiente.
 
 ## Investigación cerrada: `pexels-provider-fit-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 

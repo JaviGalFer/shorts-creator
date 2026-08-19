@@ -14,10 +14,13 @@ from shorts_creator.assets.candidates import (
     CandidateEnvelope,
     CandidateSelectionResult,
     CandidateSemanticMetadata,
+    DOWNLOAD_FAILED,
     EXHAUSTED,
     METADATA_REJECTED,
+    PIXEL_REJECTED,
     RAW,
     SELECTED,
+    select_first_accepted,
     take_top_n,
 )
 from shorts_creator.contracts.visual_media import IMAGE
@@ -154,6 +157,19 @@ def test_top_n_preserves_discovery_order_without_score_sorting():
     assert take_top_n(candidates, 2) == tuple(candidates[:2])
 
 
+def test_top_n_consumes_only_the_requested_generator_items():
+    consumed: list[int] = []
+
+    def source():
+        for rank in range(1, 5):
+            consumed.append(rank)
+            yield _candidate(provider_rank=rank)
+
+    selected = take_top_n(source(), 3)
+    assert [candidate.provider_rank for candidate in selected] == [1, 2, 3]
+    assert consumed == [1, 2, 3]
+
+
 @pytest.mark.parametrize("limit", [0, -1, True, "3"])
 def test_top_n_rejects_invalid_limit(limit):
     with pytest.raises(ValueError, match="INVALID_CANDIDATE_LIMIT"):
@@ -168,3 +184,83 @@ def test_candidate_contract_module_is_import_safe():
     assert "urllib" not in source
     assert "requests" not in source
     assert "os.getenv" not in source
+
+
+def test_lifecycle_rejections_progress_without_unnecessary_downloads():
+    candidates = [_candidate(provider_rank=1), _candidate(provider_rank=2), _candidate(provider_rank=3)]
+    events: list[str] = []
+
+    def semantic(candidate):
+        events.append(f"semantic:{candidate.provider_rank}")
+        return {"verdict": "IRRELEVANT" if candidate.provider_rank == 1 else "RELEVANT"}
+
+    def download(candidate):
+        events.append(f"download:{candidate.provider_rank}")
+        return None if candidate.provider_rank == 2 else "/tmp/third.jpg"
+
+    def fidelity(candidate, path):
+        events.append(f"fidelity:{candidate.provider_rank}")
+        return True, {"verdict": "ACCEPT"}
+
+    result = select_first_accepted(
+        candidates,
+        semantic_evaluator=semantic,
+        downloader=download,
+        visual_fidelity_evaluator=fidelity,
+        rejection_cleanup=lambda candidate, path: events.append("cleanup"),
+        limit=3,
+    )
+    assert result.status == SELECTED
+    assert [attempt.status for attempt in result.attempts] == [
+        METADATA_REJECTED, DOWNLOAD_FAILED, ACCEPTED,
+    ]
+    assert events == [
+        "semantic:1", "semantic:2", "download:2", "semantic:3", "download:3", "fidelity:3",
+    ]
+
+
+def test_lifecycle_pixel_reject_cleans_up_and_exhaustion_preserves_order():
+    first = _candidate(provider_rank=1)
+    second = _candidate(provider_rank=2)
+    cleanup: list[str] = []
+    result = select_first_accepted(
+        [first, second],
+        semantic_evaluator=lambda candidate: {"verdict": "RELEVANT"},
+        downloader=lambda candidate: f"/tmp/{candidate.provider_rank}.jpg",
+        visual_fidelity_evaluator=lambda candidate, path: (False, {"verdict": "REJECT"}),
+        rejection_cleanup=lambda candidate, path: cleanup.append(path),
+        limit=2,
+    )
+    assert result.status == EXHAUSTED
+    assert [attempt.status for attempt in result.attempts] == [PIXEL_REJECTED, PIXEL_REJECTED]
+    assert cleanup == ["/tmp/1.jpg", "/tmp/2.jpg"]
+
+
+def test_lifecycle_stops_consuming_after_first_accepted_and_propagates_exceptions():
+    consumed: list[int] = []
+
+    def source():
+        for rank in range(1, 4):
+            consumed.append(rank)
+            yield _candidate(provider_rank=rank)
+
+    result = select_first_accepted(
+        source(),
+        semantic_evaluator=lambda candidate: {"verdict": "RELEVANT"},
+        downloader=lambda candidate: "/tmp/one.jpg",
+        visual_fidelity_evaluator=lambda candidate, path: (True, {"verdict": "ACCEPT"}),
+        rejection_cleanup=lambda candidate, path: None,
+        limit=3,
+    )
+    assert result.status == SELECTED
+    assert consumed == [1]
+
+    with pytest.raises(RuntimeError, match="provider failure"):
+        select_first_accepted(
+            [_candidate()],
+            semantic_evaluator=lambda candidate: (_ for _ in ()).throw(RuntimeError("provider failure")),
+            downloader=lambda candidate: None,
+            visual_fidelity_evaluator=lambda candidate, path: (True, None),
+            rejection_cleanup=lambda candidate, path: None,
+            limit=1,
+        )

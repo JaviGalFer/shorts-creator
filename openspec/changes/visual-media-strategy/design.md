@@ -1,6 +1,6 @@
 # Design: visual-media-strategy
 
-**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED**
+**Status: IN PROGRESS — Slice 1 COMPLETED / VERIFIED / COMMITTED; Slice 2A COMPLETED / VERIFIED / COMMITTED; Slice 2B COMPLETED / VERIFIED**
 
 ## Contratos
 
@@ -100,3 +100,34 @@ mappings are immutable.
 No runtime wires these contracts in Slice 2A. A future Pexels Photos runtime
 may choose `N=3` from its own policy, but no global limit belongs in this
 contract.
+
+## Slice 2B: first-accepted lifecycle parity
+
+`select_first_accepted` is callback-driven and owns no provider or filesystem
+I/O. It consumes envelopes lazily in discovery order, applies metadata before
+download, applies pixel fidelity after download, cleans only pixel-rejected
+files, stops at the first accepted candidate and returns ordered attempts.
+`take_top_n` now accepts an iterable and consumes no item after its limit.
+
+The executor adapts provider-native candidates after the router has already
+chosen a provider. No capability routing, provider fit routing or Pexels runtime
+is introduced. Immutable attempts are never serialized or persisted; legacy
+`resolvedAssets` and bridge shapes remain unchanged.
+
+Parity intentionally retained:
+
+- Wikimedia keeps its lazy resolver calls, ordered query progression, cache and
+  exclusion mutation before semantic evaluation, and the historical limit of
+  20 candidate attempts. Its batch response does not guarantee rank, so
+  `provider_rank=None`.
+- Pixabay keeps its provider-returned candidate order, first-query-with-valid-
+  candidates behavior and historical limit of 20 attempts. The provider now
+  records its API hit position as `providerRank`; no likes/downloads scoring is
+  used.
+- Provider/source policy order, provider failover, semantic postcondition,
+  filename generation, status/reason semantics and visual-fidelity bypasses are
+  unchanged.
+
+This is first accepted, not human-best candidate selection. It does not resolve
+the Pexels Photo PlayStation/N64 rank-3 evidence: no reranking, multi-download,
+cross-provider pool or diversity policy is present.
