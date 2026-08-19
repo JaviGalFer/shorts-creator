@@ -2,9 +2,9 @@
 
 Consumes the sourcing plan from ``build_visual_sourcing_plan_v2`` and
 produces an execution plan.  In dry-run mode evaluates provider
-availability and returns what would be attempted.  In live mode
-executes Wikimedia Commons searches and downloads (other providers
-remain not implemented).
+availability and returns what would be attempted. In live mode it supports
+Wikimedia Commons and Pixabay searches/downloads; other providers remain
+without live runtime support here.
 
 No imports from v1 runtime pipeline modules.  Stdlib only.
 """
@@ -13,11 +13,22 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
+
+from shorts_creator.assets.candidates import (
+    CandidateAttribution,
+    CandidateEnvelope,
+    CandidateSemanticMetadata,
+    METADATA_REJECTED,
+    PIXEL_REJECTED,
+    select_first_accepted,
+)
+from shorts_creator.contracts.visual_media import IMAGE
 
 from shorts_creator.assets.semantic import (
     RELEVANT,
     assess_candidate,
+    to_semantic_candidate,
 )
 
 from shorts_creator.assets.visual_fidelity import (
@@ -304,7 +315,7 @@ def execute_visual_sourcing_plan_v2(
     evaluates provider availability, and returns resolved assets (live)
     or what would be attempted (dry-run).
 
-    Live execution is implemented for ``wikimedia_commons`` only.
+    Live execution currently supports ``wikimedia_commons`` and ``pixabay``.
     All other providers return ``PROVIDER_UNAVAILABLE`` in live mode.
 
     Args:
@@ -316,7 +327,7 @@ def execute_visual_sourcing_plan_v2(
         request_visuals: Optional request-level config (stored for
             traceability only; not re-applied).
         dry_run: If ``True`` (default), returns dry-run attempt plan.
-            If ``False``, attempts live Wikimedia resolution.
+            If ``False``, attempts live Wikimedia/Pixabay resolution.
         job_dir: Job directory path for asset downloads (required in
             live mode).
         asset_namespace: Optional namespace prefix for asset filenames.
@@ -759,6 +770,83 @@ def _try_live_resolution(
     }
 
 
+_MAX_CANDIDATE_ATTEMPTS = 20
+
+
+def _query_index(query_used: str | None, query_texts: list[str]) -> int | None:
+    if not query_used:
+        return None
+    for index, query in enumerate(query_texts):
+        if query == query_used:
+            return index
+    return None
+
+
+def _native_to_candidate_envelope(
+    native: dict,
+    *,
+    capability_id: str,
+    query_texts: list[str],
+    provider_rank: int | None,
+) -> CandidateEnvelope:
+    """Adapt an already discovered image candidate without changing its order."""
+    semantic = to_semantic_candidate(native)
+    provider_asset_id = native.get("pixabayId")
+    if provider_asset_id is not None:
+        provider_asset_id = str(provider_asset_id)
+    query_used = native.get("queryUsed") or None
+    width = native.get("width")
+    height = native.get("height")
+    return CandidateEnvelope(
+        capability_id=capability_id,
+        provider=native.get("provider") or None,
+        provider_asset_id=provider_asset_id,
+        media_kind=IMAGE,
+        source_type="STOCK",
+        query_used=query_used,
+        query_variant="RAW",
+        query_index=_query_index(query_used, query_texts),
+        provider_rank=provider_rank,
+        provider_score=None,
+        semantic_metadata=CandidateSemanticMetadata(
+            title=semantic.get("title") or None,
+            description=semantic.get("description") or None,
+            tags=tuple(semantic.get("tags") or []),
+            labels=tuple(semantic.get("labels") or []),
+            asset_type=semantic.get("assetType") or None,
+        ),
+        source_url=native.get("sourceUrl") or None,
+        preview_url=native.get("thumbnailUrl") or native.get("previewURL") or None,
+        acquisition_url=native.get("fileUrl") or None,
+        mime_type=native.get("mimeType") or None,
+        width=width if isinstance(width, int) and width > 0 else None,
+        height=height if isinstance(height, int) and height > 0 else None,
+        attribution=CandidateAttribution(
+            author=native.get("author") or None,
+            license=native.get("license") or None,
+        ),
+    )
+
+
+def _selection_rejections(
+    selection: Any,
+    semantic_assessments: dict[int, dict],
+    visual_fidelity_assessments: dict[int, dict],
+) -> tuple[list[dict], list[dict]]:
+    """Recover legacy rejection lists without serializing immutable attempts."""
+    semantic = [
+        semantic_assessments[id(attempt.candidate)]
+        for attempt in selection.attempts
+        if attempt.status == METADATA_REJECTED
+    ]
+    visual_fidelity = [
+        visual_fidelity_assessments[id(attempt.candidate)]
+        for attempt in selection.attempts
+        if attempt.status == PIXEL_REJECTED
+    ]
+    return semantic, visual_fidelity
+
+
 def _resolve_wikimedia(
     candidate: dict,
     segment: dict,
@@ -793,8 +881,6 @@ def _resolve_wikimedia(
     _, queries = _dispatch_inputs(candidate, segment)
     query_texts = _extract_query_texts(queries)
 
-    _MAX_DOWNLOAD_ATTEMPTS = 20
-
     try:
         from shorts_creator.assets.providers.wikimedia import (
             resolve_wikimedia_candidate_v2,
@@ -802,89 +888,106 @@ def _resolve_wikimedia(
             WikimediaRateLimitedError,
         )
 
+        native_by_envelope: dict[int, dict] = {}
+        semantic_assessments: dict[int, dict] = {}
+        visual_fidelity_assessments: dict[int, dict] = {}
+        download_results: dict[int, tuple[str, Path, dict]] = {}
         download_errors: list[dict] = []
-        semantic_rejections: list[dict] = []
-        visual_fidelity_rejections: list[dict] = []
-        any_candidate_found = False
 
-        for _attempt_idx in range(_MAX_DOWNLOAD_ATTEMPTS):
-            resolved = resolve_wikimedia_candidate_v2(
-                query_texts,
-                user_agent=user_agent,
-                excluded_source_urls=excluded_source_urls,
-                excluded_file_urls=excluded_file_urls,
-                cache=wikimedia_cache,
-            )
-
-            if resolved is None:
-                break
-
-            any_candidate_found = True
-
-            if excluded_source_urls is not None:
-                excluded_source_urls.add(resolved.get("sourceUrl", ""))
-            if excluded_file_urls is not None:
-                excluded_file_urls.add(resolved.get("fileUrl", ""))
-
-            # ── Semantic gate: before download, skip irrelevant/unscorable ──
-            semantic = _evaluate_semantic(segment, resolved)
-            if semantic.get("verdict") != RELEVANT:
-                semantic_rejections.append(semantic)
-                continue
-
-            relative_path, absolute_path = _compute_asset_paths(
-                job_dir, segment_idx, resolved, asset_namespace,
-            )
-
-            dl_result = download_wikimedia_asset_v2(
-                resolved,
-                absolute_path,
-                user_agent=user_agent,
-            )
-
-            if dl_result["ok"]:
-                query_used = resolved.get("queryUsed", "")
-                if not query_used and query_texts:
-                    query_used = query_texts[0]
-
-                vf_allow, vf_assessment = _apply_visual_fidelity_gate(
-                    absolute_path, query_used, warnings,
+        def envelopes() -> Iterable[CandidateEnvelope]:
+            while True:
+                resolved = resolve_wikimedia_candidate_v2(
+                    query_texts,
+                    user_agent=user_agent,
+                    excluded_source_urls=excluded_source_urls,
+                    excluded_file_urls=excluded_file_urls,
+                    cache=wikimedia_cache,
                 )
-                if not vf_allow:
-                    visual_fidelity_rejections.append(vf_assessment)
-                    if absolute_path.exists():
-                        absolute_path.unlink(missing_ok=True)
-                    continue
+                if resolved is None:
+                    return
+                if excluded_source_urls is not None:
+                    excluded_source_urls.add(resolved.get("sourceUrl", ""))
+                if excluded_file_urls is not None:
+                    excluded_file_urls.add(resolved.get("fileUrl", ""))
+                envelope = _native_to_candidate_envelope(
+                    resolved,
+                    capability_id="wikimedia_commons.image.stock",
+                    query_texts=query_texts,
+                    provider_rank=None,
+                )
+                native_by_envelope[id(envelope)] = resolved
+                yield envelope
 
-                return {
-                    "segmentIndex": segment_idx,
-                    "assetPreference": asset_pref,
-                    "status": "RESOLVED",
-                    "provider": "wikimedia_commons",
-                    "assetPath": relative_path,
-                    "fileSize": dl_result["size"],
-                    "sourceUrl": resolved.get("sourceUrl", ""),
-                    "fileUrl": resolved.get("fileUrl", ""),
-                    "license": resolved.get("license", "unknown"),
-                    "author": resolved.get("author", "Unknown"),
-                    "mimeType": dl_result.get("mimeType")
-                                or resolved.get("mimeType", ""),
-                    "width": resolved.get("width", 0),
-                    "height": resolved.get("height", 0),
-                    "searchQueryUsed": query_used,
-                    "generationPromptUsed": None,
-                    "semanticAssessment": semantic,
-                    "visualFidelityAssessment": vf_assessment,
-                }
+        def evaluate_semantic(envelope: CandidateEnvelope) -> dict:
+            assessment = _evaluate_semantic(segment, native_by_envelope[id(envelope)])
+            semantic_assessments[id(envelope)] = assessment
+            return assessment
 
+        def download(envelope: CandidateEnvelope) -> str | None:
+            native = native_by_envelope[id(envelope)]
+            relative_path, absolute_path = _compute_asset_paths(
+                job_dir, segment_idx, native, asset_namespace,
+            )
+            result = download_wikimedia_asset_v2(native, absolute_path, user_agent=user_agent)
+            if result["ok"]:
+                download_results[id(envelope)] = (relative_path, absolute_path, result)
+                return str(absolute_path)
             if absolute_path.exists():
                 absolute_path.unlink(missing_ok=True)
-
             download_errors.append({
-                "sourceUrl": resolved.get("sourceUrl", ""),
-                "fileUrl": resolved.get("fileUrl", ""),
-                "error": dl_result.get("error", "download failed"),
+                "sourceUrl": native.get("sourceUrl", ""),
+                "fileUrl": native.get("fileUrl", ""),
+                "error": result.get("error", "download failed"),
             })
+            return None
+
+        def evaluate_visual_fidelity(
+            envelope: CandidateEnvelope, local_path: str,
+        ) -> tuple[bool, dict]:
+            query_used = envelope.query_used or (query_texts[0] if query_texts else "")
+            allow, assessment = _apply_visual_fidelity_gate(Path(local_path), query_used, warnings)
+            visual_fidelity_assessments[id(envelope)] = assessment
+            return allow, assessment
+
+        def cleanup(_envelope: CandidateEnvelope, local_path: str) -> None:
+            Path(local_path).unlink(missing_ok=True)
+
+        selection = select_first_accepted(
+            envelopes(),
+            semantic_evaluator=evaluate_semantic,
+            downloader=download,
+            visual_fidelity_evaluator=evaluate_visual_fidelity,
+            rejection_cleanup=cleanup,
+            limit=_MAX_CANDIDATE_ATTEMPTS,
+        )
+        semantic_rejections, visual_fidelity_rejections = _selection_rejections(
+            selection, semantic_assessments, visual_fidelity_assessments,
+        )
+
+        if selection.selected is not None:
+            selected = selection.selected.candidate
+            native = native_by_envelope[id(selected)]
+            relative_path, _, dl_result = download_results[id(selected)]
+            query_used = selected.query_used or (query_texts[0] if query_texts else "")
+            return {
+                "segmentIndex": segment_idx,
+                "assetPreference": asset_pref,
+                "status": "RESOLVED",
+                "provider": "wikimedia_commons",
+                "assetPath": relative_path,
+                "fileSize": dl_result["size"],
+                "sourceUrl": native.get("sourceUrl", ""),
+                "fileUrl": native.get("fileUrl", ""),
+                "license": native.get("license", "unknown"),
+                "author": native.get("author", "Unknown"),
+                "mimeType": dl_result.get("mimeType") or native.get("mimeType", ""),
+                "width": native.get("width", 0),
+                "height": native.get("height", 0),
+                "searchQueryUsed": query_used,
+                "generationPromptUsed": None,
+                "semanticAssessment": semantic_assessments[id(selected)],
+                "visualFidelityAssessment": visual_fidelity_assessments[id(selected)],
+            }
 
         if download_errors:
             return {
@@ -995,80 +1098,99 @@ def _resolve_pixabay(
                 "reason": "Pixabay returned no valid candidates",
             }
 
-        _MAX_DOWNLOAD_ATTEMPTS = 20
+        native_by_envelope: dict[int, dict] = {}
+        semantic_assessments: dict[int, dict] = {}
+        visual_fidelity_assessments: dict[int, dict] = {}
+        download_results: dict[int, tuple[str, Path, dict]] = {}
         download_errors: list[dict] = []
-        semantic_rejections: list[dict] = []
-        visual_fidelity_rejections: list[dict] = []
 
-        for attempt in range(min(_MAX_DOWNLOAD_ATTEMPTS, len(candidates))):
-            pix_candidate = candidates[attempt]
-
-            if excluded_source_urls is not None:
-                excluded_source_urls.add(pix_candidate.get("sourceUrl", ""))
-            if excluded_file_urls is not None:
-                excluded_file_urls.add(pix_candidate.get("fileUrl", ""))
-
-            # ── Semantic gate: before download, skip irrelevant/unscorable ──
-            semantic = _evaluate_semantic(segment, pix_candidate)
-            if semantic.get("verdict") != RELEVANT:
-                semantic_rejections.append(semantic)
-                continue
-
-            relative_path, absolute_path = _compute_asset_paths(
-                job_dir, segment_idx, pix_candidate, asset_namespace,
-            )
-
-            dl_result = download_pixabay_asset_v2(
-                pix_candidate,
-                absolute_path,
-            )
-
-            if dl_result["ok"]:
-                query_used = pix_candidate.get("queryUsed", "")
-                if not query_used and query_texts:
-                    query_used = query_texts[0]
-
-                vf_allow, vf_assessment = _apply_visual_fidelity_gate(
-                    absolute_path, query_used, warnings,
+        def envelopes() -> Iterable[CandidateEnvelope]:
+            for discovery_rank, pix_candidate in enumerate(candidates, start=1):
+                if excluded_source_urls is not None:
+                    excluded_source_urls.add(pix_candidate.get("sourceUrl", ""))
+                if excluded_file_urls is not None:
+                    excluded_file_urls.add(pix_candidate.get("fileUrl", ""))
+                envelope = _native_to_candidate_envelope(
+                    pix_candidate,
+                    capability_id="pixabay.image.stock",
+                    query_texts=query_texts,
+                    provider_rank=discovery_rank,
                 )
-                if not vf_allow:
-                    visual_fidelity_rejections.append(vf_assessment)
-                    if absolute_path.exists():
-                        absolute_path.unlink(missing_ok=True)
-                    continue
+                native_by_envelope[id(envelope)] = pix_candidate
+                yield envelope
 
-                return {
-                    "segmentIndex": segment_idx,
-                    "assetPreference": asset_pref,
-                    "status": "RESOLVED",
-                    "provider": "pixabay",
-                    "assetPath": relative_path,
-                    "fileSize": dl_result["size"],
-                    "sourceUrl": pix_candidate.get("sourceUrl", ""),
-                    "fileUrl": pix_candidate.get("fileUrl", ""),
-                    "license": pix_candidate.get("license", "Pixabay Content License"),
-                    "author": pix_candidate.get("author", "Unknown"),
-                    "mimeType": dl_result.get("mimeType") or "",
-                    "width": dl_result.get("actualWidth",
-                                          pix_candidate.get("width", 0)),
-                    "height": dl_result.get("actualHeight",
-                                           pix_candidate.get("height", 0)),
-                    "searchQueryUsed": query_used,
-                    "generationPromptUsed": None,
-                    "tags": pix_candidate.get("tags", ""),
-                    "pixabayId": pix_candidate.get("pixabayId"),
-                    "semanticAssessment": semantic,
-                    "visualFidelityAssessment": vf_assessment,
-                }
+        def evaluate_semantic(envelope: CandidateEnvelope) -> dict:
+            assessment = _evaluate_semantic(segment, native_by_envelope[id(envelope)])
+            semantic_assessments[id(envelope)] = assessment
+            return assessment
 
+        def download(envelope: CandidateEnvelope) -> str | None:
+            native = native_by_envelope[id(envelope)]
+            relative_path, absolute_path = _compute_asset_paths(
+                job_dir, segment_idx, native, asset_namespace,
+            )
+            result = download_pixabay_asset_v2(native, absolute_path)
+            if result["ok"]:
+                download_results[id(envelope)] = (relative_path, absolute_path, result)
+                return str(absolute_path)
             if absolute_path.exists():
                 absolute_path.unlink(missing_ok=True)
-
             download_errors.append({
-                "sourceUrl": pix_candidate.get("sourceUrl", ""),
-                "fileUrl": pix_candidate.get("fileUrl", ""),
-                "error": dl_result.get("error", "download failed"),
+                "sourceUrl": native.get("sourceUrl", ""),
+                "fileUrl": native.get("fileUrl", ""),
+                "error": result.get("error", "download failed"),
             })
+            return None
+
+        def evaluate_visual_fidelity(
+            envelope: CandidateEnvelope, local_path: str,
+        ) -> tuple[bool, dict]:
+            query_used = envelope.query_used or (query_texts[0] if query_texts else "")
+            allow, assessment = _apply_visual_fidelity_gate(Path(local_path), query_used, warnings)
+            visual_fidelity_assessments[id(envelope)] = assessment
+            return allow, assessment
+
+        def cleanup(_envelope: CandidateEnvelope, local_path: str) -> None:
+            Path(local_path).unlink(missing_ok=True)
+
+        selection = select_first_accepted(
+            envelopes(),
+            semantic_evaluator=evaluate_semantic,
+            downloader=download,
+            visual_fidelity_evaluator=evaluate_visual_fidelity,
+            rejection_cleanup=cleanup,
+            limit=_MAX_CANDIDATE_ATTEMPTS,
+        )
+        semantic_rejections, visual_fidelity_rejections = _selection_rejections(
+            selection, semantic_assessments, visual_fidelity_assessments,
+        )
+
+        if selection.selected is not None:
+            selected = selection.selected.candidate
+            native = native_by_envelope[id(selected)]
+            relative_path, _, dl_result = download_results[id(selected)]
+            query_used = selected.query_used or (query_texts[0] if query_texts else "")
+            return {
+                "segmentIndex": segment_idx,
+                "assetPreference": asset_pref,
+                "status": "RESOLVED",
+                "provider": "pixabay",
+                "assetPath": relative_path,
+                "fileSize": dl_result["size"],
+                "sourceUrl": native.get("sourceUrl", ""),
+                "fileUrl": native.get("fileUrl", ""),
+                "license": native.get("license", "Pixabay Content License"),
+                "author": native.get("author", "Unknown"),
+                "mimeType": dl_result.get("mimeType") or "",
+                "width": dl_result.get("actualWidth", native.get("width", 0)),
+                "height": dl_result.get("actualHeight", native.get("height", 0)),
+                "searchQueryUsed": query_used,
+                "generationPromptUsed": None,
+                "tags": native.get("tags", ""),
+                "pixabayId": native.get("pixabayId"),
+                "semanticAssessment": semantic_assessments[id(selected)],
+                "visualFidelityAssessment": visual_fidelity_assessments[id(selected)],
+            }
 
         if download_errors:
             return {

@@ -21,6 +21,7 @@ from shorts_creator.assets.executor import (
     _extension_from_url,
     _determine_extension,
     _extract_query_texts,
+    _resolve_pixabay,
     _validate_asset_namespace,
     ALLOWED_AVAILABILITY_STATUSES,
     ALLOWED_EXECUTOR_STATUSES,
@@ -126,6 +127,158 @@ def _mock_sourcing_plan(segments=None):
             "unroutable": 0,
         },
     }
+
+
+def _pixabay_native_candidate(index: int, *, query: str = "test query") -> dict:
+    extension = {3: "png", 4: "webp"}.get(index, "jpg")
+    return {
+        "provider": "pixabay",
+        "pixabayId": index,
+        "sourceUrl": f"https://pixabay.test/source-{index}",
+        "fileUrl": f"https://pixabay.test/file-{index}.{extension}",
+        "previewURL": f"https://pixabay.test/preview-{index}",
+        "author": f"Author {index}",
+        "license": "Pixabay Content License",
+        "width": 1200,
+        "height": 800,
+        "mimeType": f"image/{'png' if extension == 'png' else 'webp' if extension == 'webp' else 'jpeg'}",
+        "queryUsed": query,
+        "tags": "test query",
+    }
+
+
+def _pixabay_segment() -> dict:
+    return _mock_segment(
+        assetPreference="photograph",
+        searchQueries=[{"text": "test query", "source": "segment.searchQuery"}],
+        providerCandidates=[_mock_candidate(
+            provider="pixabay", requiresApiKey=True, supportStrength="strong",
+        )],
+    )
+
+
+def _pixabay_vf(verdict: str) -> dict:
+    return {"status": "SCORED", "verdict": verdict, "method": "test"}
+
+
+class TestPixabayCandidateLifecycleWiring:
+    def test_real_resolver_progresses_gates_and_preserves_legacy_output(self, tmp_path):
+        candidates = [_pixabay_native_candidate(index) for index in range(1, 5)]
+        semantic_order: list[int] = []
+        download_order: list[int] = []
+        fidelity_order: list[int] = []
+
+        def semantic(segment, candidate):
+            index = candidate["pixabayId"]
+            semantic_order.append(index)
+            return {"verdict": "IRRELEVANT" if index == 1 else "RELEVANT"}
+
+        def download(candidate, path):
+            index = candidate["pixabayId"]
+            download_order.append(index)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"partial" if index == 2 else b"asset")
+            if index == 2:
+                return {"ok": False, "error": "network failed"}
+            return {
+                "ok": True, "size": path.stat().st_size,
+                "mimeType": candidate["mimeType"], "actualWidth": 1200,
+                "actualHeight": 800,
+            }
+
+        def fidelity(path, query_used, warnings):
+            index = 3 if path.suffix == ".png" else 4
+            fidelity_order.append(index)
+            return (index == 4, _pixabay_vf("ACCEPT" if index == 4 else "REJECT"))
+
+        with patch(
+            "shorts_creator.assets.providers.pixabay.resolve_pixabay_candidates_v2",
+            return_value=candidates,
+        ), patch(
+            "shorts_creator.assets.providers.pixabay.download_pixabay_asset_v2",
+            side_effect=download,
+        ), patch(
+            "shorts_creator.assets.executor._evaluate_semantic", side_effect=semantic,
+        ), patch(
+            "shorts_creator.assets.executor._apply_visual_fidelity_gate", side_effect=fidelity,
+        ):
+            result = _resolve_pixabay(
+                _mock_candidate(provider="pixabay"), _pixabay_segment(), str(tmp_path), [],
+                provider_credentials={"pixabay": {"apiKey": "KEY"}},
+            )
+
+        assert semantic_order == [1, 2, 3, 4]
+        assert download_order == [2, 3, 4]
+        assert fidelity_order == [3, 4]
+        assert not (tmp_path / "assets" / "seg_001.jpg").exists()
+        assert not (tmp_path / "assets" / "seg_001.png").exists()
+        assert (tmp_path / "assets" / "seg_001.webp").exists()
+        assert result["status"] == "RESOLVED"
+        assert result["provider"] == "pixabay"
+        assert result["searchQueryUsed"] == "test query"
+        assert result["semanticAssessment"]["verdict"] == "RELEVANT"
+        assert result["visualFidelityAssessment"]["verdict"] == "ACCEPT"
+        assert result["pixabayId"] == 4
+        assert "candidate" not in result
+        assert "attempts" not in result
+
+    def test_real_resolver_stops_at_twenty_candidates(self, tmp_path):
+        candidates = [_pixabay_native_candidate(index) for index in range(1, 22)]
+        evaluated: list[int] = []
+        with patch(
+            "shorts_creator.assets.providers.pixabay.resolve_pixabay_candidates_v2",
+            return_value=candidates,
+        ), patch(
+            "shorts_creator.assets.providers.pixabay.download_pixabay_asset_v2",
+        ) as download, patch(
+            "shorts_creator.assets.executor._evaluate_semantic",
+            side_effect=lambda segment, candidate: (
+                evaluated.append(candidate["pixabayId"]) or {"verdict": "IRRELEVANT"}
+            ),
+        ):
+            result = _resolve_pixabay(
+                _mock_candidate(provider="pixabay"), _pixabay_segment(), str(tmp_path), [],
+                provider_credentials={"pixabay": {"apiKey": "KEY"}},
+            )
+
+        assert evaluated == list(range(1, 21))
+        download.assert_not_called()
+        assert result["status"] == "NO_RESULTS"
+        assert result["reason"] == "no Pixabay candidate downloaded successfully"
+
+    def test_download_failure_precedes_no_results_after_other_rejections(self, tmp_path):
+        candidates = [_pixabay_native_candidate(index) for index in range(1, 4)]
+
+        def semantic(segment, candidate):
+            return {"verdict": "IRRELEVANT" if candidate["pixabayId"] == 1 else "RELEVANT"}
+
+        def download(candidate, path):
+            if candidate["pixabayId"] == 2:
+                return {"ok": False, "error": "network failed"}
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"asset")
+            return {"ok": True, "size": 5, "mimeType": "image/png"}
+
+        with patch(
+            "shorts_creator.assets.providers.pixabay.resolve_pixabay_candidates_v2",
+            return_value=candidates,
+        ), patch(
+            "shorts_creator.assets.providers.pixabay.download_pixabay_asset_v2",
+            side_effect=download,
+        ), patch(
+            "shorts_creator.assets.executor._evaluate_semantic", side_effect=semantic,
+        ), patch(
+            "shorts_creator.assets.executor._apply_visual_fidelity_gate",
+            return_value=(False, _pixabay_vf("REJECT")),
+        ):
+            result = _resolve_pixabay(
+                _mock_candidate(provider="pixabay"), _pixabay_segment(), str(tmp_path), [],
+                provider_credentials={"pixabay": {"apiKey": "KEY"}},
+            )
+
+        assert result["status"] == "DOWNLOAD_FAILED"
+        assert result["downloadAttempts"] == 1
+        assert len(result["visualFidelityRejections"]) == 1
 
 
 def _collect_legacy_fields(data, path=""):

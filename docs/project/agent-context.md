@@ -1,5 +1,59 @@
 # Agent Context
 
+## Active Change: visual-media-strategy — COMPLETED / VERIFIED / CLOSED
+- Slice 1 scope was limited to additive pure contracts, request policy
+  normalization and a static provider capability registry. It made no executor,
+  prepare, renderer, CLI or prompt changes. Slice 2B later wired the existing
+  IMAGE lifecycle conservatively inside executor/provider internals.
+- `visualSequence[].mediaPreference` is optional in VisualPlan v2 with
+  `IMAGE_PREFERRED` default for historical plans; schema version remains 2 and
+  historical metadata is not rewritten.
+- `request.visuals.visualMode` supports AUTO, IMAGES_ONLY, VIDEOS_ONLY and
+  MIXED. Missing field and legacy `mode: images` both normalize to IMAGES_ONLY;
+  a conflict is explicit. MIXED is best-effort diversity only, never a quality
+  requirement.
+- `MediaStrategyDecision` is pure and records explicit degradations. Provider
+  selection remains outside the LLM and outside this slice; sourceProviders is
+  still the explicit user/operations policy for later capability intersection.
+- Registry has separate planned Pexels Photos IMAGE/STOCK and Pexels Video
+  VIDEO/STOCK capabilities. Photos photograph fit is DIRECT; Video is
+  CONDITIONAL (`ELIGIBLE_CANDIDATE` evidence); exact forms are UNSUPPORTED.
+- Validation: focused `130 passed`; full suite `1703 passed, 0 failed`;
+  `git diff --check` clean.
+- Commit: `57479c1` (`feat(visual): add media strategy contracts`).
+- Slice 2A is pure contract hardening only: MediaStrategy distinguishes visual
+  form support from runtime availability; media enums have one authority;
+  registry fit has `UNDECLARED` for absent evidence and immutable mappings.
+  `CandidateEnvelope`/Attempt/SelectionResult plus order-preserving top-N are
+  pure and not wired to router/executor/providers.
+- Validation: focused `66 passed`; VisualPlan regression `106 passed`; full
+  suite `1692 passed, 0 failed`; `git diff --check` clean.
+- Commit: `c0449f6` (`feat(assets): add candidate selection contracts`).
+- Docs commit: `90d825f` (`docs(project): record candidate contracts slice`).
+- Slice 2B wires CandidateEnvelope/Attempt/SelectionResult to the existing
+  Wikimedia/Pixabay first-accepted lifecycle without changing router policy,
+  bridge/metadata shape, Pexels status or rendering. The lifecycle is lazy and
+  callback-driven; provider I/O remains outside `candidates.py`.
+- Parity retained: Wikimedia query/cache/exclusion progression and 20-attempt
+  limit; Pixabay provider-returned candidate order, first-query-with-valid-
+  candidates behavior, final discovery-stream `provider_rank` and 20-attempt
+  limit; semantic-before-download, fidelity-after-download,
+  provider failover and OFF-by-default fidelity bypass. No reranking/diversity.
+- Validation: affected tests `331 passed`; full suite `1699 passed, 0 failed`;
+  `git diff --check` clean.
+- Commit: `9381435` (`refactor(assets): unify candidate selection lifecycle`).
+- Docs commit: `b8edc18` (`docs(project): record candidate lifecycle slice`).
+- Hardening final: Pixabay `provider_rank` is now the 1-based final candidate
+  stream position, never a remote API/subquery rank. Real executor tests cover
+  semantic/download/pixel progression, cleanup, the 20-candidate cap and
+  `DOWNLOAD_FAILED` precedence. Evidence is parity-preserving, not formal
+  before/after equivalence. Validation: focused `257 passed`; full suite
+  `1703 passed, 0 failed`; `git diff --check` clean.
+- Commit: `c2d66f8` (`fix(assets): harden candidate lifecycle parity`).
+- Final review: VISUAL_MEDIA_STRATEGY_READY_TO_CLOSE_WITH_MINOR_FIXES. Minor fixes:
+  executor docstring (`Wikimedia/Pixabay`), test rename (`test_exhausted_adapter_lifecycle_preserves_candidate_order`),
+  tasks.md future work deferred. No behavioral changes.
+
 ## Closed Investigation: pexels-provider-fit-benchmark — COMPLETED / VERIFIED / CLOSED (merged into `main`, no-ff)
 - Benchmark-first del PROVIDER FIT de Pexels Photos/Video y de `query-adapt-v1`, sin runtime Pexels, rendering, VisualPlan/schema, OpenCLIP/BLIP/VLM, generación de imágenes ni perceptual hash. Base `main` `cf391c5`; commits `6b18d01` (benchmark), `d948300` (hardening) y cierre documental.
 - Evidencia reutilizada: 58 rows / 56 queryUsed; 39 requests Video adaptadas históricas (cap 40, rate-limit final 24849/25000). **0 requests, descargas o contact sheets** durante hardening/cierre. Suite de cierre `1626 passed, 0 failed`.

@@ -2,6 +2,55 @@
 
 **Última actualización:** 2026-08-19
 
+## Change activo: `visual-media-strategy` — COMPLETED / VERIFIED / CLOSED
+
+- Slice 1 fue puro y aditivo: contrato `visualSequence[].mediaPreference`, policy
+  `request.visuals.visualMode`, `MediaStrategyDecision` y registry estático de
+  capabilities. Sin router productivo, runtime Pexels/VIDEO, executor, prepare,
+  renderer, prompt o CLI. Slice 2B posteriormente cableó internals de executor
+  y Pixabay, sin cambiar routing, bridge ni metadata pública.
+- `mediaPreference` usa `IMAGE_PREFERRED | VIDEO_PREFERRED | EITHER`; ausencia
+  histórica canonicaliza a `IMAGE_PREFERRED` bajo VisualPlan schema v2, sin
+  reescribir metadata ni elevar versión.
+- `visualMode` usa `AUTO | IMAGES_ONLY | VIDEOS_ONLY | MIXED`; ausencia o
+  `mode: images` legado significan `IMAGES_ONLY`. Conflicto explícito si ambos
+  se contradicen. MIXED es diversidad best-effort, nunca obligación ni descenso
+  de calidad.
+- El registry separa `pexels.photos.stock` (IMAGE, PLANNED, photograph DIRECT)
+  de `pexels.video.stock` (VIDEO, PLANNED, photograph CONDITIONAL); las formas
+  exactas son UNSUPPORTED según `pexels-provider-fit-benchmark`. No hay claim de
+  runtime ni secretos en registry.
+- Validación: focales `130 passed`; suite completa `1650 passed, 0 failed`;
+  `git diff --check` limpio.
+- Commit: `57479c1` (`feat(visual): add media strategy contracts`).
+- Slice 2A hardens only pure contracts: form support is distinct from runtime
+  availability in `MediaStrategyDecision`; enums live authoritatively in
+  `contracts.visual_media`; absent fit is `UNDECLARED`, not unsupported; and
+  capability fit mappings are immutable. `CandidateEnvelope`, Attempt and
+  SelectionResult model discovery, gate outcomes and selection invariants; the
+  top-N helper preserves discovery order and does not rerank by score.
+- Slice 2A made no router/executor/provider/semantic/fidelity/bridge/CLI/render
+  change. Validation: focales `66 passed`, VisualPlan `106 passed`, suite
+  completa `1692 passed, 0 failed`; `git diff --check` limpio. Commit `c0449f6`
+  (`feat(assets): add candidate selection contracts`).
+- Slice 2B cablea los contratos candidate al lifecycle first-accepted actual de
+  Wikimedia/Pixabay mediante callbacks, sin serializar envelopes/attempts ni
+  modificar bridge/metadata pública. Mantiene el orden de provider y queries,
+  cache/exclusions y límite 20 de Wikimedia; el comportamiento de primera query
+  viable, orden de candidates devuelto por provider, posición final del stream
+  como `provider_rank` y límite 20 de Pixabay; semantic antes de download y
+  fidelity después. No hay reranking, pool cross-provider, diversity, Pexels ni
+  VIDEO runtime. Afectados: `331 passed`; suite completa `1699 passed, 0 failed`;
+  `git diff --check` limpio. Commit `9381435`
+  (`refactor(assets): unify candidate selection lifecycle`).
+- Hardening final: `provider_rank` de Pixabay es la posición 1-based del stream
+  final de candidates y no rank remoto/subquery. Tests reales de executor cubren
+  progresión semantic/download/pixel, cleanup, cap de 20 y precedence
+  `DOWNLOAD_FAILED`; la evidencia es parity-preserving, no equivalencia formal
+  before/after. Validación: focales `257 passed`; suite `1703 passed, 0 failed`;
+  `git diff --check` limpio. Commit `c2d66f8`
+  (`fix(assets): harden candidate lifecycle parity`).
+
 ## Investigación cerrada: `pexels-provider-fit-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
 - Benchmark-first del **PROVIDER FIT** de Pexels Photos/Video y de
