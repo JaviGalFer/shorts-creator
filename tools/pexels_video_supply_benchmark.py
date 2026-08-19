@@ -960,7 +960,9 @@ def generate_contact_sheets(out_dir: Path) -> dict:
 
     # ── 01 temporal contact sheet ───────────────────────────────────────────
     frame_px = 270  # each review frame displayed at 270 wide
-    label_h = 74
+    label_h = 78
+    row_gap = 18
+    frame_gap = 18
     rows_data: list[dict] = []
     for r in review["results"]:
         if r["status"] not in ("OK", "OK_CACHED") or "localPath" not in r:
@@ -992,8 +994,31 @@ def generate_contact_sheets(out_dir: Path) -> dict:
             }
         )
 
-    img_w = frame_px * 3 + 60
-    img_h = 30 + sum(label_h + 10 + frame_px for _ in rows_data) + 20
+    def _load_scaled(fp: Path) -> "tuple[Image.Image, int, int] | None":
+        if not fp.exists():
+            return None
+        im = Image.open(fp).convert("RGB")
+        ratio = frame_px / im.width
+        return im, frame_px, max(1, int(im.height * ratio))
+
+    # Pre-compute per-row frame display heights so rows never overlap and the
+    # canvas reserves the real height (aspect ratio preserved, no crop).
+    precomputed: list[list] = []
+    for row in rows_data:
+        scaled = [_load_scaled(fp) for fp in row["frames"]]
+        precomputed.append(scaled)
+
+    img_w = frame_px * 3 + frame_gap * 2 + 20
+    img_h = (
+        16
+        + sum(
+            label_h
+            + row_gap
+            + max((s[2] for s in scaled if s is not None), default=frame_px)
+            for scaled in precomputed
+        )
+        + 16
+    )
     sheet = Image.new("RGB", (img_w, img_h), "white")
     draw = ImageDraw.Draw(sheet)
     try:
@@ -1003,23 +1028,43 @@ def generate_contact_sheets(out_dir: Path) -> dict:
         font = ImageFont.load_default()
         font_sm = font
 
-    y = 10
-    for row in rows_data:
+    def _draw_wrapped(dr, text, x, y, max_w, fnt, fill, line_h=17):
+        words = text.split(" ")
+        lines = []
+        cur = ""
+        for w in words:
+            trial = (cur + " " + w).strip()
+            if dr.textlength(trial, font=fnt) <= max_w:
+                cur = trial
+            else:
+                if cur:
+                    lines.append(cur)
+                cur = w
+        if cur:
+            lines.append(cur)
+        yy = y
+        for ln in lines[:3]:
+            dr.text((x, yy), ln, fill=fill, font=fnt)
+            yy += line_h
+        return yy
+
+    y = 12
+    for row, scaled in zip(rows_data, precomputed):
         label = (
             f"{row['query']}  |  {row['jobScene']}  |  #{row['videoId']}  "
             f"rank {row['rank']}  dur {row['duration']}s  {row['resolution']}"
         )
-        draw.text((10, y), label, fill="black", font=font_sm)
+        _draw_wrapped(draw, label, 10, y, img_w - 20, font_sm, "black")
+        row_img_h = label_h + row_gap + max((s[2] for s in scaled if s is not None), default=frame_px)
         yy = y + label_h
-        for idx, fp in enumerate(row["frames"]):
-            if fp.exists():
-                im = Image.open(fp).convert("RGB")
-                ratio = frame_px / im.width
-                im = im.resize((frame_px, int(im.height * ratio)), Image.LANCZOS)
-            else:
-                im = Image.new("RGB", (frame_px, frame_px), "lightgray")
-            sheet.paste(im, (10 + idx * (frame_px + 20), yy))
-        y = yy + frame_px + 10
+        col = 0
+        for s in scaled:
+            x = 10 + col * (frame_px + frame_gap)
+            if s is not None:
+                im, w, h = s
+                sheet.paste(im, (x, yy))
+                col += 1
+        y = y + row_img_h
 
     sheet01 = out_dir / "01-pexels-video-temporal-contact-sheet.png"
     sheet.save(sheet01)

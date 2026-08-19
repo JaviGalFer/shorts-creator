@@ -2,27 +2,38 @@
 
 **Última actualización:** 2026-08-19
 
-## Investigación activa: `pexels-video-supply-benchmark` — READY_FOR_HUMAN_REVIEW (rama `change/pexels-video-supply-benchmark`)
+## Investigación activa: `pexels-visual-supply-benchmark` — READY_FOR_HUMAN_REVIEW (rama `change/pexels-visual-supply-benchmark`)
 
-- Benchmark-first del SUPPLY de Pexels Video (`GET /v1/videos/search`, RAW,
-  `orientation=portrait`, `locale=en-US`, `per_page=15`, sin filtro `size`, sin
-  reranking ML/LLM ni judges) sobre las queryUsed ya usadas por el pipeline.
-  Sin integración runtime; sin tocar rendering/OpenCLIP/BLIP/VLM/VisualPlan.
+- Benchmark-first del SUPPLY visual de Pexels (**Video + Photos**) frente al
+  stack Wikimedia/Pixabay. Sin integración runtime; sin tocar rendering/
+  OpenCLIP/BLIP/VLM/VisualPlan; sin relabel. Base real del benchmark:
+  **`de570fa`** (no `321da8a`).
 - Datasets reutilizados sin relabel: canonical-38 + development-20 = 58 rows →
-  56 queryUsed únicas (dedup exacto, mapping query→rows conservado).
-- Resultado técnico: cobertura **56/56**, **HIGH_SUPPLY** (portrait >=720x1280
-  y >=1080x1920 = **1.0**); zero results 0; portraitMp4 838/838;
-  medianTotalResults 6856.5; duration mediana 12s. Requests **56/100**;
-  diagnóstico landscape **0** (todo `PORTRAIT_SUPPLY_OK`, sin NO_CONTENT ni
-  CONTENT_EXISTS_BUT_NOT_PORTRAIT). Rate-limit `remaining=24944/25000`.
-- Review humano: 12 clips rank#1 descargados **12/12, 0 fallos** (720x1280); 2
-  contact sheets PNG (`01-...-temporal-...`, `02-...-top3-...`) en
-  `data/evaluations/pexels-video-supply-benchmark/` (git-ignored). Sin juicio
-  automático; **no se afirma `PEXELS_BETTER`**; pendiente de revisión humana.
-- Harness `tools/pexels_video_supply_benchmark.py` (stdlib urllib, import-safe/
-  offline, lazy network) + tests `tests/test_pexels_video_supply_benchmark.py`
-  (**30 passed**, sin llamadas reales).
-- Ver `openspec/changes/pexels-video-supply-benchmark/`.
+  56 queryUsed únicas (dedup exacto; se conserva mapping query→rows y
+  `assetPath`).
+- **Pexels Video** (fase previa): cobertura **56/56, HIGH_SUPPLY** (>=720x1280
+  y >=1080x1920 = 1.0); requests 56/100; 12 clips rank#1 (720x1280); contact
+  sheets `01-...-temporal-...` (corregido: aspectos, sin solapamiento) y
+  `02-...-top3-...`.
+- **Pexels Photos** (extensión): cobertura **56/56, HIGH_SUPPLY** —
+  fracción >=720x1280 y >=1080x1920 = **1.0** (originales portrait alta res);
+  requests **56/70** (main 56, diag 0); `candidatesReturned=840`,
+  `originalPortraitCount=840`; diagnóstico 0 (56/56 `PORTRAIT_SUPPLY_OK`);
+  rate-limit `remaining=24888/25000`; 12 rank#1 originales descargados, 0
+  fallos.
+- Revisión humana: mismas 12 queries focales (7 dev-bad + 4 buenos que BLIP
+  falso-rechazó + 1 control CR). Contact sheets en
+  `data/evaluations/pexels-visual-supply-benchmark/` (git-ignored):
+  `01-pexels-video-temporal-contact-sheet.png`, `02-pexels-top3-search-results.png`
+  y `03-pexels-photo-vs-current-contact-sheet.png` (CURRENT vs PEXELS #1/#2/#3).
+  Sin juicio automático; **no se afirma `PEXELS_BETTER` ni
+  `PEXELS_PHOTOS_BETTER`**; pendiente de revisión humana.
+- Harness `tools/pexels_photo_supply_benchmark.py` + `tools/pexels_video_supply_benchmark.py`
+  (evaluation-only, stdlib urllib, import-safe/offline, User-Agent, key no
+  leak). Tests `tests/test_pexels_photo_supply_benchmark.py` (**30 passed**) +
+  `tests/test_pexels_video_supply_benchmark.py` (**30 passed**), sin llamadas
+  reales.
+- Ver `openspec/changes/pexels-visual-supply-benchmark/`.
 
 ## Investigación cerrada: `visual-fidelity-vlm-judge-v2` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
