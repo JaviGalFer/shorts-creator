@@ -109,11 +109,18 @@ frozen outcome is therefore `METADATA_SELECTION_EVIDENCE_INSUFFICIENT`; no
 strategy is selected and no metadata selector is validated or rejected.
 
 Metrics are reported in the artifact without changing any strategy: RAW
-top-1 preferred rate `0.8571428571` / macro pairwise `0.5`; A1 `1.0` / `1.0`;
-A2 `1.0` / `1.0`. A1 does not move PlayStation raw #3 ahead of #1; A2 does.
+top-1 preferred rate `0.8571428571` / macro pairwise `0.5` / mean preferred
+rank `1.2857142857`; A1 `1.0` / `1.0` / `1.0`; A2 `1.0` / `1.0` / `1.0`.
+A1 does not move PlayStation raw #3 ahead of #1; A2 does.
 The result cannot use these observations to bypass the frozen sufficiency gate.
 `preferredCandidateGateSurvival` is `NOT_COMPUTED`: Phase A deliberately does
 not import or alter the semantic runtime contract.
+
+Evidence hardening corrected a metric-window bug: `selectorRank` remains the
+global top-15 diagnostic rank, while every human top-3 metric now uses an
+explicit local `reviewWindowRank` from 1..3. This affects preferred rank and
+pairwise comparisons only; top-1, reorder counts, selector ties, sufficiency,
+and verdict criteria are unchanged.
 
 Phase B is not run and is not currently eligible: a pixel ranker cannot repair
 insufficient candidate-level human discrimination.

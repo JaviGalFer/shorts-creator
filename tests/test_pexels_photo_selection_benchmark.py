@@ -309,6 +309,45 @@ def test_evaluation_maps_aliases_and_computes_frozen_metrics():
     assert result["queries"][1]["top1Preferred"] is None
 
 
+def test_human_metrics_use_local_review_window_not_global_selector_rank():
+    manifest, preferences, scored = _synthetic_evaluation_inputs()
+    query = benchmark.CANONICAL_REVIEW_QUERIES[0]
+    # The preferred raw #2 is first within the reviewed top-3, but raw #4..#15
+    # are globally ahead. Human metrics must still see reviewWindowRank=1.
+    scored[query] = [
+        {
+            "candidateId": 20_000 + raw_rank,
+            "pexelsQueryRank": raw_rank,
+            "selectorScore": float(16 - raw_rank),
+            "selectorRank": raw_rank - 3,
+        }
+        for raw_rank in range(4, 16)
+    ] + [
+        {"candidateId": 20_001, "pexelsQueryRank": 1, "selectorScore": 3.0, "selectorRank": 14},
+        {"candidateId": 20_002, "pexelsQueryRank": 2, "selectorScore": 4.0, "selectorRank": 13},
+        {"candidateId": 20_003, "pexelsQueryRank": 3, "selectorScore": 2.0, "selectorRank": 15},
+    ]
+    # Keep the manifest/preference IDs aligned with the synthetic candidates.
+    manifest["queries"][0]["candidates"] = [
+        {"alias": "A", "candidateId": 20_001, "pexelsQueryRank": 1},
+        {"alias": "B", "candidateId": 20_002, "pexelsQueryRank": 2},
+        {"alias": "C", "candidateId": 20_003, "pexelsQueryRank": 3},
+    ]
+    result = benchmark.evaluate_against_preferences(
+        strategy=benchmark.LEXICAL_RECALL,
+        scored_candidates=scored,
+        manifest=manifest,
+        preferences=preferences,
+    )
+    first = result["queries"][0]
+    assert result["metrics"]["top1PreferredRate"] == 1.0
+    assert first["bestPreferredSelectorRank"] == 1
+    assert first["pairwiseAccuracy"] == 1.0
+    preferred = next(candidate for candidate in first["candidates"] if candidate["candidateId"] == 20_002)
+    assert preferred["selectorRank"] == 13
+    assert preferred["reviewWindowRank"] == 1
+
+
 def test_evaluation_records_selector_score_ties_and_playstation_check():
     manifest, preferences, scored = _synthetic_evaluation_inputs(tied=True)
     result = benchmark.evaluate_against_preferences(

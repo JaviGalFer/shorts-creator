@@ -14,6 +14,8 @@
 
 - [x] Reviewer filled only `preferredAliases`, `allUnusable`, and optional `notes`.
 - [x] Validate preference schema and run the frozen Phase A evaluation.
+- [x] Harden human metrics to use explicit local top-3 `reviewWindowRank` while
+  preserving global top-15 `selectorRank` diagnostics.
 
 ## Conditional Slice 2: Pixel Ranking
 

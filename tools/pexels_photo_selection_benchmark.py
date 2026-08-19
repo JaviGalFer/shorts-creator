@@ -434,6 +434,10 @@ def evaluate_against_preferences(
             (item for item in ordered if item["pexelsQueryRank"] <= 3),
             key=lambda item: item["selectorRank"],
         )
+        raw_window = [
+            {**item, "reviewWindowRank": rank}
+            for rank, item in enumerate(raw_window, start=1)
+        ]
         raw_top1 = next(item for item in ordered if item["pexelsQueryRank"] == 1)
         selected = raw_window[0]
         top1_preferred: bool | None = None
@@ -448,13 +452,13 @@ def evaluate_against_preferences(
             top1_preferred = selected["candidateId"] in preferred_ids
             top1_successes += int(top1_preferred)
             best_preferred_rank = min(
-                item["selectorRank"] for item in raw_window if item["candidateId"] in preferred_ids
+                item["reviewWindowRank"] for item in raw_window if item["candidateId"] in preferred_ids
             )
             preferred_ranks.append(best_preferred_rank)
             non_preferred = [item for item in raw_window if item["candidateId"] not in preferred_ids]
             if non_preferred:
                 correct = sum(
-                    preferred["selectorRank"] < non_preferred_candidate["selectorRank"]
+                    preferred["reviewWindowRank"] < non_preferred_candidate["reviewWindowRank"]
                     for preferred in raw_window if preferred["candidateId"] in preferred_ids
                     for non_preferred_candidate in non_preferred
                 )
@@ -479,6 +483,11 @@ def evaluate_against_preferences(
                     "pexelsQueryRank": item["pexelsQueryRank"],
                     "selectorScore": item["selectorScore"],
                     "selectorRank": item["selectorRank"],
+                    "reviewWindowRank": next(
+                        window_item["reviewWindowRank"]
+                        for window_item in raw_window
+                        if window_item["candidateId"] == item["candidateId"]
+                    ) if item["pexelsQueryRank"] <= 3 else None,
                 }
                 for item in ordered
             ],
@@ -492,7 +501,7 @@ def evaluate_against_preferences(
         })
 
     playstation = next(row for row in query_results if row["queryUsed"] == "PlayStation Nintendo 64 comparison photograph")
-    ranks = {candidate["pexelsQueryRank"]: candidate["selectorRank"] for candidate in playstation["candidates"]}
+    ranks = {candidate["pexelsQueryRank"]: candidate["reviewWindowRank"] for candidate in playstation["candidates"]}
     return {
         "strategy": strategy,
         "metrics": {
