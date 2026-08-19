@@ -2,7 +2,10 @@
 """Asset validation for render quality gate. Ensures no placeholder/invalid asset reaches final MP4."""
 
 import json
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -50,8 +53,58 @@ def _get_segment_asset(render_entry: dict, assets: list[dict]) -> dict | None:
     return None
 
 
+def _probe_video(path: Path, project_root: Path) -> dict | None:
+    """Probe a local video file via host ffprobe with Docker fallback.
+
+    Returns ``{"width", "height", "duration"}`` or ``None`` when the file
+    cannot be decoded. Never requires a host ffprobe as a hard dependency.
+    """
+    args = ["-v", "quiet", "-print_format", "json", "-show_streams", "-show_format", str(path)]
+    result = None
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe:
+        try:
+            result = subprocess.run([ffprobe] + args, capture_output=True, text=True, timeout=30)
+        except Exception:
+            result = None
+    if result is None or result.returncode != 0:
+        try:
+            env = os.environ.copy()
+            env.pop("DOCKER_API_VERSION", None)
+            ws_path = f"/workspace/{path.relative_to(project_root)}"
+            result = subprocess.run(
+                ["docker", "run", "--rm",
+                 "-v", f"{project_root}:/workspace",
+                 "--entrypoint", "ffprobe",
+                 "linuxserver/ffmpeg:latest",
+                 "-v", "quiet", "-print_format", "json",
+                 "-show_streams", "-show_format", ws_path],
+                capture_output=True, text=True, timeout=30, env=env,
+            )
+        except Exception:
+            return None
+    if result is None or result.returncode != 0:
+        return None
+    try:
+        data = json.loads(result.stdout)
+    except Exception:
+        return None
+    width = height = 0
+    for stream in data.get("streams", []):
+        if stream.get("codec_type") == "video":
+            width = int(stream.get("width", 0) or 0)
+            height = int(stream.get("height", 0) or 0)
+            break
+    duration = 0.0
+    try:
+        duration = float(data.get("format", {}).get("duration", 0) or 0)
+    except (TypeError, ValueError):
+        duration = 0.0
+    return {"width": width, "height": height, "duration": duration}
+
+
 def validate_asset_file(asset_path: str, project_root: Path, video_dir: Path | None = None,
-                       is_v2: bool = False) -> list[dict]:
+                       is_v2: bool = False, media_kind: str = "IMAGE") -> list[dict]:
     failures = []
     p = Path(asset_path)
     if not p.is_absolute():
@@ -61,6 +114,16 @@ def validate_asset_file(asset_path: str, project_root: Path, video_dir: Path | N
             p = project_root / asset_path
     if not p.exists():
         failures.append({"rule": "file_not_found", "message": f"Asset file not found: {asset_path}"})
+        return failures
+    if media_kind == "VIDEO":
+        info = _probe_video(p, project_root)
+        if info is None:
+            failures.append({"rule": "not_decodable", "message": f"Video asset cannot be decoded: {asset_path}"})
+            return failures
+        if info["width"] <= 0 or info["height"] <= 0:
+            failures.append({"rule": "invalid_video_dimensions", "message": f"Video asset has invalid dimensions ({info['width']}x{info['height']}): {asset_path}"})
+        if info["duration"] <= 0:
+            failures.append({"rule": "zero_duration", "message": f"Video asset has zero duration: {asset_path}"})
         return failures
     try:
         from PIL import Image, ImageStat
@@ -388,7 +451,10 @@ def validate_job_for_render(metadata: dict, project_root: Path, video_dir: Path 
             "failures": [],
         }
 
-        file_issues = validate_asset_file(asset_path, project_root, video_dir, is_v2=is_v2)
+        file_issues = validate_asset_file(
+            asset_path, project_root, video_dir, is_v2=is_v2,
+            media_kind=(seg_asset or {}).get("mediaKind", "IMAGE") if is_v2 else "IMAGE",
+        )
         placeholder_issues = detect_placeholder_content(entry, seg_asset, asset_path, is_v2=is_v2)
         metadata_issues = validate_metadata_completeness(seg_asset, entry, is_v2=is_v2)
         provider_issues = check_provider_allowed(seg_asset, is_v2=is_v2)
@@ -456,6 +522,7 @@ def validate_job_for_render(metadata: dict, project_root: Path, video_dir: Path 
         _v2_blocking_rules = {
             "segment_validation_fail", "renderability_fail", "negative_score",
             "file_not_found", "not_decodable", "dimensions_too_small",
+            "invalid_video_dimensions", "zero_duration",
             "placeholder_provider", "placeholder_filename",
             "no_asset_metadata", "missing_provider", "no_provenance",
         }

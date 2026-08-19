@@ -23,15 +23,18 @@
 - FIRST REAL VIDEO E2E BEFORE FURTHER VIDEO RESEARCH. Maximum two functional
   slices: VIDEO asset runtime through metadata/assets, then prepare/render plus
   bounded real validation.
-- Reuses existing `IMAGE | VIDEO` contracts. Pexels Video stays explicit opt-in
-  and `PLANNED` during Slice 1; MVP uses RAW ordering only, without query
-  adaptation, diversity/dedup, smart clip selection, Video audio or
-  OpenCLIP-on-MP4.
+- Reuses existing `IMAGE | VIDEO` contracts. Pexels Video stays explicit opt-in;
+  MVP uses RAW ordering only, without query adaptation, diversity/dedup, smart
+  clip selection, Video audio or OpenCLIP-on-MP4.
 - Slice 1 COMPLETE: capability-aware `visualMode` routing, Pexels Video
   adapter/portrait MP4 choice, lifecycle/downloader, bounded semantic
-  degradation, pixel NOT_APPLICABLE and public asset transport. Mocked/offline
-  suite: `1768 passed`; no Pexels network request. Slice 2 is the only
-  functional slice pending.
+  degradation, pixel NOT_APPLICABLE and public asset transport.
+- Slice 2 COMPLETE: prepare/renderTimeline transport, media-aware validation,
+  VIDEO FFmpeg inputs (`-stream_loop -1`, mute, 1080x1920 crop, LOOP_FROM_START),
+  selected-only cross-scene reservation and VIDEO sparse-metadata
+  partial-match policy. First real Video E2E `la-2026-08-19-235138` (dolphins)
+  reached `VALIDATED` with 4/4 VIDEO segments. `pexels.video.stock` is
+  `AVAILABLE` (explicit opt-in only). Suite: `1801 passed`; Closure pending.
 
 ## Cambio cerrado: `pexels-photo-selection-benchmark` — COMPLETED / VERIFIED / CLOSED
 

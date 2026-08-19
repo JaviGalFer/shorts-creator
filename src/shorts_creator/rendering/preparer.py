@@ -565,6 +565,10 @@ def build_render_timeline(scenes: list, assets: list, scenes_dir: Path,
                     "height": seg.get("height"),
                     "focalRegion": seg.get("focalRegion", "center"),
                     "cropMode": seg.get("cropMode", "full_map"),
+                    "mediaKind": seg.get("mediaKind", "IMAGE"),
+                    "mimeType": seg.get("mimeType", ""),
+                    "sourceDurationSec": seg.get("sourceDurationSec"),
+                    "fps": seg.get("fps"),
                 })
         elif segments:
             raw_fractions = []
@@ -624,6 +628,10 @@ def build_render_timeline(scenes: list, assets: list, scenes_dir: Path,
                     "height": seg.get("height"),
                     "focalRegion": seg.get("focalRegion", "center"),
                     "cropMode": seg.get("cropMode", "full_map"),
+                    "mediaKind": seg.get("mediaKind", "IMAGE"),
+                    "mimeType": seg.get("mimeType", ""),
+                    "sourceDurationSec": seg.get("sourceDurationSec"),
+                    "fps": seg.get("fps"),
                 })
                 cumulative = end_sec
         else:
@@ -646,6 +654,10 @@ def build_render_timeline(scenes: list, assets: list, scenes_dir: Path,
                 "height": None,
                 "focalRegion": "center",
                 "cropMode": "full_map",
+                "mediaKind": "IMAGE",
+                "mimeType": "",
+                "sourceDurationSec": None,
+                "fps": None,
             })
 
         accumulated_time += scene_duration

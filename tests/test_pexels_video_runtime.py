@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+import urllib.error
 from unittest.mock import patch
 
 from shorts_creator.assets.bridge import apply_visual_assets_v2_to_metadata
-from shorts_creator.assets.capabilities import AVAILABLE, get_provider_capability
+from shorts_creator.assets.capabilities import PLANNED, get_provider_capability
 from shorts_creator.assets.executor import _apply_visual_fidelity_gate, _resolve_pexels_videos, _search_semantic_ok, execute_visual_sourcing_plan_v2
 from shorts_creator.assets.providers.pexels_videos import (
     PexelsVideoSearchResult,
     descriptive_video_slug,
+    download_pexels_video,
     map_video_response,
 )
 from shorts_creator.assets.router import build_visual_sourcing_plan_v2
@@ -36,10 +38,10 @@ def _video(video_id: int = 1, **overrides) -> dict:
     return value
 
 
-def _available_video_capability(capability_id: str):
+def _planned_video_capability(capability_id: str):
     capability = get_provider_capability(capability_id)
     if capability and capability_id == "pexels.video.stock":
-        return replace(capability, runtime_status=AVAILABLE)
+        return replace(capability, runtime_status=PLANNED)
     return capability
 
 
@@ -85,10 +87,7 @@ def test_video_file_selection_rejects_hls_landscape_and_sub720():
         assert getattr(exc, "code", None) == "MALFORMED_RESPONSE"
 
 
-def test_router_is_capability_aware_and_keeps_video_planned_by_default(monkeypatch):
-    default = build_visual_sourcing_plan_v2(_plan("videos-only"), request_visuals={"sourceProviders": ["pexels"], "visualMode": "VIDEOS_ONLY"})
-    assert default["sourcingPlan"]["segments"][0]["routingStatus"] == "UNROUTABLE"
-    monkeypatch.setattr("shorts_creator.assets.router.get_provider_capability", _available_video_capability)
+def test_router_routes_video_when_available():
     routed = build_visual_sourcing_plan_v2(_plan("videos-only"), request_visuals={"sourceProviders": ["pexels"], "visualMode": "VIDEOS_ONLY"})
     candidate = routed["sourcingPlan"]["segments"][0]["providerCandidates"][0]
     assert candidate["capabilityId"] == "pexels.video.stock"
@@ -97,8 +96,13 @@ def test_router_is_capability_aware_and_keeps_video_planned_by_default(monkeypat
     assert images["sourcingPlan"]["segments"][0]["providerCandidates"][0]["capabilityId"] == "pexels.photos.stock"
 
 
-def test_videos_only_exact_form_is_unroutable(monkeypatch):
-    monkeypatch.setattr("shorts_creator.assets.router.get_provider_capability", _available_video_capability)
+def test_router_keeps_video_unroutable_when_planned(monkeypatch):
+    monkeypatch.setattr("shorts_creator.assets.router.get_provider_capability", _planned_video_capability)
+    routed = build_visual_sourcing_plan_v2(_plan("videos-only"), request_visuals={"sourceProviders": ["pexels"], "visualMode": "VIDEOS_ONLY"})
+    assert routed["sourcingPlan"]["segments"][0]["routingStatus"] == "UNROUTABLE"
+
+
+def test_videos_only_exact_form_is_unroutable():
     routed = build_visual_sourcing_plan_v2(_plan("videos-only", form="diagram"), request_visuals={"sourceProviders": ["pexels"], "visualMode": "VIDEOS_ONLY"})
     assert routed["sourcingPlan"]["segments"][0]["routingStatus"] == "UNROUTABLE"
 
@@ -149,3 +153,206 @@ def test_executor_dispatches_pexels_by_capability(monkeypatch, tmp_path):
     })
     result = execute_visual_sourcing_plan_v2(plan, {"pexels": {"enabled": True, "implemented": True, "requiresApiKey": True, "apiKeyPresent": True}}, dry_run=False, job_dir=str(tmp_path))
     assert result["resolvedAssets"][0]["mediaKind"] == VIDEO
+
+
+def _video_candidate_envelope():
+    return map_video_response({"videos": [_video(url="https://www.pexels.com/video/water-crashing-over-the-rocks-1093662/")]}, "water rocks").candidates[0].envelope
+
+
+def _fake_response(content_type="video/mp4", body=b"mp4"):
+    class _Resp:
+        def __init__(self):
+            self.headers = {"Content-Type": content_type}
+            self._body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n=-1):
+            if n == -1:
+                return self._body
+            data = self._body
+            self._body = b""
+            return data
+
+    return _Resp()
+
+
+def test_downloader_sends_user_agent(tmp_path):
+    captured = {}
+
+    def _urlopen(request, timeout=None):
+        captured["ua"] = request.get_header("User-agent") or request.get_header("User-Agent")
+        return _fake_response(body=b"mp4")
+
+    with patch("shorts_creator.assets.providers.pexels_videos.urllib.request.urlopen", side_effect=_urlopen):
+        result = download_pexels_video(_video_candidate_envelope(), tmp_path / "a.mp4")
+    assert result["ok"] is True
+    assert captured["ua"] == "shorts-creator/1.0"
+
+
+def test_downloader_rejects_non_mp4_mime(tmp_path):
+    with patch("shorts_creator.assets.providers.pexels_videos.urllib.request.urlopen", return_value=_fake_response("image/jpeg")):
+        result = download_pexels_video(_video_candidate_envelope(), tmp_path / "a.mp4")
+    assert result["error"] == "VIDEO_MIME_MISMATCH"
+    assert not (tmp_path / "a.mp4").exists()
+
+
+def test_downloader_handles_403(tmp_path):
+    def _raise(*a, **k):
+        raise urllib.error.HTTPError("https://x", 403, "Forbidden", {}, None)
+
+    with patch("shorts_creator.assets.providers.pexels_videos.urllib.request.urlopen", side_effect=_raise):
+        result = download_pexels_video(_video_candidate_envelope(), tmp_path / "a.mp4")
+    assert result["error"] == "VIDEO_ACCESS_DENIED"
+    assert not (tmp_path / "a.mp4").exists()
+
+
+# ── Fix 1: selected-only cross-scene reservation ─────────────────────────────
+
+
+def _dl_ok():
+    return lambda envelope, path: (path.parent.mkdir(parents=True, exist_ok=True), path.write_bytes(b"mp4"), {"ok": True, "size": 3, "mimeType": "video/mp4"})[-1]
+
+
+def _resolve_videos(excluded_source, excluded_file, videos, query_texts, download=None):
+    search = PexelsVideoSearchResult("OK", tuple(map_video_response({"videos": videos}, query_texts[0]).candidates), {})
+    with patch("shorts_creator.assets.providers.pexels_videos.search_pexels_videos", return_value=search), patch(
+        "shorts_creator.assets.providers.pexels_videos.download_pexels_video",
+        side_effect=download if download is not None else _dl_ok(),
+    ):
+        return _resolve_pexels_videos(
+            {"capabilityId": "pexels.video.stock", "queryStrategy": "search"},
+            {"segmentIndex": 1, "assetPreference": "photograph", "subjects": [], "searchQueries": [{"text": q} for q in query_texts]},
+            {}, str(Path("/tmp/resv-test")), [], excluded_source_urls=excluded_source, excluded_file_urls=excluded_file,
+            provider_credentials={"pexels": {"apiKey": "secret"}},
+        )
+
+
+def test_rejected_video_candidate_does_not_poison_global_sets(tmp_path):
+    excluded_source, excluded_file = set(), set()
+    resolved = _resolve_videos(excluded_source, excluded_file, [_video(url="https://www.pexels.com/video/unrelated-footage-123/", tags=[])], ["water rocks photograph"])
+    assert resolved["status"] == "NO_RESULTS"
+    assert excluded_source == set()
+    assert excluded_file == set()
+
+
+def test_download_failed_video_candidate_does_not_poison_global_sets(tmp_path):
+    excluded_source, excluded_file = set(), set()
+    resolved = _resolve_videos(excluded_source, excluded_file, [_video(url="https://www.pexels.com/video/water-rocks-456/", tags=[])], ["water rocks photograph"], download=lambda envelope, path: {"ok": False, "error": "VIDEO_DOWNLOAD_FAILED"})
+    assert resolved["status"] == "DOWNLOAD_FAILED"
+    assert excluded_source == set()
+    assert excluded_file == set()
+
+
+def test_selected_video_candidate_enters_global_sets(tmp_path):
+    excluded_source, excluded_file = set(), set()
+    resolved = _resolve_videos(excluded_source, excluded_file, [_video(url="https://www.pexels.com/video/water-rocks-456/", tags=[])], ["water rocks photograph"])
+    assert resolved["status"] == "RESOLVED"
+    assert resolved["sourceUrl"] in excluded_source
+    assert resolved["fileUrl"] in excluded_file
+
+
+def test_selected_video_candidate_skipped_by_later_resolver(tmp_path):
+    excluded_source, excluded_file = set(), set()
+    videos = [_video(1, url="https://www.pexels.com/video/water-rocks-456/", tags=[])]
+    first = _resolve_videos(excluded_source, excluded_file, videos, ["water rocks photograph"])
+    assert first["status"] == "RESOLVED"
+    second = _resolve_videos(excluded_source, excluded_file, videos, ["water rocks photograph"])
+    assert second["status"] == "NO_RESULTS"
+
+
+def test_local_repeated_video_candidate_evaluated_once(tmp_path):
+    import shorts_creator.assets.executor as ex
+
+    videos = [_video(1, url="https://www.pexels.com/video/water-rocks-456/", tags=[])]
+    search = PexelsVideoSearchResult("OK", tuple(map_video_response({"videos": videos}, "water rocks photograph").candidates), {})
+    calls = []
+    orig = ex._evaluate_semantic
+
+    def spy(segment, candidate):
+        calls.append(candidate.get("queryUsed"))
+        return orig(segment, candidate)
+
+    with patch("shorts_creator.assets.providers.pexels_videos.search_pexels_videos", side_effect=lambda q, api_key=None, timeout=30: search), patch(
+        "shorts_creator.assets.executor._evaluate_semantic", side_effect=spy), patch(
+        "shorts_creator.assets.providers.pexels_videos.download_pexels_video", side_effect=_dl_ok(),
+    ):
+        resolved = _resolve_pexels_videos(
+            {"capabilityId": "pexels.video.stock", "queryStrategy": "search"},
+            {"segmentIndex": 1, "assetPreference": "photograph", "subjects": [], "searchQueries": [{"text": "water rocks photograph"}, {"text": "water rocks closeup"}]},
+            {}, str(tmp_path), [], provider_credentials={"pexels": {"apiKey": "secret"}},
+        )
+    assert resolved["status"] == "RESOLVED"
+    assert len(calls) == 1
+
+
+# ── Fix 2: VIDEO sparse-metadata partial-match policy ────────────────────────
+
+
+def test_video_sparse_partial_match_degraded_accept(tmp_path):
+    excluded_source, excluded_file = set(), set()
+    resolved = _resolve_videos(
+        excluded_source, excluded_file,
+        [_video(url="https://www.pexels.com/video/aerial-view-of-turquoise-ocean-waters-123/", tags=[])],
+        ["tropical ocean landscape"],
+    )
+    assert resolved["status"] == "RESOLVED"
+    assessment = resolved["semanticAssessment"]
+    assert assessment["verdict"] == "IRRELEVANT"
+    assert resolved["semanticDegradation"] == "PROVIDER_METADATA_PARTIAL_MATCH"
+    assert assessment["matchedAnchors"]
+    assert "allowSemanticDegradation" not in assessment
+    assert "allowUnscorable" not in assessment
+
+
+def test_video_sparse_zero_matched_anchors_rejected(tmp_path):
+    excluded_source, excluded_file = set(), set()
+    resolved = _resolve_videos(
+        excluded_source, excluded_file,
+        [_video(url="https://www.pexels.com/video/completely-unrelated-footage-999/", tags=[])],
+        ["tropical ocean landscape"],
+    )
+    assert resolved["status"] == "NO_RESULTS"
+    assert excluded_source == set()
+    assert excluded_file == set()
+
+
+def test_video_rich_metadata_mismatch_rejected(tmp_path):
+    excluded_source, excluded_file = set(), set()
+    resolved = _resolve_videos(
+        excluded_source, excluded_file,
+        [_video(url="https://www.pexels.com/video/mountain-forest-777/", tags=["mountain", "forest"])],
+        ["tropical ocean landscape"],
+    )
+    assert resolved["status"] == "NO_RESULTS"
+
+
+def test_video_partial_match_postcondition_allowed():
+    ok = _search_semantic_ok({
+        "mediaKind": VIDEO,
+        "semanticAssessment": {"verdict": "IRRELEVANT", "matchedAnchors": ["ocean"]},
+        "semanticDegradation": "PROVIDER_METADATA_PARTIAL_MATCH",
+    }, "search")
+    assert ok is True
+
+
+def test_video_partial_match_without_anchors_rejected():
+    ok = _search_semantic_ok({
+        "mediaKind": VIDEO,
+        "semanticAssessment": {"verdict": "IRRELEVANT", "matchedAnchors": []},
+        "semanticDegradation": "PROVIDER_METADATA_PARTIAL_MATCH",
+    }, "search")
+    assert ok is False
+
+
+def test_image_partial_match_flag_rejected():
+    ok = _search_semantic_ok({
+        "mediaKind": "IMAGE",
+        "semanticAssessment": {"verdict": "IRRELEVANT", "matchedAnchors": ["ocean"]},
+        "semanticDegradation": "PROVIDER_METADATA_PARTIAL_MATCH",
+    }, "search")
+    assert ok is False

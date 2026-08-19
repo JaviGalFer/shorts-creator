@@ -18,11 +18,20 @@
 
 ## Slice 2: VIDEO Render And First Real E2E
 
-- [ ] Transport VIDEO facts through prepare/renderTimeline.
-- [ ] Add VIDEO FFmpeg inputs, mute, crop, trim/loop and media-aware validation.
-- [ ] Run mocked regressions and local renderer Smoke B.
-- [ ] Run real Pexels provider Smoke A and canonical full E2E C.
-- [ ] Flip `pexels.video.stock` to AVAILABLE only after all Slice 2 requirements pass.
+- [x] Transport VIDEO facts through prepare/renderTimeline.
+- [x] Add VIDEO FFmpeg inputs, mute, crop, trim/loop and media-aware validation.
+- [x] Run mocked regressions and local renderer Smoke B.
+- [x] Run real Pexels provider Smoke A (ASSETS_READY 1/1).
+- [x] Fix selected-only cross-scene reservation for `pexels.video.stock` (a
+      candidate is excluded from later scenes only after it is selected; local
+      dedup avoids re-evaluating the same clip within one resolver).
+- [x] Add VIDEO sparse-metadata partial-match policy
+      (`PROVIDER_METADATA_PARTIAL_MATCH`) for photograph IRRELEVANT candidates
+      with at least one matched discriminative anchor and empty tags.
+- [x] Run canonical full E2E C (`la-2026-08-19-235138`, dolphins): 4/4 VIDEO
+      segments resolved, `VALIDATED`, 1080x1920, one narration audio stream, no
+      Pexels clip audio, duration compliant.
+- [x] Flip `pexels.video.stock` to AVAILABLE (explicit opt-in only).
 
 ## Out Of Scope
 

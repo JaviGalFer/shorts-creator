@@ -686,11 +686,21 @@ def _search_semantic_ok(resolved: dict, strategy: str) -> bool:
     sem = resolved.get("semanticAssessment") or {}
     if sem.get("verdict") == RELEVANT:
         return True
-    return (
-        resolved.get("mediaKind") == VIDEO
-        and sem.get("verdict") == "UNSCORABLE"
-        and resolved.get("semanticDegradation") == "PROVIDER_METADATA_INSUFFICIENT"
-    )
+    if resolved.get("mediaKind") != VIDEO:
+        return False
+    degradation = resolved.get("semanticDegradation")
+    if (
+        sem.get("verdict") == "UNSCORABLE"
+        and degradation == "PROVIDER_METADATA_INSUFFICIENT"
+    ):
+        return True
+    if (
+        sem.get("verdict") == "IRRELEVANT"
+        and degradation == "PROVIDER_METADATA_PARTIAL_MATCH"
+        and sem.get("matchedAnchors")
+    ):
+        return True
+    return False
 
 
 def _evaluate_semantic(segment: dict, candidate: dict) -> dict:
@@ -1506,7 +1516,7 @@ def _resolve_pexels_videos(
     creds = provider_credentials or {}
     api_key = (creds.get("pexels", {}) or {}).get("apiKey", "")
     if not isinstance(api_key, str) or not api_key.strip():
-        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": "MISSING_API_KEY", "provider": "pexels", "reason": "PEXELS_API_KEY not configured in provider_credentials"}
+        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": "MISSING_API_KEY", "provider": "pexels", "mediaKind": VIDEO, "capabilityId": "pexels.video.stock", "reason": "PEXELS_API_KEY not configured in provider_credentials"}
     _, queries = _dispatch_inputs(candidate, segment)
     query_texts = _extract_query_texts(queries)
     try:
@@ -1514,6 +1524,7 @@ def _resolve_pexels_videos(
         from shorts_creator.assets.providers.pexels_videos import (
             NO_RESULTS as PEXELS_NO_RESULTS,
             PROVIDER_METADATA_INSUFFICIENT,
+            PROVIDER_METADATA_PARTIAL_MATCH,
             bind_lifecycle_positions,
             download_pexels_video,
             search_pexels_videos,
@@ -1529,6 +1540,8 @@ def _resolve_pexels_videos(
 
         def envelopes() -> Iterable[CandidateEnvelope]:
             stream_rank = 0
+            local_seen_source_urls: set[str] = set()
+            local_seen_file_urls: set[str] = set()
             for query_index, query_text in enumerate(query_texts):
                 result = search_pexels_videos(query_text, api_key=api_key)
                 if result.telemetry:
@@ -1540,14 +1553,25 @@ def _resolve_pexels_videos(
                     envelope = item.envelope
                     if not envelope.acquisition_url:
                         continue
-                    if excluded_source_urls is not None and envelope.source_url in excluded_source_urls:
+                    source_url = envelope.source_url or ""
+                    acquisition_url = envelope.acquisition_url
+                    # Global sets represent clips already SELECTED by earlier
+                    # scenes. Skip those, but do not reserve a discovered
+                    # clip globally until it is actually selected.
+                    if excluded_source_urls is not None and source_url in excluded_source_urls:
                         continue
-                    if excluded_file_urls is not None and envelope.acquisition_url in excluded_file_urls:
+                    if excluded_file_urls is not None and acquisition_url in excluded_file_urls:
                         continue
-                    if excluded_source_urls is not None:
-                        excluded_source_urls.add(envelope.source_url or "")
-                    if excluded_file_urls is not None:
-                        excluded_file_urls.add(envelope.acquisition_url)
+                    # Local dedup: avoid evaluating the same clip twice within
+                    # this resolver (across queries/pages of the same segment).
+                    if source_url and source_url in local_seen_source_urls:
+                        continue
+                    if acquisition_url and acquisition_url in local_seen_file_urls:
+                        continue
+                    if source_url:
+                        local_seen_source_urls.add(source_url)
+                    if acquisition_url:
+                        local_seen_file_urls.add(acquisition_url)
                     page.append(item)
                 positioned = bind_lifecycle_positions(tuple(page), query_index=query_index, provider_rank_start=stream_rank)
                 stream_rank += len(positioned)
@@ -1567,6 +1591,20 @@ def _resolve_pexels_videos(
                 assessment = dict(assessment)
                 assessment["allowUnscorable"] = True
                 assessment["semanticDegradation"] = PROVIDER_METADATA_INSUFFICIENT
+            elif (
+                assessment.get("verdict") == "IRRELEVANT"
+                and asset_pref == "photograph"
+                and assessment.get("anchorTerms")
+                and assessment.get("matchedAnchors")
+                and not (native_by_envelope[id(envelope)].get("tags") or [])
+            ):
+                # Pexels Video photograph with sparse provider metadata: the
+                # slug matched at least one discriminative anchor but not enough
+                # for the generic threshold. Keep the original IRRELEVANT
+                # verdict, but degrade explicitly instead of rejecting.
+                assessment = dict(assessment)
+                assessment["allowSemanticDegradation"] = True
+                assessment["semanticDegradation"] = PROVIDER_METADATA_PARTIAL_MATCH
             semantic_assessments[id(envelope)] = assessment
             return assessment
 
@@ -1598,6 +1636,13 @@ def _resolve_pexels_videos(
             relative_path, _, result = download_results[id(selected)]
             assessment = dict(semantic_assessments[id(selected)])
             assessment.pop("allowUnscorable", None)
+            assessment.pop("allowSemanticDegradation", None)
+            # Selected-only cross-scene reservation: only a clip that actually
+            # became the segment's asset is excluded from later scenes.
+            if excluded_source_urls is not None and selected.source_url:
+                excluded_source_urls.add(selected.source_url)
+            if excluded_file_urls is not None and selected.acquisition_url:
+                excluded_file_urls.add(selected.acquisition_url)
             resolved = {
                 "segmentIndex": segment_idx, "assetPreference": asset_pref, "status": "RESOLVED",
                 "provider": "pexels", "mediaKind": VIDEO, "capabilityId": selected.capability_id,
@@ -1616,12 +1661,12 @@ def _resolve_pexels_videos(
                 resolved["semanticDegradation"] = assessment["semanticDegradation"]
             return resolved
         status = "DOWNLOAD_FAILED" if download_errors else "NO_RESULTS"
-        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": status, "provider": "pexels", "searchQueriesTried": query_texts, "reason": "Pexels Video returned no candidate accepted by the lifecycle", "downloadErrors": download_errors}
+        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": status, "provider": "pexels", "mediaKind": VIDEO, "capabilityId": "pexels.video.stock", "searchQueriesTried": query_texts, "reason": "Pexels Video returned no candidate accepted by the lifecycle", "downloadErrors": download_errors}
     except PexelsClientError as exc:
-        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": "PROVIDER_ERROR", "provider": "pexels", "searchQueriesTried": query_texts, "reason": exc.code}
+        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": "PROVIDER_ERROR", "provider": "pexels", "mediaKind": VIDEO, "capabilityId": "pexels.video.stock", "searchQueriesTried": query_texts, "reason": exc.code}
     except Exception:
         warnings.append(_warn("PROVIDER_ERROR:pexels", "Pexels provider error", ""))
-        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": "PROVIDER_ERROR", "provider": "pexels", "searchQueriesTried": query_texts, "reason": "PROVIDER_ERROR"}
+        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": "PROVIDER_ERROR", "provider": "pexels", "mediaKind": VIDEO, "capabilityId": "pexels.video.stock", "searchQueriesTried": query_texts, "reason": "PROVIDER_ERROR"}
 
 
 def _increment_live_unresolved(

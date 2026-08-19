@@ -9,7 +9,6 @@ from shorts_creator.assets.capabilities import (
     CONDITIONAL_FIT,
     DIRECT,
     IMAGE,
-    PLANNED,
     PROVIDER_CAPABILITIES,
     UNSUPPORTED,
     UNDECLARED,
@@ -35,11 +34,11 @@ def test_pexels_photo_and_video_are_separate_capabilities():
     assert photos.capability_id != video.capability_id
 
 
-def test_only_pexels_photos_is_runtime_available():
+def test_pexels_photos_and_video_are_runtime_available():
     pexels = [capability for capability in PROVIDER_CAPABILITIES if capability.provider == "pexels"]
     assert {capability.capability_id: capability.runtime_status for capability in pexels} == {
         "pexels.photos.stock": AVAILABLE,
-        "pexels.video.stock": PLANNED,
+        "pexels.video.stock": AVAILABLE,
     }
     assert {capability.evidence_version for capability in pexels} == {
         "pexels-provider-fit-benchmark"
@@ -58,7 +57,7 @@ def test_pexels_form_fit_preserves_benchmark_semantics():
         assert video.visual_form_fit[form] == UNSUPPORTED
 
 
-def test_current_available_capabilities_are_image_stock_search_only():
+def test_current_available_capabilities_cover_image_and_video_stock_search():
     available = [
         capability
         for capability in PROVIDER_CAPABILITIES
@@ -67,7 +66,7 @@ def test_current_available_capabilities_are_image_stock_search_only():
     assert {capability.provider for capability in available} == {
         "wikimedia_commons", "pixabay", "pexels",
     }
-    assert {capability.media_kind for capability in available} == {IMAGE}
+    assert {capability.media_kind for capability in available} == {IMAGE, VIDEO}
 
 
 def test_missing_visual_form_fit_is_undeclared_not_unsupported():

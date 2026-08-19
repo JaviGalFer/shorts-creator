@@ -11,7 +11,7 @@ import urllib.request
 from typing import Any, Mapping
 
 from shorts_creator.assets.candidates import CandidateAttribution, CandidateEnvelope, CandidateSemanticMetadata, RAW
-from shorts_creator.assets.providers.pexels import MALFORMED_RESPONSE, PexelsClientError, get_json, resolve_pexels_api_key
+from shorts_creator.assets.providers.pexels import MALFORMED_RESPONSE, PEXELS_USER_AGENT, PexelsClientError, get_json, resolve_pexels_api_key
 from shorts_creator.contracts.visual_media import VIDEO
 
 PEXELS_VIDEOS_SEARCH_PATH = "/v1/videos/search"
@@ -20,6 +20,7 @@ PEXELS_VIDEOS_PARAMS: Mapping[str, str | int] = {
 }
 NO_RESULTS = "NO_RESULTS"
 PROVIDER_METADATA_INSUFFICIENT = "PROVIDER_METADATA_INSUFFICIENT"
+PROVIDER_METADATA_PARTIAL_MATCH = "PROVIDER_METADATA_PARTIAL_MATCH"
 _SLUG_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
@@ -161,7 +162,11 @@ def download_pexels_video(candidate: CandidateEnvelope, destination: Path, *, ti
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(".mp4.part")
     try:
-        with urllib.request.urlopen(candidate.acquisition_url, timeout=timeout) as response:
+        request = urllib.request.Request(
+            candidate.acquisition_url,
+            headers={"User-Agent": PEXELS_USER_AGENT},
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             content_type = (response.headers.get("Content-Type") or "").split(";", 1)[0].lower()
             if content_type != "video/mp4":
                 return {"ok": False, "error": "VIDEO_MIME_MISMATCH", "mimeType": content_type}
@@ -173,6 +178,10 @@ def download_pexels_video(candidate: CandidateEnvelope, destination: Path, *, ti
             return {"ok": False, "error": "VIDEO_EMPTY_BODY"}
         os.replace(temporary, destination)
         return {"ok": True, "size": size, "mimeType": "video/mp4"}
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return {"ok": False, "error": "VIDEO_ACCESS_DENIED", "status": exc.code}
+        return {"ok": False, "error": "VIDEO_DOWNLOAD_FAILED", "status": exc.code}
     except (urllib.error.URLError, OSError, TimeoutError):
         return {"ok": False, "error": "VIDEO_DOWNLOAD_FAILED"}
     finally:

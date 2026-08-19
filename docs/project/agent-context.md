@@ -4,14 +4,22 @@
 - FIRST REAL VIDEO E2E BEFORE FURTHER VIDEO RESEARCH. Two functional slices
   maximum: Slice 1 provides Pexels Video through public metadata/assets with
   mocked/offline validation; Slice 2 adds prepare/render VIDEO support and
-  bounded real Smoke A/B/E2E C. Pexels Video remains PLANNED until Slice 2;
-  it is explicit opt-in, RAW-order only, with no query adaptation,
-  diversity/dedup, smart clip selection, Video audio or OpenCLIP-on-MP4.
+  bounded real Smoke A/B/E2E C. Pexels Video is explicit opt-in, RAW-order
+  only, with no query adaptation, diversity/dedup, smart clip selection, Video
+  audio or OpenCLIP-on-MP4.
 - Slice 1 is complete: CLI/request policy, capability-aware routing, RAW Pexels
   Video adapter and deterministic portrait MP4 selection, lifecycle/downloader,
   narrow semantic metadata degradation, VIDEO pixel bypass, public bridge
-  transport and assets-stage contract. All validation is mocked/offline;
-  Pexels Video remains PLANNED pending Slice 2 rendering and real smokes.
+  transport and assets-stage contract.
+- Slice 2 is complete: prepare/renderTimeline transport, media-aware asset
+  validation (ffprobe/Docker for VIDEO, Pillow for IMAGE), VIDEO FFmpeg inputs
+  (`-stream_loop -1`, mute, crop 1080x1920, LOOP_FROM_START), selected-only
+  cross-scene reservation for `pexels.video.stock`, and a narrow VIDEO
+  sparse-metadata partial-match policy (`PROVIDER_METADATA_PARTIAL_MATCH`).
+  First real Video E2E `la-2026-08-19-235138` (dolphins) reached `VALIDATED`
+  with 4/4 VIDEO segments and one narration-only audio stream.
+  `pexels.video.stock` is now `AVAILABLE` (explicit opt-in only). Closure is
+  pending.
 
 ## Closed Change: pexels-photo-selection-benchmark — COMPLETED / VERIFIED / CLOSED
 - Evaluation-only investigation that froze a candidate-ordering benchmark before
