@@ -1,6 +1,6 @@
 # Tasks: pexels-photos-runtime
 
-**Status: ACTIVE. Two functional slices maximum.**
+**Status: COMPLETED / VERIFIED / CLOSED. Two functional slices maximum.**
 
 ## Preconditions
 
@@ -21,12 +21,12 @@
 - [x] Wire the existing lifecycle, downloader, semantic gate and pixel gate.
 - [x] Persist bridge provenance and preserve provider failover/order.
 - [x] Flip `pexels.photos.stock` from PLANNED to AVAILABLE atomically after all requirements pass.
-- [x] Add mocked integration tests and bounded real Photos smokes: Smoke A one request/resolved; Smoke B five requests, `ASSETS_PARTIAL`, five resolved segments.
+- [x] Add mocked integration tests and bounded real Photos smokes: Smoke A one request/resolved; Smoke B `ASSETS_PARTIAL`, five of seven segments resolved, with request count conservatively UNKNOWN.
 
 ## Closure
 
-- [ ] Review scope, test evidence, real request count and docs.
-- [ ] Full suite and `git diff --check`.
+- [x] Review scope, test evidence, bounded smoke evidence and docs.
+- [x] Full suite and `git diff --check`.
 - [ ] Merge only in a separate authorized session.
 
 ## Out Of Scope

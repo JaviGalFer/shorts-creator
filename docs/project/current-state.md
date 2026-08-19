@@ -1,6 +1,24 @@
 # Estado actual del proyecto
 
-**Última actualización:** 2026-08-19
+**Última actualización:** 2026-08-20
+
+## Cambio cerrado: `pexels-photos-runtime` — COMPLETED / VERIFIED / CLOSED
+
+- Pexels Photos is `AVAILABLE` as an explicit opt-in IMAGE/STOCK provider. It
+  never enters defaults; Pexels Video remains `PLANNED`.
+- Shared client, Photos adapter, provisional BM25 ordering, provider-fit,
+  existing lifecycle/gates, fallback and bridge provenance are implemented.
+  BM25 is `PROVISIONAL_BM25` / `NOT VALIDATED`; semantic and pixel gates remain
+  the acceptance authority.
+- Smoke A: one integrated request, `ASSETS_READY`, 1/1 resolved,
+  `RELEVANT`, pixel gate `DISABLED`, raw rank 15, provider rank 1, remaining
+  24848. Smoke B: bounded run, 5/7 resolved, `ASSETS_PARTIAL`; remaining
+  decreased 24847 → 24841, exact request count `UNKNOWN`.
+- Validation: Slice 1 `99` focused / `1751` full; Slice 2 `333` focused; closure
+  suite `1758 passed, 0 failed`; `git diff --check` clean.
+- Next product direction: `pexels-video-runtime-mvp`, reusing the shared Pexels
+  client and potentially introducing the minimum generic `IMAGE | VIDEO`
+  transport contract in its first slice. No change opened here.
 
 ## Cambio cerrado: `pexels-photo-selection-benchmark` — COMPLETED / VERIFIED / CLOSED
 
@@ -9,13 +27,12 @@
   selected strategy, `phaseBRequired=false`. Solo 2 queries discriminating (min
   8); A1 no valida, A2 no valida ni NOT_USEFUL (señal PlayStation prometedora).
   Sin runtime, sin Phase B/OpenCLIP.
-- **Siguiente change de producto: `pexels-photos-runtime`** (Pexels Photos
-  opt-in, nunca default). A2 BM25 usable como top-N PROVISIONAL (documentado
+- Pexels Photos runtime is now completed; A2 BM25 remains usable as top-N
+  PROVISIONAL (documentado
   NOT VALIDATED, decisión de ingeniería reversible, no conclusión del
   benchmark); preservar `pexelsQueryRank`, separar futuro `providerRank`;
   semantic/pixel gates siguen siendo autoridad de acceptance; fallback
-  permanece; telemetry/provenance para detectar problemas reales. Pexels Photos
-  continúa `PLANNED` hasta runtime implementado y probado.
+  permanece; telemetry/provenance para detectar problemas reales.
 - `pexels-photo-selection-evidence-extension`: DEFERRED / OPTIONAL, revisit solo
   si evidencia real del runtime lo requiere (no es el siguiente change).
 
@@ -33,7 +50,8 @@
   `mode: images` legado significan `IMAGES_ONLY`. Conflicto explícito si ambos
   se contradicen. MIXED es diversidad best-effort, nunca obligación ni descenso
   de calidad.
-- El registry separa `pexels.photos.stock` (IMAGE, PLANNED, photograph DIRECT)
+- El registry separa `pexels.photos.stock` (IMAGE, AVAILABLE, opt-in explícito,
+  photograph DIRECT)
   de `pexels.video.stock` (VIDEO, PLANNED, photograph CONDITIONAL); las formas
   exactas son UNSUPPORTED según `pexels-provider-fit-benchmark`. No hay claim de
   runtime ni secretos en registry.

@@ -25,7 +25,7 @@
   The historical pairwise evidence PlayStation raw #3 > raw #1 stays external
   to the blinded review.
 
-## Active Product Change: pexels-photos-runtime
+## Closed Change: pexels-photos-runtime — COMPLETED / VERIFIED / CLOSED
 - Image-only Pexels Photos provider runtime. First version uses Pexels Photos as
   explicit opt-in (never default). A2 BM25 is usable as a PROVISIONAL top-N
   heuristic, explicitly documented as NOT VALIDATED — a reversible engineering
@@ -42,6 +42,10 @@
   resolved five of seven segments and ended `ASSETS_PARTIAL` for explainable
   provider-fit/gate outcomes. OpenCLIP was not activated; pixel gate bypass was
   recorded by the existing fail-soft contract.
+- Next product direction: `pexels-video-runtime-mvp`; it may introduce the
+  minimum generic `IMAGE | VIDEO` transport contract in its first slice and
+  should reuse the shared Pexels client. `pexels-photo-selection-evidence-extension`
+  remains DEFERRED / OPTIONAL and is not next.
 
 ## Deferred (Optional) Research: pexels-photo-selection-evidence-extension
 - DEFERRED / OPTIONAL, NOT the next change. Only reconsidered if real runtime
@@ -65,8 +69,9 @@
 - `MediaStrategyDecision` is pure and records explicit degradations. Provider
   selection remains outside the LLM and outside this slice; sourceProviders is
   still the explicit user/operations policy for later capability intersection.
-- Registry has separate planned Pexels Photos IMAGE/STOCK and Pexels Video
-  VIDEO/STOCK capabilities. Photos photograph fit is DIRECT; Video is
+- Registry has separate Pexels Photos IMAGE/STOCK and Pexels Video VIDEO/STOCK
+  capabilities. Photos is AVAILABLE only by explicit opt-in and photograph fit
+  is DIRECT; Video is
   CONDITIONAL (`ELIGIBLE_CANDIDATE` evidence); exact forms are UNSUPPORTED.
 - Validation: focused `130 passed`; full suite `1703 passed, 0 failed`;
   `git diff --check` clean.
@@ -179,7 +184,8 @@
 - Per-scene TTS runtime is provider-generic (`generic-tts-provider-runtime`, CLOSED): `generate_audio_with_timestamps()` takes `tts_provider`; Edge remains default/validated. ElevenLabs native `/with-timestamps` timing implemented with character-to-word normalization. Runtime config hardening resolves provider voice/secrets/model from project `.env` then process env, computes it once in `generate_audio()`, and applies it consistently to availability and synthesis; provider voice wins over the implicit Edge default; the API key never persists. Continuous mode is Edge-only (`CONTINUOUS_TTS_PROVIDER_UNSUPPORTED` for non-Edge).
 - Job-level TTS config plumbing (Slice 3): `bin/run_job.py` exposes `--tts-provider --voice --subtitle-timing-provider`; the orchestrator resolves the effective config once (`resolve_audio_job_config` in the audio domain) and threads it to the `script` stage (persisted into `request.voice`/`request.subtitles`) and the initial `audio` stage, preserved across fitting regenerations. `--voice` wins over env; the API key never lives in commands/metadata. ElevenLabs validated for per-scene TTS: real smoke PASSED (`ELEVENLABS_REAL_SMOKE_OK`, voice `Xb7hH8MSUJpSbSDYk0k2`, 3.84s) and canonical full real E2E `cmo-2026-08-17-145309` VALIDATED (28.20s, native `elevenlabs_normalized_alignment` timing, 2 fitting repairs). `cmo-2026-08-17-142952` was an Edge regression E2E, not ElevenLabs validation. ElevenLabs continuous mode is NOT supported.
 - n8n is legacy/alternative infrastructure, not the canonical orchestrator.
-- TTS and visual providers are replaceable; Edge TTS is currently the default and Wikimedia/Pixabay are current visual providers.
+- TTS and visual providers are replaceable; Edge TTS is currently the default and
+  Wikimedia/Pixabay remain defaults while Pexels Photos is explicit opt-in.
 - Visual assets are semantically gated (`asset-semantic-relevance`, CLOSED): after provider search and before download, candidates are scored against the primary query intent by a provider-agnostic anchor-aware deterministic scorer (`deterministic_anchor_coverage_v2`); weak/support terms alone never yield `RELEVANT`, scene subjects cannot rescue a missing query anchor, and a search-strategy `RESOLVED` without `semanticAssessment.verdict == RELEVANT` never enters `resolvedAssets`. `bin/run_job.py --asset-providers wikimedia_commons,pixabay` restricts/persists `request.visuals.sourceProviders` in order (omitted → default fallback). Known limitation: the gate guarantees coarse topic relevance, not temporal/editorial/image-content fidelity.
 - Visual queries are upstream-gated for specificity (`script-visual-specificity`, CLOSED): the script stage rejects vague/editorial queries (`QUERY_NOT_SPECIFIC` / `SEGMENT_QUERY_NOT_SPECIFIC`) via the conservative guard in `contracts/visual_specificity.py`, and the router derivation drops vague candidate queries before providers. `SPECIFICITY_WEAK_TERMS` (guard-only) is a calibrated subset distinct from the semantic `WEAK_SUPPORT_TERMS`; `deterministic_anchor_coverage_v2` is unchanged. Known limitation: specificity rejects obvious vagueness but does not prove factual grounding or exact visual/editorial fidelity; entity/visual fidelity gaps (e.g. the "Smosh fan art" false positive, confirmed repeated by `generic-content-pipeline-evaluation`) remain downstream and are tracked as future investigation `asset-visual-semantic-fidelity`.
 

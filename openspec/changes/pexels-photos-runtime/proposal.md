@@ -2,7 +2,8 @@
 
 ## Status
 
-ACTIVE. This is a product change, not a benchmark or research loop.
+COMPLETED / VERIFIED / CLOSED. This was a product change, not a benchmark or
+research loop.
 
 ## Objective
 

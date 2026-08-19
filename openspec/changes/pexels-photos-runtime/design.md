@@ -1,5 +1,7 @@
 # Design: pexels-photos-runtime
 
+**Status: COMPLETED / VERIFIED / CLOSED.**
+
 ## Boundaries
 
 Pexels Photos is IMAGE-only and opt-in. It remains outside defaults. Slice 1
@@ -59,10 +61,12 @@ diagnostics.
 Runtime evidence: Smoke A made one search request, downloaded and resolved one
 photograph, passed the semantic gate and persisted Pexels provenance. The pixel
 gate was `DISABLED` because `VISUAL_FIDELITY_THRESHOLD` was not set. Smoke B
-made five search requests through `run_job --duration 20 --stop-after assets`
-with `--asset-providers pexels`, resolved five of seven segments and ended
+was bounded through `run_job --duration 20 --stop-after assets` with
+`--asset-providers pexels`, resolved five of seven segments and ended
 `ASSETS_PARTIAL` because unsupported/unaccepted segments remained unresolved.
-Rate-limit remaining values were sanitized and decreased from 24847 to 24841.
+The local metadata shows sanitized rate-limit remaining values decreasing from
+24847 to 24841. The exact number of API requests cannot be proven from the
+persisted artifact, so it is not asserted as a request count.
 `pexels.photos.stock` is now `AVAILABLE`; Pexels remains opt-in and BM25 remains
 `PROVISIONAL_BM25` / `NOT VALIDATED`.
 
