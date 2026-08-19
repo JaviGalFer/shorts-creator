@@ -1,12 +1,57 @@
 # Results: pexels-visual-supply-benchmark
 
-**Status: READY_FOR_HUMAN_REVIEW** — investigación benchmark-first del SUPPLY
-visual de Pexels (Video + Photos). **Sin integración de runtime.** No se afirma
-`PEXELS_BETTER` ni `PEXELS_PHOTOS_BETTER`; la decisión semántica queda pendiente
-de la revisión humana externa sobre los contact sheets.
+**Status: COMPLETED / VERIFIED / CLOSED** — investigación benchmark-first del
+SUPPLY visual de Pexels (Video + Photos) cerrada con **revisión humana externa**
+de los 3 contact sheets. **Sin integración de runtime.** Decisión:
+**`PEXELS_CONDITIONAL_PROVIDER_PROMISING`**. NO se afirma `PEXELS_BETTER` ni
+`PEXELS_PHOTOS_BETTER`.
 
-Se presentan tres capas separadas (Current / Pexels Video / Pexels Photos), sin
-mezclar **disponibilidad técnica** con **calidad semántica**.
+El supply técnico se registró en la fase previa (READY_FOR_HUMAN_REVIEW) y **no
+se cambia en esta fase de cierre**. Lo que se añade aquí es la evidencia
+cualitativa de la revisión humana y la decisión/camino siguiente. Se presentan
+tres capas separadas (Current / Pexels Video / Pexels Photos), sin mezclar
+**disponibilidad técnica** con **calidad semántica**.
+
+---
+
+## Review humana — conclusiones cualitativa (evidencia)
+
+(Renglones autoritativos del cierre; la revisión se hizo sobre `01-...-temporal-...`,
+`02-...-top3-...` y `03-...-photo-vs-current-...`.)
+
+1. **Pexels es especialmente prometedor para:** photographs, physical subjects,
+   locations, people, objects, technology/server B-roll, y environmental/
+   contextual footage.
+
+2. **Pexels NO satisface de forma fiable visual forms explícitos:** `diagram`,
+   `infographic`, `illustration`, `architectural plan`, `construction-time
+   diagram`. El buscador tiende a recuperar el **SUBJECT** principal pero
+   ignorar el **requested visual form**.
+
+3. **Ejemplo importante de ranking** — `four stroke engine automobile
+   photograph`:
+   - Pexels Video rank #1: débil/no representativo del motor.
+   - Pexels Video rank #3: mecánico/persona trabajando junto a un motor,
+     claramente más apropiado.
+   Conclusión: hay casos donde existe buen supply pero el **raw rank #1 no
+   selecciona el mejor candidato** (top-N contiene mejor candidato).
+
+4. **Casos de castillo** muestran otra limitación: queries diferentes sobre
+   `construction`, `architectural plans`, `construction-time diagram`,
+   `workers building` recuperan repetidamente castillos/ruinas similares, sin
+   satisfacer la relación/forma requerida.
+
+5. **Candidate overlap/repetición** entre queries relacionadas (especialmente
+   castillos / data center). Registrado como riesgo futuro: **cross-scene
+   visual diversity / duplicate avoidance**.
+
+6. **Comparación Photos CURRENT vs Pexels:** NO existe evidencia para afirmar
+   que Pexels Photos reemplace globalmente Wikimedia/Pixabay.
+   - Current assets son frecuentemente mejores en: diagramas, ilustraciones,
+     conceptos abstractos/explicativos.
+   - Pexels es frecuentemente más útil en: fotografía real, objetos/lugares/
+     personas, B-roll.
+   Por tanto son **COMPLEMENTARIOS**.
 
 ---
 
@@ -139,16 +184,49 @@ asset actual. Sin juicio automático.
 
 ## Decisión
 
-**Pendiente.** La evidencia técnica muestra que tanto Pexels Video como Pexels
-Photos ofrecen cobertura completa y supply portrait de alta resolución para las
-queries del corpus. La decisión semántica (¿mejor supply/relevancia?, ¿mejor
-que Wikimedia/Pixabay?, ¿provider de producción?) queda en manos de la
-**revisión humana externa** con los 3 contact sheets. No se integra hasta
-entonces.
+**`PEXELS_CONDITIONAL_PROVIDER_PROMISING`**
+
+- supply VALIDADO (Video y Photos: 56/56, HIGH_SUPPLY, >=720x1280 y >=1080x1920
+  = 1.0).
+- Pexels merece continuar hacia integración.
+- **NO** es sustituto global del stack actual; **NO** es default.
+- **No integrar todavía.**
+- El routing debe ser sensible a **visual form / provider fit** (Pexels falla
+  en visual forms explícitos: diagram/illustration/plan/infographic).
+- Pexels Video necesita **provider-aware query adaptation** (ver dirección
+  siguiente).
+- **raw rank #1 no es selección suficiente** (top-N contiene mejor candidato).
+- **diversity/dedup** debe considerarse antes o durante la productización
+  (overlap entre queries relacionadas: castillos / data center).
+
+NO se afirma: `PEXELS_BETTER`, `PEXELS_PHOTOS_BETTER`, "Pexels debe ser
+default", "Pexels reemplaza Wikimedia/Pixabay".
+
+## Dirección siguiente (separada, NO implementada todavía)
+
+`pexels-provider-fit-benchmark` — objetivo futuro:
+
+1. determinar elegibilidad del provider usando **visual intent +
+   assetPreference**;
+2. Pexels Photos: priorizar para intents photographic/stock-compatible;
+3. Pexels Video: probar **query adaptation determinista** eliminando
+   visual-form tokens incompatibles (`photograph`, `illustration`, `diagram`,
+   `infographic`, `painting`) conservando sujeto/acción;
+4. comparar RAW vs adapted query;
+5. medir si el **top-N** contiene mejor candidato que rank #1;
+6. estudiar overlap/duplicados entre escenas;
+7. benchmark-first, sin runtime inicialmente.
+
+Este siguiente change NO se implementa en esta fase.
+
+## Paths de evidencia
+
+- Video evidence permanece en `data/evaluations/pexels-video-supply-benchmark/`.
+- Photos/comparison: `data/evaluations/pexels-visual-supply-benchmark/`.
+- No se mueve evidencia git-ignored solo por estética.
 
 ## Tests
 
 - `tests/test_pexels_video_supply_benchmark.py`: **30 passed**.
 - `tests/test_pexels_photo_supply_benchmark.py`: **30 passed**.
-- Suite completa: ver `tasks.md` (baseline previa `1556 passed`; con 30 nuevos
-  de Photos → ver estado final actualizado).
+- Suite completa en cierre: **1586 passed, 0 failed** (60 focales + resto).

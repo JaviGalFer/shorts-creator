@@ -1,9 +1,10 @@
 # Propuesta: pexels-visual-supply-benchmark
 
-**Status: READY_FOR_HUMAN_REVIEW** — investigación benchmark-first del SUPPLY
-visual de Pexels (Video + Photos) frente al stack actual Wikimedia/Pixabay.
-Sin integración de runtime; la decisión semántica queda pendiente de revisión
-humana externa con los contact sheets.
+**Status: COMPLETED / VERIFIED / CLOSED** — investigación benchmark-first del
+SUPPLY visual de Pexels (Video + Photos) frente al stack actual
+Wikimedia/Pixabay, cerrada tras la revisión humana externa de los 3 contact
+sheets. **Sin integración de runtime.** Decisión:
+**`PEXELS_CONDITIONAL_PROVIDER_PROMISING`**.
 
 ## Contexto
 

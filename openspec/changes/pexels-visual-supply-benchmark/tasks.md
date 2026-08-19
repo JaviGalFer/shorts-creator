@@ -1,8 +1,10 @@
 # Tasks: pexels-visual-supply-benchmark
 
-**Status: READY_FOR_HUMAN_REVIEW** — investigación benchmark-first (Pexels Video
-+ Pexels Photos) concluida a nivel técnico, sin integración de runtime. Pendiente
-de revisión humana con los contact sheets antes de decidir (NO CLOSED).
+**Status: COMPLETED / VERIFIED / CLOSED** — investigación benchmark-first
+(Pexels Video + Pexels Photos) cerrada tras la **revisión humana externa** de
+los 3 contact sheets. Sin integración de runtime. Decisión:
+**`PEXELS_CONDITIONAL_PROVIDER_PROMISING`**.
+
 
 ## Datos (NO tocados)
 
@@ -74,7 +76,17 @@ de revisión humana con los contact sheets antes de decidir (NO CLOSED).
 ## Commit
 
 - [x] `git commit -m "test(evaluation): extend Pexels visual supply benchmark"`
-- [ ] (externo) Revisión humana de los 3 contact sheets → decisión y cierre
+- [x] Revisión humana externa de los 3 contact sheets completada y registrada
+      en `results.md` (evidencia cualitativa)
+- [x] Decisión → **`PEXELS_CONDITIONAL_PROVIDER_PROMISING`** (NO
+      `PEXELS_BETTER` / `PEXELS_PHOTOS_BETTER`)
+- [x] Dirección siguiente `pexels-provider-fit-benchmark` registrada (NO
+      implementada)
+- [x] Paths de evidencia corregidos (vídeo vs photos; sin mover evidencia
+      git-ignored)
+- [x] Estado del change → **COMPLETED / VERIFIED / CLOSED**
+- [x] Cierre documental: `git commit -m "docs(evaluation): close Pexels visual supply benchmark"`
+- [x] Merge no-ff a `main`; suite en main `1586 passed, 0 failed`. Sin push.
 
 ## Notas
 

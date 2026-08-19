@@ -1,7 +1,8 @@
 # Design: pexels-visual-supply-benchmark
 
-**Status: READY_FOR_HUMAN_REVIEW** — investigación benchmark-first, sin cambios
-de runtime. La decisión semántica queda en manos de la revisión humana externa.
+**Status: COMPLETED / VERIFIED / CLOSED** — investigación benchmark-first, sin
+cambios de runtime. Cerrado tras la revisión humana externa; decisión
+**`PEXELS_CONDITIONAL_PROVIDER_PROMISING`**.
 
 ## Arquitectura de evaluación (sin cambios de runtime)
 

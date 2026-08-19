@@ -2,7 +2,7 @@
 
 **Última actualización:** 2026-08-19
 
-## Investigación activa: `pexels-visual-supply-benchmark` — READY_FOR_HUMAN_REVIEW (rama `change/pexels-visual-supply-benchmark`)
+## Investigación cerrada: `pexels-visual-supply-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
 - Benchmark-first del SUPPLY visual de Pexels (**Video + Photos**) frente al
   stack Wikimedia/Pixabay. Sin integración runtime; sin tocar rendering/
@@ -21,13 +21,21 @@
   `originalPortraitCount=840`; diagnóstico 0 (56/56 `PORTRAIT_SUPPLY_OK`);
   rate-limit `remaining=24888/25000`; 12 rank#1 originales descargados, 0
   fallos.
-- Revisión humana: mismas 12 queries focales (7 dev-bad + 4 buenos que BLIP
-  falso-rechazó + 1 control CR). Contact sheets en
-  `data/evaluations/pexels-visual-supply-benchmark/` (git-ignored):
-  `01-pexels-video-temporal-contact-sheet.png`, `02-pexels-top3-search-results.png`
-  y `03-pexels-photo-vs-current-contact-sheet.png` (CURRENT vs PEXELS #1/#2/#3).
-  Sin juicio automático; **no se afirma `PEXELS_BETTER` ni
-  `PEXELS_PHOTOS_BETTER`**; pendiente de revisión humana.
+- Revisión humana externa: Pexels prometedor para fotografía/sujetos físicos/
+  ubicaciones/personas/objetos/B-roll tech/server; **no** fiable para visual
+  forms explícitos (diagram/infographic/illustration/plan/construction-time);
+  raw rank #1 no siempre es el mejor candidato; overlap/repetición en
+  castillos/data-center (diversity/dedup futuro); Photos CURRENT vs Pexels:
+  **complementarios**.
+- **Decisión: `PEXELS_CONDITIONAL_PROVIDER_PROMISING`** — supply validado;
+  continuar hacia integración; NO sustituto global; NO integrar todavía; en
+  cierre `1586 passed, 0 failed`. Dirección siguiente (separada, NO
+  implementada): `pexels-provider-fit-benchmark`.
+- Contact sheets en `data/evaluations/pexels-visual-supply-benchmark/`
+  (git-ignored): `01-pexels-video-temporal-contact-sheet.png`,
+  `02-pexels-top3-search-results.png` y
+  `03-pexels-photo-vs-current-contact-sheet.png` (CURRENT vs PEXELS #1/#2/#3).
+  Evidencia de vídeo en `data/evaluations/pexels-video-supply-benchmark/`.
 - Harness `tools/pexels_photo_supply_benchmark.py` + `tools/pexels_video_supply_benchmark.py`
   (evaluation-only, stdlib urllib, import-safe/offline, User-Agent, key no
   leak). Tests `tests/test_pexels_photo_supply_benchmark.py` (**30 passed**) +
