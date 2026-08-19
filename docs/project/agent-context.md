@@ -1,5 +1,25 @@
 # Agent Context
 
+## Active Change: visual-media-strategy — Slice 1 COMPLETED / VERIFIED / pending commit
+- Scope limited to additive pure contracts, request policy normalization and a
+  static provider capability registry. No productive routing, Pexels runtime,
+  VIDEO runtime, executor, prepare, renderer, CLI or prompt changes.
+- `visualSequence[].mediaPreference` is optional in VisualPlan v2 with
+  `IMAGE_PREFERRED` default for historical plans; schema version remains 2 and
+  historical metadata is not rewritten.
+- `request.visuals.visualMode` supports AUTO, IMAGES_ONLY, VIDEOS_ONLY and
+  MIXED. Missing field and legacy `mode: images` both normalize to IMAGES_ONLY;
+  a conflict is explicit. MIXED is best-effort diversity only, never a quality
+  requirement.
+- `MediaStrategyDecision` is pure and records explicit degradations. Provider
+  selection remains outside the LLM and outside this slice; sourceProviders is
+  still the explicit user/operations policy for later capability intersection.
+- Registry has separate planned Pexels Photos IMAGE/STOCK and Pexels Video
+  VIDEO/STOCK capabilities. Photos photograph fit is DIRECT; Video is
+  CONDITIONAL (`ELIGIBLE_CANDIDATE` evidence); exact forms are UNSUPPORTED.
+- Validation: focused `130 passed`; full suite `1650 passed, 0 failed`;
+  `git diff --check` clean.
+
 ## Closed Investigation: pexels-provider-fit-benchmark — COMPLETED / VERIFIED / CLOSED (merged into `main`, no-ff)
 - Benchmark-first del PROVIDER FIT de Pexels Photos/Video y de `query-adapt-v1`, sin runtime Pexels, rendering, VisualPlan/schema, OpenCLIP/BLIP/VLM, generación de imágenes ni perceptual hash. Base `main` `cf391c5`; commits `6b18d01` (benchmark), `d948300` (hardening) y cierre documental.
 - Evidencia reutilizada: 58 rows / 56 queryUsed; 39 requests Video adaptadas históricas (cap 40, rate-limit final 24849/25000). **0 requests, descargas o contact sheets** durante hardening/cierre. Suite de cierre `1626 passed, 0 failed`.

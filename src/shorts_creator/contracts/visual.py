@@ -24,6 +24,10 @@ ALLOWED_ASSET_PREFERENCES: frozenset[str] = frozenset({
     "archive", "map", "document", "stock", "generated",
 })
 
+ALLOWED_MEDIA_PREFERENCES: frozenset[str] = frozenset({
+    "IMAGE_PREFERRED", "VIDEO_PREFERRED", "EITHER",
+})
+
 ALLOWED_TRANSITIONS: frozenset[str] = frozenset({"cut", "fade"})
 
 ALLOWED_PROVIDERS: frozenset[str] = frozenset({
@@ -76,6 +80,7 @@ REQUIRED_SEGMENT_FIELDS: list[str] = [
 OPTIONAL_SEGMENT_DEFAULTS: dict[str, Any] = {
     "searchQuery": None,
     "transition": "cut",
+    "mediaPreference": "IMAGE_PREFERRED",
 }
 
 ALL_KNOWN_SEGMENT_FIELDS: set[str] = (
@@ -93,6 +98,7 @@ STRING_FIELD_MAX: dict[str, int] = {
     "imageGenerationPrompt": 500,
     "negativePrompt": 200,
     "assetPreference": 100,
+    "mediaPreference": 30,
     "searchQuery": 200,
     "transition": 20,
 }
@@ -299,19 +305,21 @@ def _validate_visual_sequence(
                     f"{path_prefix}.durationFraction",
                 ))
 
-        if "assetPreference" in seg:
-            ap = seg["assetPreference"]
+        for field in ("assetPreference", "mediaPreference"):
+            if field not in seg:
+                continue
+            ap = seg[field]
             if not isinstance(ap, str):
                 errors.append(_err(
-                    f"INVALID_FIELD_TYPE:{path_prefix}.assetPreference",
+                    f"INVALID_FIELD_TYPE:{path_prefix}.{field}",
                     f"expected str, got {type(ap).__name__}",
-                    f"{path_prefix}.assetPreference",
+                    f"{path_prefix}.{field}",
                 ))
-            elif len(ap) > STRING_FIELD_MAX["assetPreference"]:
+            elif len(ap) > STRING_FIELD_MAX[field]:
                 errors.append(_err(
-                    f"FIELD_TOO_LONG:{path_prefix}.assetPreference",
-                    f"max {STRING_FIELD_MAX['assetPreference']} chars, got {len(ap)}",
-                    f"{path_prefix}.assetPreference",
+                    f"FIELD_TOO_LONG:{path_prefix}.{field}",
+                    f"max {STRING_FIELD_MAX[field]} chars, got {len(ap)}",
+                    f"{path_prefix}.{field}",
                 ))
 
         if "searchQuery" in seg and seg["searchQuery"] is not None:
@@ -431,6 +439,13 @@ def _validate_enums(plan: dict, errors: list[dict], warnings: list[dict]) -> Non
                         f"INVALID_ENUM_VALUE:{path_prefix}.assetPreference",
                         f"got '{seg['assetPreference']}', allowed: {sorted(ALLOWED_ASSET_PREFERENCES)}",
                         f"{path_prefix}.assetPreference",
+                    ))
+            if "mediaPreference" in seg and isinstance(seg["mediaPreference"], str):
+                if seg["mediaPreference"].strip().upper() not in ALLOWED_MEDIA_PREFERENCES:
+                    errors.append(_err(
+                        f"INVALID_ENUM_VALUE:{path_prefix}.mediaPreference",
+                        f"got '{seg['mediaPreference']}', allowed: {sorted(ALLOWED_MEDIA_PREFERENCES)}",
+                        f"{path_prefix}.mediaPreference",
                     ))
             if "transition" in seg and isinstance(seg["transition"], str):
                 if seg["transition"].strip().lower() not in ALLOWED_TRANSITIONS:
@@ -616,6 +631,19 @@ def _canonicalize_plan(plan: dict, diagnostics: dict) -> dict:
             if clean != cs["assetPreference"]:
                 canonicalizations.append(f"visualSequence assetPreference '{cs['assetPreference']}' → '{clean}'")
             cs["assetPreference"] = clean
+        raw_media_preference = cs.get("mediaPreference")
+        if raw_media_preference is None:
+            cs["mediaPreference"] = OPTIONAL_SEGMENT_DEFAULTS["mediaPreference"]
+            canonicalizations.append(
+                "visualSequence mediaPreference default applied (IMAGE_PREFERRED)"
+            )
+        elif isinstance(raw_media_preference, str):
+            clean = raw_media_preference.strip().upper()
+            if clean != raw_media_preference:
+                canonicalizations.append(
+                    f"visualSequence mediaPreference '{raw_media_preference}' → '{clean}'"
+                )
+            cs["mediaPreference"] = clean
         if "transition" in cs and isinstance(cs["transition"], str):
             clean = _canonicalize_enum(cs["transition"])
             if clean != cs["transition"]:

@@ -2,6 +2,26 @@
 
 **Última actualización:** 2026-08-19
 
+## Change activo: `visual-media-strategy` — Slice 1 COMPLETED / VERIFIED / pendiente commit
+
+- Slice puro y aditivo: contrato `visualSequence[].mediaPreference`, policy
+  `request.visuals.visualMode`, `MediaStrategyDecision` y registry estático de
+  capabilities. Sin router productivo, runtime Pexels/VIDEO, executor, prepare,
+  renderer, prompt o CLI.
+- `mediaPreference` usa `IMAGE_PREFERRED | VIDEO_PREFERRED | EITHER`; ausencia
+  histórica canonicaliza a `IMAGE_PREFERRED` bajo VisualPlan schema v2, sin
+  reescribir metadata ni elevar versión.
+- `visualMode` usa `AUTO | IMAGES_ONLY | VIDEOS_ONLY | MIXED`; ausencia o
+  `mode: images` legado significan `IMAGES_ONLY`. Conflicto explícito si ambos
+  se contradicen. MIXED es diversidad best-effort, nunca obligación ni descenso
+  de calidad.
+- El registry separa `pexels.photos.stock` (IMAGE, PLANNED, photograph DIRECT)
+  de `pexels.video.stock` (VIDEO, PLANNED, photograph CONDITIONAL); las formas
+  exactas son UNSUPPORTED según `pexels-provider-fit-benchmark`. No hay claim de
+  runtime ni secretos en registry.
+- Validación: focales `130 passed`; suite completa `1650 passed, 0 failed`;
+  `git diff --check` limpio.
+
 ## Investigación cerrada: `pexels-provider-fit-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
 - Benchmark-first del **PROVIDER FIT** de Pexels Photos/Video y de
