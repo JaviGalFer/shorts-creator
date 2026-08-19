@@ -1,5 +1,18 @@
 # Agent Context
 
+## Active Change: pexels-video-runtime-mvp — ACTIVE / PRODUCT CHANGE
+- FIRST REAL VIDEO E2E BEFORE FURTHER VIDEO RESEARCH. Two functional slices
+  maximum: Slice 1 provides Pexels Video through public metadata/assets with
+  mocked/offline validation; Slice 2 adds prepare/render VIDEO support and
+  bounded real Smoke A/B/E2E C. Pexels Video remains PLANNED until Slice 2;
+  it is explicit opt-in, RAW-order only, with no query adaptation,
+  diversity/dedup, smart clip selection, Video audio or OpenCLIP-on-MP4.
+- Slice 1 is complete: CLI/request policy, capability-aware routing, RAW Pexels
+  Video adapter and deterministic portrait MP4 selection, lifecycle/downloader,
+  narrow semantic metadata degradation, VIDEO pixel bypass, public bridge
+  transport and assets-stage contract. All validation is mocked/offline;
+  Pexels Video remains PLANNED pending Slice 2 rendering and real smokes.
+
 ## Closed Change: pexels-photo-selection-benchmark — COMPLETED / VERIFIED / CLOSED
 - Evaluation-only investigation that froze a candidate-ordering benchmark before
   any candidate-level human preferences were supplied. It did not touch Pexels
@@ -37,11 +50,11 @@
 - Slice 1 and Slice 2 are complete: shared Pexels infrastructure, Photos
   candidate adapter, explicit opt-in routing, existing lifecycle/gates,
   provenance bridge and bounded real smoke. No Pexels Video implementation.
-- Closure complete; pending separate authorized merge only. Smoke A used
-  one search request and resolved one asset; Smoke B used five search requests,
-  resolved five of seven segments and ended `ASSETS_PARTIAL` for explainable
-  provider-fit/gate outcomes. OpenCLIP was not activated; pixel gate bypass was
-  recorded by the existing fail-soft contract.
+- Closure complete and merged into `main` by `5b340db`. Smoke A used one search
+  request and resolved one asset; Smoke B resolved five of seven segments and
+  ended `ASSETS_PARTIAL` for explainable provider-fit/gate outcomes; its exact
+  search-request count is UNKNOWN. OpenCLIP was not activated; pixel gate
+  bypass was recorded by the existing fail-soft contract.
 - Next product direction: `pexels-video-runtime-mvp`; it may introduce the
   minimum generic `IMAGE | VIDEO` transport contract in its first slice and
   should reuse the shared Pexels client. `pexels-photo-selection-evidence-extension`

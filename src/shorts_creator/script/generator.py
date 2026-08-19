@@ -1401,6 +1401,7 @@ def generate_script(
     voice: str | None = None,
     subtitle_timing_provider: str | None = None,
     source_providers: list[str] | None = None,
+    visual_mode: str | None = None,
 ) -> int:
     """Generate and persist a canonical V2 script for one request."""
     llm_config = resolve_llm_config(model_override=model)
@@ -1453,10 +1454,25 @@ def generate_script(
     # persisted request.metadata. False for now; True is future-ready.
     allow_generated_images = False
 
+    visual_mode_map = {
+        "auto": "AUTO", "images-only": "IMAGES_ONLY",
+        "videos-only": "VIDEOS_ONLY", "mixed": "MIXED",
+    }
+    if visual_mode not in (None, *visual_mode_map):
+        raise ValueError(f"INVALID_VISUAL_MODE: {visual_mode!r}")
+    video_context = ""
+    if visual_mode == "videos-only":
+        video_context = (
+            "\n\nPOLITICA DE VIDEO OBLIGATORIA: el usuario requiere VIDEOS_ONLY. "
+            "Cuando sea editorialmente valido, prefiere assetPreference=photograph "
+            "y sujetos satisfacibles mediante footage real. No inventes diagram, "
+            "infographic, illustration o painting si la intencion puede expresarse "
+            "con video real; si una forma exacta es necesaria, mantenla."
+        )
     base_prompt = _build_user_prompt_v2(
         topic, provisional_budget, strictness,
         allow_generated_images=allow_generated_images,
-    )
+    ) + video_context
 
     if dry_run:
         print("=== SYSTEM PROMPT ===")
@@ -1538,7 +1554,7 @@ def generate_script(
                     allow_generated_images=allow_generated_images,
                 )
                 base_retry = _build_user_prompt_v2(topic, retry_budget, strictness,
-                                                   allow_generated_images=allow_generated_images)
+                                                   allow_generated_images=allow_generated_images) + video_context
                 current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
             elif word_count > retry_budget["maximumWords"]:
                 # Case B — valid structure but excessive duration: compress the
@@ -1564,7 +1580,7 @@ def generate_script(
                     allow_generated_images=allow_generated_images,
                 )
                 base_retry = _build_user_prompt_v2(topic, retry_budget, strictness,
-                                                   allow_generated_images=allow_generated_images)
+                                                   allow_generated_images=allow_generated_images) + video_context
                 current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
 
             print(f"Retry {retries}/{MAX_SCRIPT_ATTEMPTS - 1}: generated {word_count} words, "
@@ -1887,10 +1903,11 @@ def generate_script(
     if resolved.get("presetId"):
         duration_dict["presetId"] = resolved["presetId"]
 
-    visuals_request = {
-        "mode": "images",
-        "allowGeneratedImages": allow_generated_images,
-    }
+    visuals_request = {"allowGeneratedImages": allow_generated_images}
+    if visual_mode is None:
+        visuals_request["mode"] = "images"
+    else:
+        visuals_request["visualMode"] = visual_mode_map[visual_mode]
     visuals_request["schemaVersion"] = 2
     if source_providers:
         visuals_request["sourceProviders"] = list(source_providers)

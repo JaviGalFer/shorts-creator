@@ -56,7 +56,7 @@ STAGE_STATUS_MAP = {
 
 RENDER_SUCCESS_STATUSES = {"RENDERED", "RENDERED_WITH_WARNINGS", "RENDERED_WITH_ASSET_WARNINGS"}
 REVIEW_BLOCKING_STAGES = {"assets", "audio", "prepare", "render", "validate"}
-V2_IMAGE_EXTENSIONS: frozenset[str] = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
+V2_ASSET_EXTENSIONS: frozenset[str] = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4"})
 
 V1_POSITIVE_FIELDS: frozenset[str] = frozenset({"editorialRole", "strategy"})
 
@@ -179,6 +179,9 @@ def build_script_command(args) -> list[str]:
     asset_providers = getattr(args, "asset_providers", None)
     if asset_providers:
         cmd.extend(["--asset-providers", asset_providers])
+    visual_mode = getattr(args, "visual_mode", None)
+    if visual_mode:
+        cmd.extend(["--visual-mode", visual_mode])
     return cmd
 
 
@@ -427,13 +430,13 @@ def _verify_stage_contract(
 
     if stage == "assets":
         assets_dir = video_dir / "assets"
-        images = []
+        assets = []
         if assets_dir.exists():
-            images = [f for f in assets_dir.iterdir()
-                      if f.is_file() and f.suffix.lower() in V2_IMAGE_EXTENSIONS]
+            assets = [f for f in assets_dir.iterdir()
+                      if f.is_file() and f.suffix.lower() in V2_ASSET_EXTENSIONS]
 
         if actual_status == "ASSETS_READY":
-            if images:
+            if assets:
                 return True, "ASSETS_READY", None
             return False, actual_status, (
                 "STAGE_OUTPUT_CONTRACT_FAILED: assets exited 0 with status ASSETS_READY "
@@ -610,6 +613,7 @@ def run_pipeline(
     voice: str | None = None,
     subtitle_timing_provider: str | None = None,
     asset_providers: str | None = None,
+    visual_mode: str | None = None,
 ) -> int:
     """Run the V2 pipeline through the requested stage."""
     args = SimpleNamespace(
@@ -630,6 +634,7 @@ def run_pipeline(
         voice=voice,
         subtitle_timing_provider=subtitle_timing_provider,
         asset_providers=asset_providers,
+        visual_mode=visual_mode,
     )
     _resolve_audio_config(args)
 

@@ -16,9 +16,22 @@
   decreased 24847 → 24841, exact request count `UNKNOWN`.
 - Validation: Slice 1 `99` focused / `1751` full; Slice 2 `333` focused; closure
   suite `1758 passed, 0 failed`; `git diff --check` clean.
-- Next product direction: `pexels-video-runtime-mvp`, reusing the shared Pexels
-  client and potentially introducing the minimum generic `IMAGE | VIDEO`
-  transport contract in its first slice. No change opened here.
+- Merged into `main` by `5b340db`.
+
+## Change activo: `pexels-video-runtime-mvp` — ACTIVE / PRODUCT CHANGE
+
+- FIRST REAL VIDEO E2E BEFORE FURTHER VIDEO RESEARCH. Maximum two functional
+  slices: VIDEO asset runtime through metadata/assets, then prepare/render plus
+  bounded real validation.
+- Reuses existing `IMAGE | VIDEO` contracts. Pexels Video stays explicit opt-in
+  and `PLANNED` during Slice 1; MVP uses RAW ordering only, without query
+  adaptation, diversity/dedup, smart clip selection, Video audio or
+  OpenCLIP-on-MP4.
+- Slice 1 COMPLETE: capability-aware `visualMode` routing, Pexels Video
+  adapter/portrait MP4 choice, lifecycle/downloader, bounded semantic
+  degradation, pixel NOT_APPLICABLE and public asset transport. Mocked/offline
+  suite: `1768 passed`; no Pexels network request. Slice 2 is the only
+  functional slice pending.
 
 ## Cambio cerrado: `pexels-photo-selection-benchmark` — COMPLETED / VERIFIED / CLOSED
 
