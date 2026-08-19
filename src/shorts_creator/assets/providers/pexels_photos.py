@@ -99,6 +99,26 @@ def order_candidates_bm25(query_used: str, candidates: Iterable[PexelsPhotoCandi
     )
 
 
+def bind_lifecycle_positions(
+    candidates: Iterable[PexelsPhotoCandidate],
+    *,
+    query_index: int,
+    provider_rank_start: int,
+) -> tuple[PexelsPhotoCandidate, ...]:
+    """Bind one already-filtered page to its final lifecycle stream positions."""
+    return tuple(
+        replace(
+            item,
+            envelope=replace(
+                item.envelope,
+                query_index=query_index,
+                provider_rank=provider_rank_start + offset,
+            ),
+        )
+        for offset, item in enumerate(candidates, start=1)
+    )
+
+
 def _required_string(photo: Mapping[str, Any], key: str) -> str | None:
     value = photo.get(key)
     return value.strip() if isinstance(value, str) and value.strip() else None

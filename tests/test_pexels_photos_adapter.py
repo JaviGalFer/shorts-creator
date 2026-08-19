@@ -90,6 +90,7 @@ def test_client_sends_exact_authorization_path_params_timeout_and_sanitized_tele
     def fake_urlopen(request, timeout):
         observed["url"] = request.full_url
         observed["authorization"] = request.get_header("Authorization")
+        observed["user_agent"] = request.get_header("User-agent")
         observed["timeout"] = timeout
         return _Response({"photos": []}, {
             "X-Ratelimit-Remaining": "24999", "Retry-After": "2", "X-Ignored": "secret",
@@ -102,7 +103,8 @@ def test_client_sends_exact_authorization_path_params_timeout_and_sanitized_tele
     )
     assert observed == {
         "url": "https://api.pexels.com/v1/videos/search?query=castle&page=1",
-        "authorization": "very-secret", "timeout": 12,
+        "authorization": "very-secret", "user_agent": pexels.PEXELS_USER_AGENT,
+        "timeout": 12,
     }
     assert "very-secret" not in observed["url"]
     assert result.telemetry == {"x-ratelimit-remaining": "24999", "retry-after": "2"}
@@ -120,6 +122,8 @@ def test_client_normalizes_auth_errors_without_key_leak(monkeypatch, status):
         get_json(path="/v1/search", params={"query": "x"}, api_key=secret)
     assert raised.value.code == AUTH_ERROR
     assert secret not in str(raised.value)
+    assert f"HTTP status {status}" in str(raised.value)
+    assert "Bearer " not in str(raised.value)
 
 
 def test_client_normalizes_rate_network_and_malformed_errors(monkeypatch):

@@ -13,6 +13,7 @@ from typing import Any, Mapping
 from shorts_creator.assets.provider_credentials import resolve_api_key
 
 PEXELS_API_BASE = "https://api.pexels.com"
+PEXELS_USER_AGENT = "shorts-creator/1.0"
 DEFAULT_TIMEOUT_SECONDS = 30
 
 CREDENTIAL_MISSING = "CREDENTIAL_MISSING"
@@ -75,7 +76,8 @@ def get_json(
     if not key:
         raise PexelsClientError(CREDENTIAL_MISSING, "PEXELS_API_KEY is not configured")
     request = urllib.request.Request(
-        _request_url(path, params), headers={"Authorization": key},
+        _request_url(path, params),
+        headers={"Authorization": key, "User-Agent": PEXELS_USER_AGENT},
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -90,7 +92,9 @@ def get_json(
         raise
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
-            code, message = AUTH_ERROR, "Pexels authentication failed"
+            code, message = AUTH_ERROR, (
+                f"Pexels authentication/access failed with HTTP status {exc.code}"
+            )
         elif exc.code == 429:
             code, message = RATE_LIMITED, "Pexels rate limit reached"
         else:

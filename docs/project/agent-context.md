@@ -20,9 +20,10 @@
   `bestPreferredReviewWindowRank`; `selectorRank` stays global diagnostic. No
   material metric/sufficiency/verdict changed. A1/A2 NOT VALIDATED and not
   NOT_USEFUL; A2 shows a promising PlayStation signal only.
-- Pexels Photos remains `PLANNED`; `pexels-photos-runtime` remains blocked only
-  w.r.t. a validated metadata top-N policy. The historical pairwise evidence
-  PlayStation raw #3 > raw #1 stays external to the blinded review.
+- Pexels Photos runtime is now `AVAILABLE` as an explicit opt-in IMAGE/STOCK
+  provider; the provisional BM25 selector remains explicitly NOT VALIDATED.
+  The historical pairwise evidence PlayStation raw #3 > raw #1 stays external
+  to the blinded review.
 
 ## Active Product Change: pexels-photos-runtime
 - Image-only Pexels Photos provider runtime. First version uses Pexels Photos as
@@ -33,9 +34,14 @@
   stays separate. Existing semantic gate and pixel gate remain the acceptance
   authority. Provider fallback remains. Runtime must leave sufficient
   provenance/telemetry to detect real ordering problems.
-- Slice 1 is active: shared Pexels infrastructure, Photos candidate adapter and
-  offline tests only. No runtime routing/executor/bridge/fetcher wiring, no
-  capability flip, no real Pexels request and no Video implementation.
+- Slice 1 and Slice 2 are complete: shared Pexels infrastructure, Photos
+  candidate adapter, explicit opt-in routing, existing lifecycle/gates,
+  provenance bridge and bounded real smoke. No Pexels Video implementation.
+- Pending closure only: final review and separate authorized merge. Smoke A used
+  one search request and resolved one asset; Smoke B used five search requests,
+  resolved five of seven segments and ended `ASSETS_PARTIAL` for explainable
+  provider-fit/gate outcomes. OpenCLIP was not activated; pixel gate bypass was
+  recorded by the existing fail-soft contract.
 
 ## Deferred (Optional) Research: pexels-photo-selection-evidence-extension
 - DEFERRED / OPTIONAL, NOT the next change. Only reconsidered if real runtime

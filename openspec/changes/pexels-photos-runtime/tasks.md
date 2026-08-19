@@ -17,11 +17,11 @@
 
 ## Slice 2: Pexels Photos Runtime Integration
 
-- [ ] Add capability/provider-fit routing and explicit `sourceProviders` opt-in.
-- [ ] Wire the existing lifecycle, downloader, semantic gate and pixel gate.
-- [ ] Persist bridge provenance and preserve provider failover/order.
-- [ ] Flip `pexels.photos.stock` from PLANNED to AVAILABLE atomically after all requirements pass.
-- [ ] Add mocked integration tests and a bounded real Photos smoke.
+- [x] Add capability/provider-fit routing and explicit `sourceProviders` opt-in.
+- [x] Wire the existing lifecycle, downloader, semantic gate and pixel gate.
+- [x] Persist bridge provenance and preserve provider failover/order.
+- [x] Flip `pexels.photos.stock` from PLANNED to AVAILABLE atomically after all requirements pass.
+- [x] Add mocked integration tests and bounded real Photos smokes: Smoke A one request/resolved; Smoke B five requests, `ASSETS_PARTIAL`, five resolved segments.
 
 ## Closure
 

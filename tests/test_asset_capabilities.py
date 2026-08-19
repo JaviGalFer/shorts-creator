@@ -35,9 +35,12 @@ def test_pexels_photo_and_video_are_separate_capabilities():
     assert photos.capability_id != video.capability_id
 
 
-def test_pexels_capabilities_are_planned_not_runtime_claims():
+def test_only_pexels_photos_is_runtime_available():
     pexels = [capability for capability in PROVIDER_CAPABILITIES if capability.provider == "pexels"]
-    assert {capability.runtime_status for capability in pexels} == {PLANNED}
+    assert {capability.capability_id: capability.runtime_status for capability in pexels} == {
+        "pexels.photos.stock": AVAILABLE,
+        "pexels.video.stock": PLANNED,
+    }
     assert {capability.evidence_version for capability in pexels} == {
         "pexels-provider-fit-benchmark"
     }
@@ -62,7 +65,7 @@ def test_current_available_capabilities_are_image_stock_search_only():
         if capability.runtime_status == AVAILABLE
     ]
     assert {capability.provider for capability in available} == {
-        "wikimedia_commons", "pixabay",
+        "wikimedia_commons", "pixabay", "pexels",
     }
     assert {capability.media_kind for capability in available} == {IMAGE}
 
@@ -79,7 +82,11 @@ def test_available_legacy_capabilities_are_not_excluded_by_empty_fit_maps():
         capability for capability in PROVIDER_CAPABILITIES
         if capability.runtime_status == AVAILABLE
     ]
-    assert all(get_visual_form_fit(capability, "diagram") == UNDECLARED for capability in available)
+    legacy = [
+        capability for capability in available
+        if capability.provider in {"wikimedia_commons", "pixabay"}
+    ]
+    assert all(get_visual_form_fit(capability, "diagram") == UNDECLARED for capability in legacy)
 
 
 def test_visual_form_fit_mapping_is_immutable():

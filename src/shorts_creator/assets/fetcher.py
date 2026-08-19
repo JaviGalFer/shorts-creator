@@ -366,12 +366,18 @@ def fetch_assets(
     pixabay_api_key = _resolve_pixabay_api_key()
     pixabay_key_present = bool(pixabay_api_key)
     pixabay_live = not dry_run
+    source_providers = (request_visuals or {}).get("sourceProviders", [])
+    pexels_requested = isinstance(source_providers, list) and "pexels" in source_providers
+    pexels_api_key = resolve_api_key("PEXELS_API_KEY") if pexels_requested else None
 
     provider_config = load_provider_config_v2(
         wikimedia_live=wikimedia_live,
         user_agent=user_agent,
         pixabay_live=pixabay_live,
         pixabay_api_key_present=pixabay_key_present,
+        pexels_enabled=pexels_requested,
+        pexels_api_key_present=bool(pexels_api_key),
+        pexels_live=not dry_run,
     )
 
     provider_credentials: dict | None = None
@@ -381,6 +387,10 @@ def fetch_assets(
                 "apiKey": pixabay_api_key,
             },
         }
+    if pexels_api_key:
+        if provider_credentials is None:
+            provider_credentials = {}
+        provider_credentials["pexels"] = {"apiKey": pexels_api_key}
 
     # 5. Validate sceneNumbers are unique
     scene_numbers_seen: set[int] = set()

@@ -49,6 +49,23 @@ Pexels availability does not depend on optional OpenCLIP being installed. The
 pixel gate is fail-soft according to its existing runtime contract; a real smoke
 with it active is additional evidence, not an intrinsic provider requirement.
 
+Slice 2 wiring uses the existing downloader and lifecycle. `providerRank` is
+the cumulative 1-based position of the emitted Pexels stream across queries;
+`pexelsQueryRank` remains the raw 1-based rank within each page. The shared
+client sends `Authorization` and the explicit safe User-Agent
+`shorts-creator/1.0`; HTTP 401/403 remain `AUTH_ERROR` with sanitized status
+diagnostics.
+
+Runtime evidence: Smoke A made one search request, downloaded and resolved one
+photograph, passed the semantic gate and persisted Pexels provenance. The pixel
+gate was `DISABLED` because `VISUAL_FIDELITY_THRESHOLD` was not set. Smoke B
+made five search requests through `run_job --duration 20 --stop-after assets`
+with `--asset-providers pexels`, resolved five of seven segments and ended
+`ASSETS_PARTIAL` because unsupported/unaccepted segments remained unresolved.
+Rate-limit remaining values were sanitized and decreased from 24847 to 24841.
+`pexels.photos.stock` is now `AVAILABLE`; Pexels remains opt-in and BM25 remains
+`PROVISIONAL_BM25` / `NOT VALIDATED`.
+
 ## Slices
 
 1. Shared client, credential helper reuse, Photos adapter, provenance wrapper,
