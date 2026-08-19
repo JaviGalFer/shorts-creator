@@ -2,8 +2,8 @@
 
 ## Status
 
-Phase A strategy/code: **FROZEN**. Human review: **PENDING**. Benchmark verdict:
-**NOT YET EXECUTED**.
+Phase A strategy/code: **FROZEN**. Human review: **COMPLETED / SEALED**.
+Benchmark verdict: **`METADATA_SELECTION_EVIDENCE_INSUFFICIENT`**.
 
 ## Evidence And Unit
 
@@ -95,6 +95,28 @@ exceed beneficial reorders, or both alternatives fail PlayStation.
 `METADATA_SELECTION_EVIDENCE_INSUFFICIENT` applies when labels are absent,
 fewer than eight discriminating queries exist, or results are inconclusive. Until
 then the only permitted status is `AWAITING_HUMAN_REVIEW`.
+
+## Phase A Result
+
+The sealed review fixture (`humanPreferencesSha256`
+`9ade45a5da70b1538a516c4100ce5bbbae4bf56d4dd625def9242b8fbaa5144f`)
+was evaluated offline against A0/A1/A2. The ignored result artifact is
+`data/evaluations/pexels-photo-selection-benchmark/phase-a.json`.
+
+Evidence sufficiency is not met: 10/10 queries are labeled and six topics are
+represented, but only two queries are discriminating (minimum is eight). The
+frozen outcome is therefore `METADATA_SELECTION_EVIDENCE_INSUFFICIENT`; no
+strategy is selected and no metadata selector is validated or rejected.
+
+Metrics are reported in the artifact without changing any strategy: RAW
+top-1 preferred rate `0.8571428571` / macro pairwise `0.5`; A1 `1.0` / `1.0`;
+A2 `1.0` / `1.0`. A1 does not move PlayStation raw #3 ahead of #1; A2 does.
+The result cannot use these observations to bypass the frozen sufficiency gate.
+`preferredCandidateGateSurvival` is `NOT_COMPUTED`: Phase A deliberately does
+not import or alter the semantic runtime contract.
+
+Phase B is not run and is not currently eligible: a pixel ranker cannot repair
+insufficient candidate-level human discrimination.
 
 ## Preference Schema: FROZEN
 

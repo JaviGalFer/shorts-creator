@@ -251,3 +251,182 @@ def test_source_hash_is_stable_and_reading_does_not_mutate_source_artifact():
 def test_playstation_raw_top3_is_available_without_evaluating_preference():
     candidates = benchmark.load_photo_candidates("PlayStation Nintendo 64 comparison photograph", limit=3)
     assert [candidate["candidateId"] for candidate in candidates] == [9281228, 9281229, 9281226]
+
+
+def _synthetic_evaluation_inputs(*, all_unusable_index: int | None = None, tied: bool = False):
+    manifest_queries = []
+    preferences = []
+    scored: dict[str, list[dict]] = {}
+    for index, query in enumerate(benchmark.CANONICAL_REVIEW_QUERIES):
+        base = 10_000 + index * 10
+        manifest_queries.append({
+            "queryUsed": query,
+            "candidates": [
+                {"alias": "A", "candidateId": base + 1, "pexelsQueryRank": 1},
+                {"alias": "B", "candidateId": base + 2, "pexelsQueryRank": 2},
+                {"alias": "C", "candidateId": base + 3, "pexelsQueryRank": 3},
+            ],
+        })
+        unusable = index == all_unusable_index
+        preferences.append({
+            "queryUsed": query,
+            "preferredAliases": [] if unusable else ["C" if query == "PlayStation Nintendo 64 comparison photograph" else "B"],
+            "allUnusable": unusable,
+            "notes": "",
+        })
+        order = [2, 1, 3]
+        if query == "PlayStation Nintendo 64 comparison photograph":
+            order = [3, 2, 1]
+        rank_by_raw = {raw_rank: selector_rank for selector_rank, raw_rank in enumerate(order, start=1)}
+        scored[query] = [
+            {
+                "candidateId": base + raw_rank,
+                "pexelsQueryRank": raw_rank,
+                "selectorScore": 1.0 if tied and raw_rank in {1, 2} else float(4 - rank_by_raw[raw_rank]),
+                "selectorRank": rank_by_raw[raw_rank],
+            }
+            for raw_rank in (1, 2, 3)
+        ]
+    return {"queries": manifest_queries}, preferences, scored
+
+
+def test_evaluation_maps_aliases_and_computes_frozen_metrics():
+    manifest, preferences, scored = _synthetic_evaluation_inputs(all_unusable_index=1)
+    result = benchmark.evaluate_against_preferences(
+        strategy=benchmark.LEXICAL_RECALL,
+        scored_candidates=scored,
+        manifest=manifest,
+        preferences=preferences,
+    )
+    metrics = result["metrics"]
+    assert metrics["top1PreferredRate"] == 1.0
+    assert metrics["macroPairwiseAccuracy"] == 1.0
+    assert metrics["meanPreferredRank"] == 1.0
+    assert metrics["beneficialReorders"] == 9
+    assert metrics["harmfulReorders"] == 0
+    assert metrics["allUnusable"] == 1
+    assert result["queries"][0]["preferredCandidateIds"] == [10_002]
+    assert result["queries"][1]["top1Preferred"] is None
+
+
+def test_evaluation_records_selector_score_ties_and_playstation_check():
+    manifest, preferences, scored = _synthetic_evaluation_inputs(tied=True)
+    result = benchmark.evaluate_against_preferences(
+        strategy=benchmark.BM25,
+        scored_candidates=scored,
+        manifest=manifest,
+        preferences=preferences,
+    )
+    assert result["metrics"]["selectorTie"] == 9
+    assert result["metrics"]["playstationRank3BeforeRank1"] is True
+
+
+def _strategy_metrics(**overrides):
+    metrics = {
+        "top1PreferredRate": 0.4,
+        "macroPairwiseAccuracy": 0.4,
+        "beneficialReorders": 0,
+        "harmfulReorders": 0,
+        "playstationRank3BeforeRank1": False,
+    }
+    metrics.update(overrides)
+    return {"metrics": metrics}
+
+
+def test_verdict_validated_prefers_a1_when_both_alternatives_pass():
+    results = {
+        benchmark.RAW: _strategy_metrics(),
+        benchmark.LEXICAL_RECALL: _strategy_metrics(
+            top1PreferredRate=0.7,
+            macroPairwiseAccuracy=0.6,
+            beneficialReorders=2,
+            playstationRank3BeforeRank1=True,
+        ),
+        benchmark.BM25: _strategy_metrics(
+            top1PreferredRate=0.8,
+            macroPairwiseAccuracy=0.7,
+            beneficialReorders=3,
+            playstationRank3BeforeRank1=True,
+        ),
+    }
+    assert benchmark.determine_phase_a_verdict(results, {"sufficient": True}) == (
+        "METADATA_SELECTOR_VALIDATED", benchmark.LEXICAL_RECALL, False,
+    )
+
+
+def test_verdict_not_useful_and_insufficient_paths_are_frozen():
+    results = {
+        benchmark.RAW: _strategy_metrics(),
+        benchmark.LEXICAL_RECALL: _strategy_metrics(),
+        benchmark.BM25: _strategy_metrics(),
+    }
+    assert benchmark.determine_phase_a_verdict(results, {"sufficient": True}) == (
+        "METADATA_SELECTOR_NOT_USEFUL", None, True,
+    )
+    assert benchmark.determine_phase_a_verdict(results, {"sufficient": False}) == (
+        "METADATA_SELECTION_EVIDENCE_INSUFFICIENT", None, False,
+    )
+
+
+def test_evidence_sufficiency_rejects_triple_ties_as_non_discriminating():
+    preferences = [
+        {
+            "queryUsed": query,
+            "preferredAliases": ["A", "B", "C"],
+            "allUnusable": False,
+            "notes": "",
+        }
+        for query in benchmark.CANONICAL_REVIEW_QUERIES
+    ]
+    result = benchmark.evidence_sufficiency(preferences)
+    assert result["labeledQueries"] == 10
+    assert result["discriminatingQueries"] == 0
+    assert result["sufficient"] is False
+
+
+def test_evaluation_artifact_persists_hashes_deterministically(tmp_path):
+    manifest, preferences, scored = _synthetic_evaluation_inputs()
+    strategy = benchmark.evaluate_against_preferences(
+        strategy=benchmark.RAW,
+        scored_candidates=scored,
+        manifest=manifest,
+        preferences=preferences,
+    )
+    result = {
+        "schemaVersion": 1,
+        "status": "METADATA_SELECTION_EVIDENCE_INSUFFICIENT",
+        "selectedStrategy": None,
+        "sourceArtifactSha256": benchmark.source_hash(),
+        "reviewManifestSha256": benchmark.manifest_hash(),
+        "humanPreferencesSha256": benchmark.human_preferences_hash(),
+        "strategyResults": {benchmark.RAW: strategy},
+    }
+    path = tmp_path / "phase-a.json"
+    benchmark.write_phase_a_result(result, path)
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert persisted["sourceArtifactSha256"] == benchmark.source_hash()
+    assert persisted["reviewManifestSha256"] == benchmark.manifest_hash()
+    assert persisted["humanPreferencesSha256"] == benchmark.human_preferences_hash()
+
+
+def test_sealed_labeled_fixture_is_loadable_for_evaluation():
+    preferences = benchmark.load_labeled_preferences()
+    assert len(preferences) == 10
+    assert {entry["queryUsed"] for entry in preferences} == set(benchmark.CANONICAL_REVIEW_QUERIES)
+
+
+def test_synthetic_evaluation_is_deterministic():
+    manifest, preferences, scored = _synthetic_evaluation_inputs()
+    first = benchmark.evaluate_against_preferences(
+        strategy=benchmark.LEXICAL_RECALL,
+        scored_candidates=scored,
+        manifest=manifest,
+        preferences=preferences,
+    )
+    second = benchmark.evaluate_against_preferences(
+        strategy=benchmark.LEXICAL_RECALL,
+        scored_candidates=scored,
+        manifest=manifest,
+        preferences=preferences,
+    )
+    assert first == second

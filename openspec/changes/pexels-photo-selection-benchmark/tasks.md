@@ -12,12 +12,14 @@
 
 ## Human Review
 
-- [ ] Reviewer fills only `preferredAliases`, `allUnusable`, and optional `notes`.
-- [ ] Validate preference schema and run the frozen Phase A evaluation.
+- [x] Reviewer filled only `preferredAliases`, `allUnusable`, and optional `notes`.
+- [x] Validate preference schema and run the frozen Phase A evaluation.
 
 ## Conditional Slice 2: Pixel Ranking
 
 - [ ] Run only if Phase A is not validated and candidate-level labels are sufficient.
+  Blocked: Phase A is `METADATA_SELECTION_EVIDENCE_INSUFFICIENT` (2/8 minimum
+  discriminating queries), so a pixel ranker is not currently evaluable.
 
 ## Slice 3: Decision And Closure
 

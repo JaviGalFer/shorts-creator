@@ -2,15 +2,20 @@
 
 ## Active Change: pexels-photo-selection-benchmark — IN PROGRESS
 - Evaluation-only investigation that freezes a candidate-ordering benchmark before
-  any candidate-level human preferences are supplied. It does not touch Pexels
+  any candidate-level human preferences were supplied. It does not touch Pexels
   runtime, providers, routing, executor, config, contracts, semantic scoring, or
   visual-fidelity runtime.
 - Phase A implementation is frozen: A0 raw Pexels order, A1 exact lexical query
   recall and A2 fixed-parameter BM25 over the persisted page-1 top-15. The blind
   review manifest maps the ten persisted top-3 sets to deterministic A/B/C aliases.
-- Human preferences remain explicitly `UNLABELED`; no Phase A selector verdict has
-  been computed. Review material is git-ignored under
-  `data/evaluations/pexels-photo-selection-benchmark/review/`.
+- Human preferences are `LABELED` and sealed in `ff64aef` (SHA-256
+  `9ade45a5da70b1538a516c4100ce5bbbae4bf56d4dd625def9242b8fbaa5144f`).
+  Frozen Phase A evaluated A0/A1/A2 offline: 10 labels, 6 topics, but only 2
+  discriminating queries (<8 required), yielding
+  `METADATA_SELECTION_EVIDENCE_INSUFFICIENT`; selected strategy is null. A1
+  does not move PlayStation raw #3 ahead of #1; A2 does, but cannot bypass
+  insufficiency. Phase B is neither run nor eligible. Artifact is git-ignored
+  at `data/evaluations/pexels-photo-selection-benchmark/phase-a.json`.
 - Pexels Photos remains `PLANNED`. The historical pairwise evidence PlayStation
   raw #3 > raw #1 stays external to the blinded review and cannot order aliases.
 

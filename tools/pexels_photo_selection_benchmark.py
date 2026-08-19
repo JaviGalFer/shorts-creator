@@ -26,6 +26,7 @@ REVIEW_SOURCE = ROOT / "data/evaluations/pexels-provider-fit-benchmark/review-sa
 MANIFEST_PATH = ROOT / "tests/fixtures/pexels_photo_selection/review_manifest.json"
 PREFERENCES_PATH = ROOT / "tests/fixtures/pexels_photo_selection/human_preferences.json"
 REVIEW_DIR = ROOT / "data/evaluations/pexels-photo-selection-benchmark/review"
+PHASE_A_RESULT_PATH = ROOT / "data/evaluations/pexels-photo-selection-benchmark/phase-a.json"
 
 RAW = "A0_RAW"
 LEXICAL_RECALL = "A1_EXACT_LEXICAL_QUERY_RECALL"
@@ -358,14 +359,272 @@ def manifest_hash() -> str:
     return hashlib.sha256(MANIFEST_PATH.read_bytes()).hexdigest()
 
 
+def human_preferences_hash(path: Path | str = PREFERENCES_PATH) -> str:
+    """Return SHA-256 of the sealed preference fixture without parsing its choices."""
+    preference_path = Path(path)
+    if not preference_path.is_absolute():
+        preference_path = ROOT / preference_path
+    return hashlib.sha256(preference_path.read_bytes()).hexdigest()
+
+
+def load_labeled_preferences(path: Path | str = PREFERENCES_PATH) -> list[dict[str, Any]]:
+    """Load only a fixture that has passed the frozen LABELED contract."""
+    if preferences_status(path) != HUMAN_REVIEW_READY:
+        raise ValueError("HUMAN_REVIEW_NOT_READY")
+    preference_path = Path(path)
+    if not preference_path.is_absolute():
+        preference_path = ROOT / preference_path
+    preferences = load_json(preference_path).get("preferences")
+    if not isinstance(preferences, list):  # validate_preferences already proves this.
+        raise ValueError("INVALID_PREFERENCES")
+    return preferences
+
+
+def _manifest_aliases(manifest: dict[str, Any]) -> dict[str, dict[str, int]]:
+    """Map the frozen aliases to candidate IDs; filenames never participate."""
+    return {
+        entry["queryUsed"]: {candidate["alias"]: candidate["candidateId"] for candidate in entry["candidates"]}
+        for entry in manifest["queries"]
+    }
+
+
+def _review_topics() -> dict[str, tuple[str, ...]]:
+    sample = load_json(REVIEW_SOURCE)["sample"]
+    return {
+        item["query"]: tuple(item.get("topics", []))
+        for item in sample
+        if isinstance(item, dict) and isinstance(item.get("query"), str)
+    }
+
+
+def evaluate_against_preferences(
+    *,
+    strategy: str,
+    scored_candidates: dict[str, list[dict[str, Any]]],
+    manifest: dict[str, Any],
+    preferences: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Evaluate already-scored candidates against sealed human preferences.
+
+    This is intentionally separate from ``score_candidates``: it maps aliases
+    only through the frozen manifest and cannot change selector scores or order.
+    Human accuracy uses the raw Pexels top-3 review window; top-15 remains a
+    score/order diagnostic in the persisted per-query result.
+    """
+    aliases_by_query = _manifest_aliases(manifest)
+    preferences_by_query = {entry["queryUsed"]: entry for entry in preferences}
+    if set(scored_candidates) != set(aliases_by_query) or set(preferences_by_query) != set(aliases_by_query):
+        raise ValueError("EVALUATION_QUERY_SET_MISMATCH")
+
+    query_results: list[dict[str, Any]] = []
+    top1_successes = 0
+    usable_count = 0
+    pairwise_accuracies: list[float] = []
+    preferred_ranks: list[int] = []
+    beneficial = harmful = unchanged = selector_ties = all_unusable = unknown = 0
+
+    for query in CANONICAL_REVIEW_QUERIES:
+        ordered = scored_candidates[query]
+        alias_by_id = {candidate_id: alias for alias, candidate_id in aliases_by_query[query].items()}
+        preference = preferences_by_query[query]
+        preferred_aliases = preference["preferredAliases"]
+        preferred_ids = {aliases_by_query[query][alias] for alias in preferred_aliases}
+        all_unusable_query = preference["allUnusable"] is True
+        raw_window = sorted(
+            (item for item in ordered if item["pexelsQueryRank"] <= 3),
+            key=lambda item: item["selectorRank"],
+        )
+        raw_top1 = next(item for item in ordered if item["pexelsQueryRank"] == 1)
+        selected = raw_window[0]
+        top1_preferred: bool | None = None
+        pairwise_accuracy: float | None = None
+        best_preferred_rank: int | None = None
+        selector_tie = False
+
+        if all_unusable_query:
+            all_unusable += 1
+        else:
+            usable_count += 1
+            top1_preferred = selected["candidateId"] in preferred_ids
+            top1_successes += int(top1_preferred)
+            best_preferred_rank = min(
+                item["selectorRank"] for item in raw_window if item["candidateId"] in preferred_ids
+            )
+            preferred_ranks.append(best_preferred_rank)
+            non_preferred = [item for item in raw_window if item["candidateId"] not in preferred_ids]
+            if non_preferred:
+                correct = sum(
+                    preferred["selectorRank"] < non_preferred_candidate["selectorRank"]
+                    for preferred in raw_window if preferred["candidateId"] in preferred_ids
+                    for non_preferred_candidate in non_preferred
+                )
+                pairwise_accuracy = correct / (len(preferred_ids) * len(non_preferred))
+                pairwise_accuracies.append(pairwise_accuracy)
+            if strategy != RAW and len(raw_window) > 1:
+                selector_tie = raw_window[0]["selectorScore"] == raw_window[1]["selectorScore"]
+                selector_ties += int(selector_tie)
+            raw_preferred = raw_top1["candidateId"] in preferred_ids
+            beneficial += int(not raw_preferred and top1_preferred)
+            harmful += int(raw_preferred and not top1_preferred)
+
+        unchanged += int(selected["candidateId"] == raw_top1["candidateId"])
+        query_results.append({
+            "queryUsed": query,
+            "topics": list(_review_topics()[query]),
+            "candidateIds": [item["candidateId"] for item in ordered],
+            "candidates": [
+                {
+                    "candidateId": item["candidateId"],
+                    "alias": alias_by_id.get(item["candidateId"]),
+                    "pexelsQueryRank": item["pexelsQueryRank"],
+                    "selectorScore": item["selectorScore"],
+                    "selectorRank": item["selectorRank"],
+                }
+                for item in ordered
+            ],
+            "preferredAliases": preferred_aliases,
+            "preferredCandidateIds": sorted(preferred_ids),
+            "allUnusable": all_unusable_query,
+            "top1Preferred": top1_preferred,
+            "pairwiseAccuracy": pairwise_accuracy,
+            "bestPreferredSelectorRank": best_preferred_rank,
+            "selectorTie": selector_tie,
+        })
+
+    playstation = next(row for row in query_results if row["queryUsed"] == "PlayStation Nintendo 64 comparison photograph")
+    ranks = {candidate["pexelsQueryRank"]: candidate["selectorRank"] for candidate in playstation["candidates"]}
+    return {
+        "strategy": strategy,
+        "metrics": {
+            "top1PreferredRate": top1_successes / usable_count if usable_count else None,
+            "macroPairwiseAccuracy": sum(pairwise_accuracies) / len(pairwise_accuracies) if pairwise_accuracies else None,
+            "meanPreferredRank": sum(preferred_ranks) / len(preferred_ranks) if preferred_ranks else None,
+            "beneficialReorders": beneficial,
+            "harmfulReorders": harmful,
+            "unchanged": unchanged,
+            "selectorTie": selector_ties if strategy != RAW else 0,
+            "allUnusable": all_unusable,
+            "unknown": unknown,
+            "playstationRank3BeforeRank1": ranks[3] < ranks[1],
+            "preferredCandidateGateSurvival": "NOT_COMPUTED",
+        },
+        "queries": query_results,
+    }
+
+
+def evidence_sufficiency(preferences: list[dict[str, Any]]) -> dict[str, Any]:
+    """Apply the frozen label, discriminating-query, and topic sufficiency gate."""
+    topics = _review_topics()
+    discriminating = [
+        entry for entry in preferences
+        if not entry["allUnusable"] and set(entry["preferredAliases"]) != set(ALIASES)
+    ]
+    topic_count = len({topic for entry in preferences for topic in topics[entry["queryUsed"]]})
+    return {
+        "labeledQueries": len(preferences),
+        "discriminatingQueries": len(discriminating),
+        "topicCount": topic_count,
+        "sufficient": len(preferences) == 10 and len(discriminating) >= 8 and topic_count >= 5,
+    }
+
+
+def determine_phase_a_verdict(
+    strategy_results: dict[str, dict[str, Any]],
+    sufficiency: dict[str, Any],
+) -> tuple[str, str | None, bool]:
+    """Apply the frozen verdict criteria without changing any selector output."""
+    if not sufficiency["sufficient"]:
+        return "METADATA_SELECTION_EVIDENCE_INSUFFICIENT", None, False
+    raw = strategy_results[RAW]["metrics"]
+
+    def passes(strategy: str) -> bool:
+        metrics = strategy_results[strategy]["metrics"]
+        return (
+            metrics["playstationRank3BeforeRank1"]
+            and metrics["top1PreferredRate"] >= raw["top1PreferredRate"] + 0.20
+            and metrics["macroPairwiseAccuracy"] >= raw["macroPairwiseAccuracy"] + 0.10
+            and metrics["beneficialReorders"] >= 2
+            and metrics["harmfulReorders"] <= 1
+        )
+
+    passing = [strategy for strategy in (LEXICAL_RECALL, BM25) if passes(strategy)]
+    if passing:
+        return "METADATA_SELECTOR_VALIDATED", LEXICAL_RECALL if LEXICAL_RECALL in passing else BM25, False
+    improved_both = [
+        strategy for strategy in (LEXICAL_RECALL, BM25)
+        if strategy_results[strategy]["metrics"]["top1PreferredRate"] > raw["top1PreferredRate"]
+        and strategy_results[strategy]["metrics"]["macroPairwiseAccuracy"] > raw["macroPairwiseAccuracy"]
+    ]
+    if (
+        not improved_both
+        or any(
+            strategy_results[strategy]["metrics"]["harmfulReorders"]
+            > strategy_results[strategy]["metrics"]["beneficialReorders"]
+            for strategy in (LEXICAL_RECALL, BM25)
+        )
+        or (
+            not strategy_results[LEXICAL_RECALL]["metrics"]["playstationRank3BeforeRank1"]
+            and not strategy_results[BM25]["metrics"]["playstationRank3BeforeRank1"]
+            and not improved_both
+        )
+    ):
+        return "METADATA_SELECTOR_NOT_USEFUL", None, True
+    return "METADATA_SELECTION_EVIDENCE_INSUFFICIENT", None, False
+
+
+def evaluate_phase_a() -> dict[str, Any]:
+    """Run the frozen offline Phase A and write no production state."""
+    if preferences_status() != HUMAN_REVIEW_READY:
+        raise ValueError("HUMAN_REVIEW_NOT_READY")
+    manifest = load_manifest()
+    preferences = load_labeled_preferences()
+    scored = {
+        strategy: {
+            query: score_candidates(strategy, query, load_photo_candidates(query, limit=15))
+            for query in CANONICAL_REVIEW_QUERIES
+        }
+        for strategy in (RAW, LEXICAL_RECALL, BM25)
+    }
+    strategy_results = {
+        strategy: evaluate_against_preferences(
+            strategy=strategy,
+            scored_candidates=scored[strategy],
+            manifest=manifest,
+            preferences=preferences,
+        )
+        for strategy in (RAW, LEXICAL_RECALL, BM25)
+    }
+    sufficiency = evidence_sufficiency(preferences)
+    verdict, selected_strategy, phase_b_required = determine_phase_a_verdict(strategy_results, sufficiency)
+    return {
+        "schemaVersion": 1,
+        "status": verdict,
+        "selectedStrategy": selected_strategy,
+        "sourceArtifactSha256": source_hash(),
+        "reviewManifestSha256": manifest_hash(),
+        "humanPreferencesSha256": human_preferences_hash(),
+        "evidenceSufficiency": sufficiency,
+        "strategyResults": strategy_results,
+        "playstationHistoricalEvidence": {"rawRank3BetterThanRawRank1": True},
+        "diagnostics": {"preferredCandidateGateSurvival": "NOT_COMPUTED"},
+        "phaseBRequired": phase_b_required,
+    }
+
+
+def write_phase_a_result(result: dict[str, Any], path: Path = PHASE_A_RESULT_PATH) -> None:
+    """Persist the ignored evaluation artifact only after all offline evaluation succeeds."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prepare offline blinded Pexels Photo review material")
-    parser.add_argument("action", choices=("prepare-review", "status"))
+    parser.add_argument("action", choices=("prepare-review", "status", "evaluate-phase-a"))
     args = parser.parse_args(argv)
     if args.action == "prepare-review":
         generated = prepare_review_package()
         print(f"prepared {len(generated)} blinded review sheets in {REVIEW_DIR}")
-    else:
+    elif args.action == "status":
         result = {
             "status": preferences_status(),
             "sourceArtifactSha256": source_hash(),
@@ -373,6 +632,17 @@ def main(argv: list[str] | None = None) -> int:
         }
         validate_result_schema(result)
         print(json.dumps(result, sort_keys=True))
+    else:
+        result = evaluate_phase_a()
+        validate_result_schema(result)
+        write_phase_a_result(result)
+        summary = {
+            "status": result["status"],
+            "selectedStrategy": result["selectedStrategy"],
+            "phaseBRequired": result["phaseBRequired"],
+            "evidenceSufficiency": result["evidenceSufficiency"],
+        }
+        print(json.dumps(summary, sort_keys=True))
     return 0
 
 
