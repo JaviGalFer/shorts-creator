@@ -7,6 +7,7 @@
 - [x] Add tracked blind manifest and explicitly unlabeled preference template.
 - [x] Generate git-ignored blinded contact sheets and review instructions.
 - [x] Add offline focused tests for scoring, ordering, artifacts, and review inputs.
+- [x] Add `validate_preferences()` and `manifest_hash()` pure functions.
 - [x] Validate focused tests and full test suite.
 
 ## Human Review

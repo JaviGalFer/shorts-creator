@@ -96,6 +96,49 @@ exceed beneficial reorders, or both alternatives fail PlayStation.
 fewer than eight discriminating queries exist, or results are inconclusive. Until
 then the only permitted status is `AWAITING_HUMAN_REVIEW`.
 
+## Preference Schema: FROZEN
+
+The human preference contract is strictly binary and frozen before any reviewer
+action. Two states are permitted:
+
+### UNLABELED
+
+- `status` = `"UNLABELED"` in `human_preferences.json`.
+- Exactly 10 entries matching the canonical query list.
+- Each entry has `preferredAliases = []`, `allUnusable = null`, and `notes = ""`.
+- `preferences_status()` returns `"AWAITING_HUMAN_REVIEW"`.
+- No human labels are present; scoring functions accept no labels.
+
+### LABELED
+
+- `status` = `"LABELED"` in `human_preferences.json`.
+- Exactly 10 entries matching the canonical query list (same 10 as UNLABELED).
+- Each entry is one of two forms:
+
+  **A)** `preferredAliases` contains 1–3 unique aliases from `{A, B, C}`,
+      `allUnusable = false`.
+
+  **B)** `preferredAliases = []`, `allUnusable = true`.
+
+- Rules:
+  - Aliases are only A, B, C; no other strings.
+  - No duplicate aliases within a single entry.
+  - `allUnusable = false` requires at least 1 alias; `allUnusable = true` requires 0 aliases.
+  - `allUnusable` is never `null` when `status = "LABELED"`.
+  - `notes` must be a string (may be empty).
+  - Queries cannot be missing, duplicated, or unknown (must be the 10 canonical queries).
+  - Multiple aliases represent a genuine tie; they are not a ranking.
+
+- `preferences_status()` returns `"HUMAN_REVIEW_READY"`.
+- `validate_preferences()` validates both states and returns a status dict
+  with a human-readable description. It does not modify `score_candidates`
+  or any ranking logic.
+
+`validate_preferences()` and `manifest_hash()` are pure functions added to
+`tools/pexels_photo_selection_benchmark.py`. They are part of the frozen
+contract and must not be altered after this change without a new OpenSpec
+change.
+
 ## Future Conditional Phase B
 
 Only if Phase A is not validated: benchmark raw relative OpenCLIP ViT-B-32 /

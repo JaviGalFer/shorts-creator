@@ -262,6 +262,93 @@ def prepare_review_package(output_dir: Path = REVIEW_DIR) -> list[Path]:
     return generated
 
 
+def manifest_hash() -> str:
+    """Return SHA-256 hex digest of the reviewed manifest bytes."""
+    return hashlib.sha256((ROOT / "tests/fixtures/pexels_photo_selection/review_manifest.json").read_bytes()).hexdigest()
+
+
+def validate_preferences() -> dict[str, str]:
+    """Validate the human_preferences.json schema.
+
+    Returns a status key and human-readable description.
+    Does not modify score_candidates or any ranking logic.
+    """
+    from pathlib import Path
+    p = Path("tests/fixtures/pexels_photo_selection/human_preferences.json")
+    data = json.loads(p.read_text(encoding="utf-8"))
+    entries = data.get("preferences", [])
+    status = data.get("status")
+    if status == "UNLABELED":
+        if data.get("schemaVersion") != 1:
+            return {"status": "INVALID", "reason": "bad schemaVersion"}
+        if len(entries) != 10:
+            return {"status": "INVALID", "reason": "expected 10 entries"}
+        for i, entry in enumerate(entries):
+            q = entry.get("queryUsed")
+            if q is None or not isinstance(q, str):
+                return {"status": "INVALID", "reason": f"entry {i}: missing queryUsed"}
+            if list(entry.get("preferredAliases", [])) != []:
+                return {"status": "INVALID", "reason": f"entry {i}: preferredAliases must be []"}
+            if entry.get("allUnusable") is not None:
+                return {"status": "INVALID", "reason": f"entry {i}: allUnusable must be null/None"}
+            if not isinstance(entry.get("notes"), str):
+                return {"status": "INVALID", "reason": f"entry {i}: notes must be string"}
+        return {"status": "UNLABELED", "description": "10 queries, all preferences empty, awaiting review"}
+    elif status == "LABELED":
+        if data.get("schemaVersion") != 1:
+            return {"status": "INVALID", "reason": "bad schemaVersion"}
+        if len(entries) != 10:
+            return {"status": "INVALID", "reason": "expected 10 entries"}
+        valid_aliases = frozenset({"A", "B", "C"})
+        pending = False
+        for i, entry in enumerate(entries):
+            q = entry.get("queryUsed")
+            if q is None or not isinstance(q, str):
+                return {"status": "INVALID", "reason": f"entry {i}: missing queryUsed"}
+            aliases = entry.get("preferredAliases", [])
+            # Validate aliases are A/B/C with no duplicates
+            if len(aliases) > 0:
+                alias_set = set()
+                for a in aliases:
+                    if a not in valid_aliases:
+                        return {"status": "INVALID", "reason": f"entry {i}: alias {a} not in A/B/C"}
+                    if a in alias_set:
+                        return {"status": "INVALID", "reason": f"entry {i}: duplicate alias {a}"}
+                    alias_set.add(a)
+                if entry.get("allUnusable") is not False:
+                    return {"status": "INVALID", "reason": f"entry {i}: allUnusable must be false when aliases present"}
+            else:
+                if entry.get("allUnusable") is not True:
+                    return {"status": "INVALID", "reason": f"entry {i}: allUnusable must be true when no aliases"}
+            if not isinstance(entry.get("notes"), str):
+                return {"status": "INVALID", "reason": f"entry {i}: notes must be string"}
+            # Track query uniqueness
+            if i == 0:
+                first_query = q
+            elif q != first_query:
+                # Ensure all queries are from the canonical 10
+                pass
+        # Verify all 10 canonical queries present
+        canonical = [
+            "four stroke engine automobile photograph",
+            "completed medieval castle photograph",
+            "medieval castle construction photograph",
+            "medieval castle historical significance photograph",
+            "four stroke engine parts photograph",
+            "blue ringed octopus venom photograph",
+            "PlayStation Nintendo 64 comparison photograph",
+            "Java code snippet photograph",
+            "engine explosion in piston photograph",
+            "amortization chart graph photograph",
+        ]
+        present = [entry.get("queryUsed") for entry in entries]
+        if sorted(present) != sorted(canonical):
+            return {"status": "INVALID", "reason": "not all 10 canonical queries present or duplicates/extra"}
+        return {"status": "LABELED", "description": "10 queries labeled by human review"}
+    else:
+        return {"status": "INVALID", "reason": f"unknown status: {status}"}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prepare offline blinded Pexels Photo review material")
     parser.add_argument("action", choices=("prepare-review", "status"))
