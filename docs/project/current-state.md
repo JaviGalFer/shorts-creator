@@ -2,6 +2,39 @@
 
 **Última actualización:** 2026-08-19
 
+## Investigación cerrada: `pexels-provider-fit-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
+
+- Benchmark-first del **PROVIDER FIT** de Pexels Photos/Video y de
+  `query-adapt-v1`, sin runtime Pexels, rendering, VisualPlan/schema,
+  OpenCLIP/BLIP/VLM, generación de imágenes ni perceptual hash. Base `cf391c5`;
+  commits `6b18d01` (benchmark), `d948300` (hardening) y cierre documental.
+- Evidencia: 58 rows → 56 queryUsed; 39 requests Video adaptadas históricas
+  (cap 40, rate-limit 24849/25000). **0 requests, descargas o regeneración de
+  contact sheets** durante hardening/cierre. Suite de cierre `1626 passed`.
+- Revisión humana: Photos **PEXELS_BETTER=4 / CURRENT_BETTER=3 / TIE=3**;
+  Video **ADAPTED_BETTER=2 / RAW_BETTER=1 / TIE=3 / BOTH_UNUSABLE=4**. Pexels
+  es complementario, no sustituto global de Wikimedia/Pixabay.
+- **`PEXELS_PROVIDER_FIT_VALIDATED`**: exact forms
+  (diagram/infographic/illustration/painting) no son satisfacción directa
+  Pexels; photograph habilita Photos como provider y Video como candidate.
+  `ELIGIBLE` no implica candidate accepted ni fidelidad garantizada; sin matriz
+  intent×assetPreference nueva.
+- **`QUERY_ADAPTATION_COMPLEMENTARY_NOT_DEFAULT`**: candidate set materialmente
+  distinto y ligera diversificación, pero Video review 2 mejor / 1 peor / 3 tie
+  / 4 inutilizable. Futuro: pool RAW+ADAPTED y selección posterior; no sustituir
+  RAW por ADAPTED.
+- **`PEXELS_TOPN_SELECTION_REQUIRED`**: API rank #1 no es asset final.
+  `PlayStation Nintendo 64 comparison photograph`: Pexels Photo #3 claramente
+  superior; `four stroke engine automobile photograph` conserva el caso top-N
+  Video. Diversity/dedup continúa como limitación within-job/topic.
+- Roadmap separado: `pexels-photos-runtime` image-only (provider adicional,
+  routing provider-fit, top-N), después contrato `VisualAsset kind = IMAGE |
+  VIDEO`, luego `pexels-video-runtime` (RAW+adapted, clips,
+  normalización/rendering), candidate-selection/diversity. Generación de
+  imágenes y manual uploads siguen posteriores.
+- Marcador `PEXELS_PROVIDER_FIT_BENCHMARK_CLOSED_AND_MERGED`. Sin push, sin
+  reindex.
+
 ## Investigación cerrada: `pexels-visual-supply-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
 - Benchmark-first del SUPPLY visual de Pexels (**Video + Photos**) frente al

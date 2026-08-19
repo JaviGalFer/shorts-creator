@@ -61,7 +61,9 @@ los 3 contact sheets. Sin integración de runtime. Decisión:
 
 - [x] No se generan CLEARLY_RELEVANT / COARSE_BUT_USABLE / FALSE_POSITIVE
 - [x] No se afirma `PEXELS_PHOTOS_BETTER` (ni `PEXELS_BETTER`)
-- [x] Estado final: READY_FOR_HUMAN_REVIEW (pendientes los píxeles)
+- [x] Estado final del change: COMPLETED / VERIFIED / CLOSED (la revisión
+      humana externa se completó y se registró en `results.md`; los píxeles
+      quedaron resueltos como evidencia cualitativa)
 
 ## Tests
 
@@ -94,4 +96,5 @@ los 3 contact sheets. Sin integración de runtime. Decisión:
   imprime ni persiste.
 - Contact sheets requieren Docker `linuxserver/ffmpeg:latest` (host ffmpeg/
   ffprobe ausentes); entrada ffmpeg por defecto y ffprobe vía `--entrypoint`.
-- No merge, no push, no reindex.
+- El merge no-ff a `main` ya ocurrió (commit `cf391c5`). Siguen siendo
+  ciertos `sin push` y `sin reindex`.
