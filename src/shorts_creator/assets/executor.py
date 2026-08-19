@@ -2,9 +2,9 @@
 
 Consumes the sourcing plan from ``build_visual_sourcing_plan_v2`` and
 produces an execution plan.  In dry-run mode evaluates provider
-availability and returns what would be attempted.  In live mode
-executes Wikimedia Commons searches and downloads (other providers
-remain not implemented).
+availability and returns what would be attempted. In live mode it supports
+Wikimedia Commons and Pixabay searches/downloads; other providers remain
+without live runtime support here.
 
 No imports from v1 runtime pipeline modules.  Stdlib only.
 """
@@ -315,7 +315,7 @@ def execute_visual_sourcing_plan_v2(
     evaluates provider availability, and returns resolved assets (live)
     or what would be attempted (dry-run).
 
-    Live execution is implemented for ``wikimedia_commons`` only.
+    Live execution currently supports ``wikimedia_commons`` and ``pixabay``.
     All other providers return ``PROVIDER_UNAVAILABLE`` in live mode.
 
     Args:

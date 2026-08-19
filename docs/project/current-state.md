@@ -37,7 +37,8 @@
   Wikimedia/Pixabay mediante callbacks, sin serializar envelopes/attempts ni
   modificar bridge/metadata pública. Mantiene el orden de provider y queries,
   cache/exclusions y límite 20 de Wikimedia; el comportamiento de primera query
-  viable, orden API/rank y límite 20 de Pixabay; semantic antes de download y
+  viable, orden de candidates devuelto por provider, posición final del stream
+  como `provider_rank` y límite 20 de Pixabay; semantic antes de download y
   fidelity después. No hay reranking, pool cross-provider, diversity, Pexels ni
   VIDEO runtime. Afectados: `331 passed`; suite completa `1699 passed, 0 failed`;
   `git diff --check` limpio. Commit `9381435`

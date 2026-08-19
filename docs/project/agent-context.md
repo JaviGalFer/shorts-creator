@@ -35,8 +35,9 @@
   bridge/metadata shape, Pexels status or rendering. The lifecycle is lazy and
   callback-driven; provider I/O remains outside `candidates.py`.
 - Parity retained: Wikimedia query/cache/exclusion progression and 20-attempt
-  limit; Pixabay first-query candidate behavior, API hit order/rank and
-  20-attempt limit; semantic-before-download, fidelity-after-download,
+  limit; Pixabay provider-returned candidate order, first-query-with-valid-
+  candidates behavior, final discovery-stream `provider_rank` and 20-attempt
+  limit; semantic-before-download, fidelity-after-download,
   provider failover and OFF-by-default fidelity bypass. No reranking/diversity.
 - Validation: affected tests `331 passed`; full suite `1699 passed, 0 failed`;
   `git diff --check` clean.

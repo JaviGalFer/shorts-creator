@@ -6,7 +6,7 @@ from shorts_creator.assets.candidates import ACCEPTED, EXHAUSTED, select_first_a
 from shorts_creator.assets.executor import _native_to_candidate_envelope
 
 
-def _native(provider: str, *, query: str, rank: int | None = None) -> dict:
+def _native(provider: str, *, query: str) -> dict:
     candidate = {
         "provider": provider,
         "title": f"{query} candidate",
@@ -22,7 +22,6 @@ def _native(provider: str, *, query: str, rank: int | None = None) -> dict:
     }
     if provider == "pixabay":
         candidate["pixabayId"] = 42
-        candidate["providerRank"] = rank
     return candidate
 
 
@@ -61,9 +60,9 @@ def test_wikimedia_adapter_keeps_rank_undeclared():
 
 def test_pixabay_adapter_uses_final_discovery_stream_rank():
     natives = [
-        _native("pixabay", query="first", rank=1),
-        _native("pixabay", query="second", rank=2),
-        _native("pixabay", query="third", rank=3),
+        _native("pixabay", query="first"),
+        _native("pixabay", query="second"),
+        _native("pixabay", query="third"),
     ]
     envelopes = [
         _native_to_candidate_envelope(
