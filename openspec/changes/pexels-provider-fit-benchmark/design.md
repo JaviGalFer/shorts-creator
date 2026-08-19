@@ -1,6 +1,8 @@
 # Design: pexels-provider-fit-benchmark
 
-**Status: IN_PROGRESS** — investigación benchmark-first, sin cambios de runtime.
+**Status: COMPLETED / VERIFIED / CLOSED** — investigación benchmark-first, sin
+cambios de runtime. La revisión humana externa cerró la elegibilidad de provider,
+pero no integra Pexels todavía.
 
 ## Arquitectura de evaluación
 
@@ -27,7 +29,7 @@ data/evaluations/pexels-provider-fit-benchmark/          ← git-ignored
 02-provider-fit-video-raw-vs-adapted-top3.png (RAW #1|#2|#3 / ADAPTED #1|#2|#3)
 03-provider-fit-video-temporal.png            (RAW vs ADAPTED rank#1, frames 20/50/80 %)
         ▼
-openspec/changes/pexels-provider-fit-benchmark/results.md  ← READY_FOR_HUMAN_REVIEW
+openspec/changes/pexels-provider-fit-benchmark/results.md  ← cierre humano / decisiones
 ```
 
 Evidencia RAW reutilizada (sin nuevas request de búsqueda):

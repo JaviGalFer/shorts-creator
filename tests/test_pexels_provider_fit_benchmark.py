@@ -100,7 +100,7 @@ def test_query_form_mismatches_recorded() -> None:
     assert len(rows) == 4
     # query form (what was actually searched) wins over the regenerated plan
     for r in rows:
-        query_form(r["queryUsed"]) in ("photograph", "exactform")
+        assert query_form(r["queryUsed"]) in ("photograph", "exactform")
 
 
 def test_missing_metadata_reported_not_invented() -> None:

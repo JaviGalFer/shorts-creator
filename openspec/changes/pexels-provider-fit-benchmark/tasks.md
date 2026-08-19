@@ -1,8 +1,8 @@
 # Tasks: pexels-provider-fit-benchmark
 
-**Status: IN_PROGRESS** — investigación benchmark-first (research-only). NO
-integra runtime. Estado de evidencia: **READY_FOR_HUMAN_REVIEW** (pendiente la
-revisión humana externa de los 3 contact sheets).
+**Status: COMPLETED / VERIFIED / CLOSED** — investigación benchmark-first
+(research-only). NO integra runtime. La revisión humana externa de los 3 contact
+sheets quedó registrada en `results.md`.
 
 ## Base / precondiciones
 
@@ -88,18 +88,20 @@ revisión humana externa de los 3 contact sheets).
 - [x] Suite completa `python3 -m pytest -q tests` en verde
 - [x] `git diff --check` limpio
 
-## Pendiente humano
+## Revisión humana externa
 
-- [ ] Revisión humana externa de los 3 contact sheets (decisiones por query:
+- [x] Revisión humana externa de los 3 contact sheets (decisiones por query:
       Photos CURRENT/PEXELS/TIE; Video RAW/ADAPTED/TIE/BOTH_UNUSABLE; rank#1 útil
       o top3 mejor; si assetPreference=photograph fue suficiente para decidir
-      fit; si algún intent requiere regla adicional). NO se producen esos labels
-      desde OpenCode.
+      fit; si algún intent requiere regla adicional). Labels registrados solo
+      desde la revisión humana, no producidos por OpenCode.
 
 ## Commit
 
 - [x] `git commit -m "test(evaluation): benchmark Pexels provider fit"`
-- [ ] Cierre documental en OpenSpec/agent-context (tras revisión humana)
+- [x] `git commit -m "fix(evaluation): harden Pexels provider fit benchmark"`
+- [x] `git commit -m "docs(evaluation): close Pexels provider fit benchmark"`
+- [x] Merge no-ff a `main`; suite `1626 passed, 0 failed`. Sin push.
 
 ## Notas
 
@@ -107,5 +109,5 @@ revisión humana externa de los 3 contact sheets).
   `sin reindex`.
 - Contact sheets requieren Docker `linuxserver/ffmpeg:latest` (host ffmpeg/
   ffprobe ausentes); entrada ffmpeg por defecto y ffprobe vía `--entrypoint`.
-- No se afirman `PROVIDER_FIT_VALIDATED`, `ADAPTED_BETTER` ni "Pexels por
-  defecto".
+- `PEXELS_PROVIDER_FIT_VALIDATED` valida elegibilidad, NO aceptación de un
+  candidato individual; `ADAPTED_BETTER` no se afirma como default.

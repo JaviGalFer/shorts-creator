@@ -1,9 +1,10 @@
 # Propuesta: pexels-provider-fit-benchmark
 
-**Status: IN_PROGRESS** — investigación benchmark-first (research-only), sin
-integración de runtime. Objetivo: determinar CUÁNDO Pexels Photos/Video son
-providers adecuados para un segmento y si una adaptación determinista de query
-mejora Pexels Video en los casos stock-compatible.
+**Status: COMPLETED / VERIFIED / CLOSED** — investigación benchmark-first
+(research-only), cerrada tras la revisión humana externa de los 3 contact
+sheets. Sin integración de runtime. Decisiones: **`PEXELS_PROVIDER_FIT_VALIDATED`**,
+**`QUERY_ADAPTATION_COMPLEMENTARY_NOT_DEFAULT`** y
+**`PEXELS_TOPN_SELECTION_REQUIRED`**.
 
 ## Contexto
 
@@ -19,7 +20,7 @@ Ese cierre registró como **dirección siguiente (no implementada)**
 Photos para intents photographic, Video con adaptación determinista de query,
 RAW vs adapted, top-N vs rank#1, overlap entre escenas; benchmark-first.
 
-Este cambio implementa esa investigación. NO toca runtime.
+Este cambio implementó y cerró esa investigación. NO tocó runtime.
 
 ## Objetivo
 
@@ -34,8 +35,8 @@ Este cambio implementa esa investigación. NO toca runtime.
    para las queries `photograph` sin perder sujeto/variante/acción.
 4. Dejar evidencia visual (3 contact sheets) para **revisión humana externa**
    que decida por query: Photos CURRENT vs PEXELS; Video RAW vs ADAPTED.
-5. NO afirmar todavía `PROVIDER_FIT_VALIDATED`, `ADAPTED_BETTER` ni "Pexels
-   por defecto".
+5. Dejar la decisión humana separada de la evidencia técnica. El cierre no
+   afirma que Pexels sustituya Wikimedia/Pixabay ni que ADAPTED reemplace RAW.
 
 ## Alcance
 
@@ -50,7 +51,7 @@ Este cambio implementa esa investigación. NO toca runtime.
 
 ## Fuera de alcance
 
-- Decisión final de integración de Pexels.
+- Integración runtime de Pexels (queda como roadmap posterior separado).
 - Matriz compleja intent×assetPreference (se mide primero si assetPreference /
   forma de query explica ya el fit).
 - Perceptual hash / near-duplicate vision.

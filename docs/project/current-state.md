@@ -2,49 +2,38 @@
 
 **Última actualización:** 2026-08-19
 
-## Investigación activa: `pexels-provider-fit-benchmark` — IN_PROGRESS / READY_FOR_HUMAN_REVIEW (rama `change/pexels-provider-fit-benchmark`, NO mergeada)
+## Investigación cerrada: `pexels-provider-fit-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
-- Benchmark-first del **PROVIDER FIT** de Pexels Photos/Video y de la
-  adaptación determinista de query para Pexels Video. **Research-only; sin
-  integración runtime.** NO tocar rendering/OpenCLIP/BLIP/VLM/VisualPlan; NO
-  generación de imágenes; NO perceptual hash. Base `main` == `cf391c5`.
-- Datasets reutilizados sin relabel (58 rows → 56 queryUsed); **evidencia RAW
-  reutilizada** de los benchmarks previos. **Solo requests nuevas: 39/40**
-  Pexels Video adaptadas (`orientation=portrait`, `locale=en-US`,
-  `per_page=15`; rate-limit final `remaining=24849/25000`).
-- Contrato persistido resuelto por `(jobId, sceneNumber, segmentIndex)` desde
-  `data/videos/<jobId>/metadata.json`: 58/58, `missingRows=0`, 4 rows con
-  `searchQueryMismatch`. Distribuciones: assetPreference {photograph 39,
-  diagram 14, illustration 5}; visualIntent {explain 27, show 10,
-  contextualize 9, emphasize 9, compare 2, immerse 1}.
-- Política provisional `provider-fit-policy-v1`: exactform →
-  `INELIGIBLE_EXACT_FORM` (16 rows); photograph → Photos `ELIGIBLE` / Video
-  `ELIGIBLE_CANDIDATE` (42); resto `UNDECIDED` (0). Adaptación `query-adapt-v1`
-  (elimina solo photograph/photo/photography): 39 adaptaciones únicas, sin
-  colisiones, ninguna igual a una queryUsed RAW.
-- RAW vs ADAPTED (39): total_results 29/39 disminuye (mediana 6439→6026), pero
-  esto solo demuestra un cambio/restricción del conjunto recuperado, no mayor
-  relevancia ni menor ruido antes de la revisión humana. Supply portrait intacto
-  (39/39 en 720 y 1080). Overlap exact-ID top15 base
-  justa: RAW 456 unique/92 repet./56 pares (J med .124) vs ADAPTED 461/88/50
-  (J med .138) — diversifica ligeramente; duplicados within-job/topic persisten
-  (Photos el peor: 278).
-- Review sample determinista 10 queries (5 mandatory + 5 por round-robin de
-  topics; 6 topics); 20 clips (10 RAW con reutilización + 10 ADAPTED, 0 fallos).
-- Evidencia visual: `data/evaluations/pexels-provider-fit-benchmark/`
-  (`01-provider-fit-photo-current-top3.png`, `02-provider-fit-video-raw-vs-
-  adapted-top3.png`, `03-provider-fit-video-temporal.png`).
-- **Estado: `READY_FOR_HUMAN_REVIEW`** — pendiente la revisión humana externa
-  (Photos CURRENT/PEXELS/TIE; Video RAW/ADAPTED/TIE/BOTH_UNUSABLE). NO se
-  afirma `PROVIDER_FIT_VALIDATED`/`ADAPTED_BETTER`/Pexels default.
-- Hardening offline: `raw_1080` corregido, `newIdsIntroducedByAdaptation`
-  renombrado y una adaptedQuery con múltiples sourceQueries compara/mappea cada
-  source conservando una sola request. `raw-vs-adapted.json` regenerado sin
-  requests, redescargas ni contact sheets.
-- Suite en rama: **`1626 passed, 0 failed`** (1586 previos + 40 nuevos).
-  Commits `test(evaluation): benchmark Pexels provider fit` +
-  `fix(evaluation): harden Pexels provider fit benchmark` (sin merge/push/reindex).
-  Marcador `PEXELS_PROVIDER_FIT_BENCHMARK_HARDENED`.
+- Benchmark-first del **PROVIDER FIT** de Pexels Photos/Video y de
+  `query-adapt-v1`, sin runtime Pexels, rendering, VisualPlan/schema,
+  OpenCLIP/BLIP/VLM, generación de imágenes ni perceptual hash. Base `cf391c5`;
+  commits `6b18d01` (benchmark), `d948300` (hardening) y cierre documental.
+- Evidencia: 58 rows → 56 queryUsed; 39 requests Video adaptadas históricas
+  (cap 40, rate-limit 24849/25000). **0 requests, descargas o regeneración de
+  contact sheets** durante hardening/cierre. Suite de cierre `1626 passed`.
+- Revisión humana: Photos **PEXELS_BETTER=4 / CURRENT_BETTER=3 / TIE=3**;
+  Video **ADAPTED_BETTER=2 / RAW_BETTER=1 / TIE=3 / BOTH_UNUSABLE=4**. Pexels
+  es complementario, no sustituto global de Wikimedia/Pixabay.
+- **`PEXELS_PROVIDER_FIT_VALIDATED`**: exact forms
+  (diagram/infographic/illustration/painting) no son satisfacción directa
+  Pexels; photograph habilita Photos como provider y Video como candidate.
+  `ELIGIBLE` no implica candidate accepted ni fidelidad garantizada; sin matriz
+  intent×assetPreference nueva.
+- **`QUERY_ADAPTATION_COMPLEMENTARY_NOT_DEFAULT`**: candidate set materialmente
+  distinto y ligera diversificación, pero Video review 2 mejor / 1 peor / 3 tie
+  / 4 inutilizable. Futuro: pool RAW+ADAPTED y selección posterior; no sustituir
+  RAW por ADAPTED.
+- **`PEXELS_TOPN_SELECTION_REQUIRED`**: API rank #1 no es asset final.
+  `PlayStation Nintendo 64 comparison photograph`: Pexels Photo #3 claramente
+  superior; `four stroke engine automobile photograph` conserva el caso top-N
+  Video. Diversity/dedup continúa como limitación within-job/topic.
+- Roadmap separado: `pexels-photos-runtime` image-only (provider adicional,
+  routing provider-fit, top-N), después contrato `VisualAsset kind = IMAGE |
+  VIDEO`, luego `pexels-video-runtime` (RAW+adapted, clips,
+  normalización/rendering), candidate-selection/diversity. Generación de
+  imágenes y manual uploads siguen posteriores.
+- Marcador `PEXELS_PROVIDER_FIT_BENCHMARK_CLOSED_AND_MERGED`. Sin push, sin
+  reindex.
 
 ## Investigación cerrada: `pexels-visual-supply-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 
