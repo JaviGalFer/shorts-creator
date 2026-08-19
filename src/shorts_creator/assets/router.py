@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from shorts_creator.assets.capabilities import DIRECT, get_provider_capability, get_visual_form_fit
 from shorts_creator.contracts.visual_specificity import assess_query_specificity
 
 # ── Schema constants ────────────────────────────────────────────────────────
@@ -537,6 +538,11 @@ def _is_archive_only_pref(asset_preference: str) -> bool:
     return asset_preference in ("archive", "painting", "map", "document")
 
 
+def _pexels_photos_supports(asset_preference: str) -> bool:
+    capability = get_provider_capability("pexels.photos.stock")
+    return capability is not None and get_visual_form_fit(capability, asset_preference) == DIRECT
+
+
 # ── Routing engine ──────────────────────────────────────────────────────────
 
 
@@ -708,10 +714,28 @@ def _route_segment(
         # Explicit provider list: use only those providers, preserving list order.
         candidates, excluded = _apply_source_policy(candidates, excluded, source_providers)
     else:
+        # Pexels Photos is an explicit opt-in runtime provider, never a fallback.
+        for c in candidates[:]:
+            if c["provider"] == "pexels":
+                candidates.remove(c)
+                excluded.append(_make_excluded(
+                    "pexels",
+                    "Pexels Photos requires explicit request_visuals.sourceProviders opt-in",
+                ))
         policy = request_visuals.get("providerPriorityPolicy", "balanced")
         candidates = _apply_priority_policy(
             candidates, canonical_plan, request_visuals, policy, asset_pref
         )
+
+    # The Pexels Photos capability has direct evidence only for photographs.
+    # Do not turn an unsupported visual form into generic stock photography.
+    for c in candidates[:]:
+        if c["provider"] == "pexels" and not _pexels_photos_supports(asset_pref):
+            candidates.remove(c)
+            excluded.append(_make_excluded(
+                "pexels",
+                f"Pexels Photos does not support assetPreference='{asset_pref}' as a direct visual form",
+            ))
 
     # ── Compute routing status ───────────────────────────────────────────
     status = _compute_routing_status(candidates, asset_pref, segment_idx)

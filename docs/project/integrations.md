@@ -75,16 +75,17 @@ Cada integración tiene un estado de validación: `VALIDADO`, `PENDIENTE_DE_VALI
 - **Atribución**: No requerida
 - **Uso**: b-roll de stock
 
-## Pexels (imágenes, planificado)
+## Pexels Photos (imágenes)
 
-- **Estado**: `PENDIENTE_DE_VALIDAR` — **planificado, deshabilitado y no implementado** en el pipeline vigente.
+- **Estado**: `DISPONIBLE` como provider IMAGE/STOCK explícito; no es default.
 - **URL**: https://www.pexels.com/api/
 - **Método**: REST API
-- **Credenciales**: API Key (sin contrato de variable activo; `PEXELS_API_KEY` retirada de `.env.example`)
+- **Credenciales**: `PEXELS_API_KEY` en `.env` o process env; nunca se persiste.
 - **Límites**: 200 requests/hora en plan gratuito
-- **Atribución**: No requerida
-- **Rol actual**: entrada de proveedor planificado en `bin/visual_provider_config_v2.py` con `enabled=false, implemented=false`. No consume recursos ni credenciales.
-- **Evidencia histórica**: el workflow n8n `fetch-assets-v1` (legacy) usó Pexels durante el desarrollo; no refleja el estado actual del pipeline CLI.
+- **Atribución**: conservar fotógrafo, perfil y URL de la foto para crédito futuro; la UI no forma parte de este change.
+- **Rol actual**: disponible solo mediante `request.visuals.sourceProviders` o `--asset-providers pexels`; el orden explícito se conserva.
+- **Selección**: `PROVISIONAL_BM25`, explícitamente `NOT VALIDATED`; solo ordena intentos. Los gates semántico y pixel siguen siendo la autoridad.
+- **Fuera de alcance**: Pexels Video, adaptación de query y pagination adicional.
 
 ## FreeAI (imágenes generadas, deshabilitado)
 

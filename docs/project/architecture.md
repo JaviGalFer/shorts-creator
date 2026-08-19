@@ -65,7 +65,8 @@ Edge TTS es el proveedor canónico (gratuito, sin API key, voz natural). ElevenL
 |----------|--------|---------|
 | Wikimedia Commons | Activo, implementado | No necesita |
 | Pixabay | Activo, implementado | `PIXABAY_API_KEY` |
-| Pexels | Planificado, deshabilitado | — |
+| Pexels Photos | Activo, opt-in explícito | `PEXELS_API_KEY` |
+| Pexels Video | Planificado, deshabilitado | `PEXELS_API_KEY` |
 | FreeAI | Deshabilitado, no implementado | — |
 | Pollinations | Deshabilitado, no implementado | — |
 

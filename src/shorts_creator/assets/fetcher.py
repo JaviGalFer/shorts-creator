@@ -18,6 +18,7 @@ import traceback
 from pathlib import Path
 
 from shorts_creator.assets.bridge import apply_visual_assets_v2_to_metadata
+from shorts_creator.assets.provider_credentials import resolve_api_key
 from shorts_creator.assets.provider_config import load_provider_config_v2
 from shorts_creator.contracts.visual import canonicalize_visual_plan_v2
 
@@ -35,25 +36,7 @@ def _resolve_pixabay_api_key() -> str | None:
     Empty/whitespace-only values are treated as absent.
     No key values are printed, persisted, or exposed in configs.
     """
-    key = os.environ.get("PIXABAY_API_KEY", "").strip()
-    if key:
-        return key
-
-    env_path = PROJECT_ROOT / ".env"
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            k = k.strip()
-            if k == "PIXABAY_API_KEY":
-                v = v.strip().strip('"').strip("'")
-                if v:
-                    return v
-    return None
+    return resolve_api_key("PIXABAY_API_KEY")
 
 
 def _find_v2_scenes(metadata: dict) -> list[tuple[int, dict, dict]]:
@@ -383,12 +366,18 @@ def fetch_assets(
     pixabay_api_key = _resolve_pixabay_api_key()
     pixabay_key_present = bool(pixabay_api_key)
     pixabay_live = not dry_run
+    source_providers = (request_visuals or {}).get("sourceProviders", [])
+    pexels_requested = isinstance(source_providers, list) and "pexels" in source_providers
+    pexels_api_key = resolve_api_key("PEXELS_API_KEY") if pexels_requested else None
 
     provider_config = load_provider_config_v2(
         wikimedia_live=wikimedia_live,
         user_agent=user_agent,
         pixabay_live=pixabay_live,
         pixabay_api_key_present=pixabay_key_present,
+        pexels_enabled=pexels_requested,
+        pexels_api_key_present=bool(pexels_api_key),
+        pexels_live=not dry_run,
     )
 
     provider_credentials: dict | None = None
@@ -398,6 +387,10 @@ def fetch_assets(
                 "apiKey": pixabay_api_key,
             },
         }
+    if pexels_api_key:
+        if provider_credentials is None:
+            provider_credentials = {}
+        provider_credentials["pexels"] = {"apiKey": pexels_api_key}
 
     # 5. Validate sceneNumbers are unique
     scene_numbers_seen: set[int] = set()

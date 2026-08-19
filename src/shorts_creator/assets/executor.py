@@ -757,6 +757,13 @@ def _try_live_resolution(
             provider_credentials,
         )
 
+    if provider == "pexels":
+        return _resolve_pexels_photos(
+            candidate, segment, provider_config, job_dir, warnings,
+            asset_namespace, excluded_source_urls, excluded_file_urls,
+            provider_credentials,
+        )
+
     segment_idx = segment.get("segmentIndex")
     asset_pref = segment.get("assetPreference", "")
     return {
@@ -1248,6 +1255,218 @@ def _resolve_pixabay(
             "provider": "pixabay",
             "searchQueriesTried": query_texts,
             "reason": reason,
+        }
+
+
+def _resolve_pexels_photos(
+    candidate: dict,
+    segment: dict,
+    provider_config: dict,
+    job_dir: str,
+    warnings: list[dict],
+    asset_namespace: str | None = None,
+    excluded_source_urls: set[str] | None = None,
+    excluded_file_urls: set[str] | None = None,
+    provider_credentials: dict[str, dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Resolve Pexels Photos through the existing candidate lifecycle.
+
+    The established Pixabay downloader is reused because it accepts an arbitrary
+    candidate ``fileUrl`` and performs the existing content-type, size and
+    dimension validation. Pexels maps its ``src.original`` to that field.
+    """
+    segment_idx = segment.get("segmentIndex")
+    asset_pref = segment.get("assetPreference", "")
+    pexels_config = provider_config.get("pexels", {}) if isinstance(provider_config, dict) else {}
+    if isinstance(pexels_config, dict) and pexels_config.get("live") is False:
+        return {
+            "segmentIndex": segment_idx,
+            "assetPreference": asset_pref,
+            "status": "PROVIDER_UNAVAILABLE",
+            "provider": "pexels",
+            "reason": "Pexels live execution not implemented when provider_config.live is false",
+        }
+    creds = provider_credentials or {}
+    pexels_creds = creds.get("pexels", {}) or {}
+    api_key = pexels_creds.get("apiKey", "")
+    if not api_key or not isinstance(api_key, str) or not api_key.strip():
+        return {
+            "segmentIndex": segment_idx,
+            "assetPreference": asset_pref,
+            "status": "MISSING_API_KEY",
+            "provider": "pexels",
+            "reason": "PEXELS_API_KEY not configured in provider_credentials",
+        }
+
+    _, queries = _dispatch_inputs(candidate, segment)
+    query_texts = _extract_query_texts(queries)
+    try:
+        from shorts_creator.assets.providers.pexels import PexelsClientError
+        from shorts_creator.assets.providers.pexels_photos import (
+            NO_RESULTS as PEXELS_NO_RESULTS,
+            bind_lifecycle_positions,
+            search_pexels_photos,
+        )
+        from shorts_creator.assets.providers.pixabay import download_pixabay_asset_v2
+
+        native_by_envelope: dict[int, dict] = {}
+        provenance_by_envelope: dict[int, Any] = {}
+        semantic_assessments: dict[int, dict] = {}
+        visual_fidelity_assessments: dict[int, dict] = {}
+        download_results: dict[int, tuple[str, Path, dict]] = {}
+        download_errors: list[dict] = []
+        telemetry: list[dict[str, str]] = []
+
+        def envelopes() -> Iterable[CandidateEnvelope]:
+            stream_rank = 0
+            for query_index, query_text in enumerate(query_texts):
+                result = search_pexels_photos(query_text, api_key=api_key)
+                if result.telemetry:
+                    telemetry.append(dict(result.telemetry))
+                if result.status == PEXELS_NO_RESULTS:
+                    continue
+                page = []
+                for photo_candidate in result.candidates:
+                    envelope = photo_candidate.envelope
+                    source_url = envelope.source_url or ""
+                    acquisition_url = envelope.acquisition_url or ""
+                    if not acquisition_url:
+                        continue
+                    if excluded_source_urls is not None and source_url in excluded_source_urls:
+                        continue
+                    if excluded_file_urls is not None and acquisition_url in excluded_file_urls:
+                        continue
+                    if excluded_source_urls is not None:
+                        excluded_source_urls.add(source_url)
+                    if excluded_file_urls is not None:
+                        excluded_file_urls.add(acquisition_url)
+                    page.append(photo_candidate)
+                positioned = bind_lifecycle_positions(
+                    page, query_index=query_index, provider_rank_start=stream_rank,
+                )
+                stream_rank += len(positioned)
+                for photo_candidate in positioned:
+                    envelope = photo_candidate.envelope
+                    native_by_envelope[id(envelope)] = {
+                        "provider": "pexels",
+                        "pexelsPhotoId": photo_candidate.pexels_photo_id,
+                        "sourceUrl": envelope.source_url or "",
+                        "fileUrl": envelope.acquisition_url or "",
+                        "author": envelope.attribution.author or "",
+                        "authorUrl": envelope.attribution.author_url or "",
+                        "width": envelope.width or 0,
+                        "height": envelope.height or 0,
+                        "mimeType": envelope.mime_type or "",
+                        "queryUsed": envelope.query_used or query_text,
+                        "description": envelope.semantic_metadata.description or "",
+                    }
+                    provenance_by_envelope[id(envelope)] = photo_candidate
+                    yield envelope
+
+        def evaluate_semantic(envelope: CandidateEnvelope) -> dict:
+            assessment = _evaluate_semantic(segment, native_by_envelope[id(envelope)])
+            semantic_assessments[id(envelope)] = assessment
+            return assessment
+
+        def download(envelope: CandidateEnvelope) -> str | None:
+            native = native_by_envelope[id(envelope)]
+            relative_path, absolute_path = _compute_asset_paths(
+                job_dir, segment_idx, native, asset_namespace,
+            )
+            result = download_pixabay_asset_v2(native, absolute_path)
+            if result["ok"]:
+                download_results[id(envelope)] = (relative_path, absolute_path, result)
+                return str(absolute_path)
+            if absolute_path.exists():
+                absolute_path.unlink(missing_ok=True)
+            download_errors.append({
+                "sourceUrl": native["sourceUrl"],
+                "fileUrl": native["fileUrl"],
+                "error": result.get("error", "download failed"),
+            })
+            return None
+
+        def evaluate_visual_fidelity(
+            envelope: CandidateEnvelope, local_path: str,
+        ) -> tuple[bool, dict]:
+            query_used = envelope.query_used or (query_texts[0] if query_texts else "")
+            allow, assessment = _apply_visual_fidelity_gate(Path(local_path), query_used, warnings)
+            visual_fidelity_assessments[id(envelope)] = assessment
+            return allow, assessment
+
+        selection = select_first_accepted(
+            envelopes(),
+            semantic_evaluator=evaluate_semantic,
+            downloader=download,
+            visual_fidelity_evaluator=evaluate_visual_fidelity,
+            rejection_cleanup=lambda _candidate, path: Path(path).unlink(missing_ok=True),
+            limit=_MAX_CANDIDATE_ATTEMPTS,
+        )
+        semantic_rejections, visual_fidelity_rejections = _selection_rejections(
+            selection, semantic_assessments, visual_fidelity_assessments,
+        )
+        if selection.selected is not None:
+            selected = selection.selected.candidate
+            native = native_by_envelope[id(selected)]
+            provenance = provenance_by_envelope[id(selected)]
+            relative_path, _, dl_result = download_results[id(selected)]
+            return {
+                "segmentIndex": segment_idx,
+                "assetPreference": asset_pref,
+                "status": "RESOLVED",
+                "provider": "pexels",
+                "capabilityId": selected.capability_id,
+                "providerAssetId": selected.provider_asset_id,
+                "pexelsPhotoId": provenance.pexels_photo_id,
+                "assetPath": relative_path,
+                "fileSize": dl_result["size"],
+                "sourceUrl": native["sourceUrl"],
+                "fileUrl": native["fileUrl"],
+                "author": native["author"],
+                "authorUrl": native["authorUrl"],
+                "mimeType": dl_result.get("mimeType") or "",
+                "width": dl_result.get("actualWidth", native["width"]),
+                "height": dl_result.get("actualHeight", native["height"]),
+                "searchQueryUsed": selected.query_used or "",
+                "queryIndex": selected.query_index,
+                "pexelsQueryRank": provenance.pexels_query_rank,
+                "providerRank": selected.provider_rank,
+                "selectorIdentity": provenance.selector_identity,
+                "selectorScore": provenance.selector_score,
+                "generationPromptUsed": None,
+                "semanticAssessment": semantic_assessments[id(selected)],
+                "visualFidelityAssessment": visual_fidelity_assessments[id(selected)],
+                "pexelsRateLimitTelemetry": telemetry[-1] if telemetry else {},
+            }
+        if download_errors:
+            return {
+                "segmentIndex": segment_idx, "assetPreference": asset_pref,
+                "status": "DOWNLOAD_FAILED", "provider": "pexels",
+                "searchQueriesTried": query_texts,
+                "reason": "all Pexels download attempts failed",
+                "downloadAttempts": len(download_errors), "downloadErrors": download_errors,
+                "visualFidelityRejections": visual_fidelity_rejections,
+            }
+        return {
+            "segmentIndex": segment_idx, "assetPreference": asset_pref,
+            "status": "NO_RESULTS", "provider": "pexels",
+            "searchQueriesTried": query_texts,
+            "reason": "Pexels returned no candidate accepted by the lifecycle",
+            "semanticRejections": semantic_rejections,
+            "visualFidelityRejections": visual_fidelity_rejections,
+        }
+    except PexelsClientError as exc:
+        return {
+            "segmentIndex": segment_idx, "assetPreference": asset_pref,
+            "status": "PROVIDER_ERROR", "provider": "pexels",
+            "searchQueriesTried": query_texts, "reason": exc.code,
+        }
+    except Exception as exc:
+        warnings.append(_warn("PROVIDER_ERROR:pexels", "Pexels provider error", ""))
+        return {
+            "segmentIndex": segment_idx, "assetPreference": asset_pref,
+            "status": "PROVIDER_ERROR", "provider": "pexels",
+            "searchQueriesTried": query_texts, "reason": "PROVIDER_ERROR",
         }
 
 

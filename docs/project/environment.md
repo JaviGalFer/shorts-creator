@@ -41,7 +41,7 @@ Postgres: localhost:5433
 Ver `.env.example`. Las variables requeridas por el pipeline CLI canónico:
 
 - **Guion (generación):** `LLM_API_KEY` (obligatoria para generar guion). `LLM_MODEL` y `LLM_PROVIDER` opcionales con defaults.
-- **Assets (proveedores visuales):** `PIXABAY_API_KEY` solo es necesaria para utilizar Pixabay. Wikimedia Commons no requiere API key.
+- **Assets (proveedores visuales):** `PIXABAY_API_KEY` solo es necesaria para utilizar Pixabay; `PEXELS_API_KEY` solo para solicitar explícitamente Pexels Photos. Wikimedia Commons no requiere API key.
 - **Audio/TTS:** `edge_tts` es el TTS por defecto y no requiere API key. Las variables de ElevenLabs (`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`) solo se necesitan cuando se selecciona ese provider (`TTS_PROVIDER=elevenlabs`).
 - **Opcionales de configuración:** `TTS_PROVIDER`, `TTS_VOICE`, `SUBTITLE_TIMING_PROVIDER`, `SUBTITLE_GLOBAL_OFFSET_MS`, `WHISPER_MODEL`, `SUBTITLE_PROVIDER`.
 - **Notificaciones (planificado):** `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.

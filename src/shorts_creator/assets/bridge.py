@@ -147,6 +147,16 @@ def _map_resolved_asset(
     for k in V2_LEGACY_FIELDS:
         segment.pop(k, None)
 
+    # Provider-specific provenance is additive so historical provider shapes
+    # remain unchanged while future attribution/UI can consume primitives.
+    for key in (
+        "capabilityId", "providerAssetId", "pexelsPhotoId", "authorUrl",
+        "queryIndex", "pexelsQueryRank", "providerRank", "selectorIdentity",
+        "selectorScore", "pexelsRateLimitTelemetry",
+    ):
+        if key in asset:
+            segment[key] = copy.deepcopy(asset[key])
+
     return segment
 
 

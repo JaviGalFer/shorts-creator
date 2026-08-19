@@ -13,6 +13,9 @@ def load_provider_config_v2(
     user_agent: str | None = None,
     pixabay_live: bool = True,
     pixabay_api_key_present: bool = False,
+    pexels_enabled: bool = False,
+    pexels_api_key_present: bool = False,
+    pexels_live: bool = True,
 ) -> dict:
     return {
         "wikimedia_commons": {
@@ -22,11 +25,12 @@ def load_provider_config_v2(
             "live": wikimedia_live,
             "userAgent": user_agent,
         },
-        "pexels": {  # Planned provider — no V2 implementation or active API-key contract yet.
-            "enabled": False,
-            "implemented": False,
+        "pexels": {
+            "enabled": pexels_enabled,
+            "implemented": pexels_enabled,
             "requiresApiKey": True,
-            "apiKeyPresent": False,
+            "apiKeyPresent": pexels_api_key_present,
+            "live": pexels_live,
         },
         "pixabay": {
             "enabled": True,

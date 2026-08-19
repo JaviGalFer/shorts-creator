@@ -72,11 +72,12 @@ class CandidateSemanticMetadata:
 @dataclass(frozen=True)
 class CandidateAttribution:
     author: str | None = None
+    author_url: str | None = None
     license: str | None = None
     license_url: str | None = None
 
     def __post_init__(self) -> None:
-        for field in ("author", "license", "license_url"):
+        for field in ("author", "author_url", "license", "license_url"):
             object.__setattr__(self, field, _optional_string(getattr(self, field), field.upper()))
 
 
