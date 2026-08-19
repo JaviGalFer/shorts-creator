@@ -255,6 +255,51 @@ def test_build_plan_dedups_adapted_queries() -> None:
     assert len(plan[0]["rowKeys"]) == 2
 
 
+def test_colliding_adapted_query_compares_every_source() -> None:
+    from pexels_provider_fit_benchmark import (
+        adapted_queries_by_source,
+        compare_planned_queries,
+    )
+
+    rows = [
+        _synthetic_row(queryUsed="town hall photograph", queryForm="photograph"),
+        _synthetic_row(
+            queryUsed="town hall photo", queryForm="photograph", segmentIndex=2
+        ),
+    ]
+    plan = build_adapted_request_plan(rows)
+    assert len(plan) == 1
+    assert plan[0]["adaptedQuery"] == "town hall"
+    assert plan[0]["sourceQueries"] == ["town hall photo", "town hall photograph"]
+    assert adapted_queries_by_source(plan) == {
+        "town hall photograph": "town hall",
+        "town hall photo": "town hall",
+    }
+
+    def _parsed(vid: int) -> dict:
+        return {
+            "total_results": 1,
+            "videos": [{
+                "id": vid,
+                "video_files": [{
+                    "file_type": "video/mp4", "width": 1080, "height": 1920,
+                }],
+            }],
+        }
+
+    comparisons = compare_planned_queries(
+        {
+            "town hall photograph": _parsed(1),
+            "town hall photo": _parsed(2),
+        },
+        {"town hall": _parsed(3)},
+        plan,
+    )
+    assert set(comparisons) == {"town hall photograph", "town hall photo"}
+    assert all(c["adaptedQuery"] == "town hall" for c in comparisons.values())
+    assert all(c["ids"]["adaptedTop15"] == [3] for c in comparisons.values())
+
+
 def test_build_plan_never_reruns_raw_queries() -> None:
     # adapted query equals another persisted RAW queryUsed => no request.
     rows = [
@@ -310,8 +355,14 @@ def test_video_supply_facts_and_compare() -> None:
             "video_pictures": [],
         }
 
-    raw = {"videos": [_video(1), _video(2), _video(3)], "total_results": 100}
-    ada = {"videos": [_video(2), _video(4), _video(5), _video(6)], "total_results": 90}
+    raw = {
+        "videos": [_video(1, 1080, 1920), _video(2, 1080, 1920), _video(3)],
+        "total_results": 100,
+    }
+    ada = {
+        "videos": [_video(2, 1080, 1920), _video(4), _video(5), _video(6)],
+        "total_results": 90,
+    }
     facts = video_supply_facts(raw)
     assert facts["idsTop15"] == [1, 2, 3]
     assert facts["atLeast720x1280"] == 3
@@ -319,9 +370,12 @@ def test_video_supply_facts_and_compare() -> None:
     cmp = compare_raw_adapted(raw, ada)
     assert cmp["ids"]["overlapCount"] == 1
     assert 2 in cmp["ids"]["sharedTop15"]
-    assert cmp["ids"]["newIdsInt21ByAdaptation"] == [4, 5, 6]
+    assert cmp["ids"]["newIdsIntroducedByAdaptation"] == [4, 5, 6]
     assert cmp["comparison"]["raw_total_results"] == 100
     assert cmp["comparison"]["adapted_total_results"] == 90
+    # Regression: RAW and ADAPTED have different >=1080x1920 counts.
+    assert cmp["comparison"]["raw_1080"] == 2
+    assert cmp["comparison"]["adapted_1080"] == 1
 
 
 def test_video_evidence_files_exists() -> None:

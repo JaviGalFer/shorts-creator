@@ -78,12 +78,12 @@ revisión humana externa de los 3 contact sheets).
 
 ## Tests
 
-- [x] `tests/test_pexels_provider_fit_benchmark.py` (39 passed): resolución,
+- [x] `tests/test_pexels_provider_fit_benchmark.py` (40 passed): resolución,
       missing, política, explicit-form precedence, photograph eligibility,
       adaptación exacta, preservación de términos semánticos, adapted==raw ⇒ no
       request, dedup, hard cap 40, no key leak, reuse RAW evidence, overlap/
       Jaccard exact IDs, review sample determinista, import-safe, no network,
-      layout helper
+      layout helper, regression `raw_1080` y colisión adaptedQuery→N sources
 - [x] Suite de las 3 suites de Pexels en verde
 - [x] Suite completa `python3 -m pytest -q tests` en verde
 - [x] `git diff --check` limpio

@@ -426,7 +426,7 @@ def compare_raw_adapted(raw_parsed: dict, adapted_parsed: dict) -> dict:
             "adapted_candidates": ada["candidates"],
             "raw_720": raw["atLeast720x1280"],
             "adapted_720": ada["atLeast720x1280"],
-            "raw_1080": ada["atLeast1080x1920"],
+            "raw_1080": raw["atLeast1080x1920"],
             "adapted_1080": ada["atLeast1080x1920"],
             "raw_has720": raw["hasOne720x1280"],
             "adapted_has720": ada["hasOne720x1280"],
@@ -440,12 +440,40 @@ def compare_raw_adapted(raw_parsed: dict, adapted_parsed: dict) -> dict:
             "adaptedTop3": ada["idsTop3"],
             "sharedTop15": sorted(common),
             "sharedTop3": [v for v in ada["idsTop3"] if v in raw_set],
-            "newIdsInt21ByAdaptation": sorted(ada_set - raw_set),
+            "newIdsIntroducedByAdaptation": sorted(ada_set - raw_set),
             "lostIdsRemoving": sorted(raw_set - ada_set),
             "overlapCount": len(common),
             "overlapTop3": len(set(raw["idsTop3"]) & set(ada["idsTop3"])),
             "rankChanges": rank_changes,
         },
+    }
+
+
+def adapted_queries_by_source(per_query_plan: list[dict]) -> dict[str, str]:
+    """Map every RAW source query to its deduplicated adapted query."""
+    mapping: dict[str, str] = {}
+    for item in per_query_plan:
+        adapted_query = item["adaptedQuery"]
+        for source_query in item.get("sourceQueries", []):
+            mapping[source_query] = adapted_query
+    return mapping
+
+
+def compare_planned_queries(
+    video_raw: dict[str, dict],
+    adapted_raw: dict[str, dict],
+    per_query_plan: list[dict],
+) -> dict[str, dict]:
+    """Compare every RAW source query to its shared adapted result."""
+    return {
+        raw_query: {
+            "rawQuery": raw_query,
+            "adaptedQuery": adapted_query,
+            **compare_raw_adapted(
+                video_raw.get(raw_query), adapted_raw.get(adapted_query)
+            ),
+        }
+        for raw_query, adapted_query in adapted_queries_by_source(per_query_plan).items()
     }
 
 
@@ -716,30 +744,24 @@ def compute_compare_record(out_dir: Path) -> dict:
         q: [v["id"] for v in (video_raw.get(q) or {}).get("videos", [])[:15]]
         for q in video_raw
     }
-    # Adapted results keyed by the RAW query string (1:1 via the plan), so
-    # within-job analysis can resolve jobs/topics from the persisted rows.
-    adapted_ids: dict[str, list[int]] = {}
-    for item in adapted.get("perQueryPlan", []):
-        raw_q = item["sourceQueries"][0]
-        adapted_q = item["adaptedQuery"]
-        adapted_ids[raw_q] = [
+    # Adapted results keyed by every RAW source query, so within-job analysis
+    # can resolve jobs/topics even when one adapted query has multiple sources.
+    source_to_adapted = adapted_queries_by_source(adapted.get("perQueryPlan", []))
+    adapted_ids = {
+        raw_q: [
             v["id"] for v in (adapted_raw.get(adapted_q) or {}).get("videos", [])[:15]
         ]
+        for raw_q, adapted_q in source_to_adapted.items()
+    }
     # Fair RAW vs ADAPTED overlap basis: RAW top-15 restricted to the same
     # photograph-form queries that were actually adapted.
     video_raw_photo_only_ids = {
         q: ids for q, ids in video_raw_ids.items() if q in adapted_ids
     }
 
-    comparisons: dict[str, dict] = {}
-    for item in adapted.get("perQueryPlan", []):
-        raw_q = item["sourceQueries"][0]
-        adapted_q = item["adaptedQuery"]
-        comparisons[raw_q] = {
-            "rawQuery": raw_q,
-            "adaptedQuery": adapted_q,
-            **compare_raw_adapted(video_raw.get(raw_q), adapted_raw.get(adapted_q)),
-        }
+    comparisons = compare_planned_queries(
+        video_raw, adapted_raw, adapted.get("perQueryPlan", [])
+    )
 
     record = {
         "schemaVersion": 1,
@@ -795,10 +817,7 @@ def run_review_clips(out_dir: Path, max_clips: int = 20) -> dict:
     adapted_raw = adapted.get("rawResults", {})
 
     # mapping raw query -> adapted query for the review sample
-    adapted_by_source = {
-        item["sourceQueries"][0]: item["adaptedQuery"]
-        for item in adapted.get("perQueryPlan", [])
-    }
+    adapted_by_source = adapted_queries_by_source(adapted.get("perQueryPlan", []))
 
     cache_dir = VIDEO_EVAL_DIR / "clips"
 
@@ -1165,10 +1184,7 @@ def _sheet02_video_raw_vs_adapted(
     prev_dir.mkdir(parents=True, exist_ok=True)
 
     adapted = json.loads((out_dir / "adapted-video-supply.json").read_text(encoding="utf-8"))
-    adapted_by_source = {
-        item["sourceQueries"][0]: item["adaptedQuery"]
-        for item in adapted.get("perQueryPlan", [])
-    }
+    adapted_by_source = adapted_queries_by_source(adapted.get("perQueryPlan", []))
 
     cell_w, cell_h, thumb_w, thumb_h = 200, 360, 180, 240
     label_h = 64

@@ -23,7 +23,9 @@
   (elimina solo photograph/photo/photography): 39 adaptaciones únicas, sin
   colisiones, ninguna igual a una queryUsed RAW.
 - RAW vs ADAPTED (39): total_results 29/39 disminuye (mediana 6439→6026), pero
-  supply portrait intacto (39/39 en 720 y 1080). Overlap exact-ID top15 base
+  esto solo demuestra un cambio/restricción del conjunto recuperado, no mayor
+  relevancia ni menor ruido antes de la revisión humana. Supply portrait intacto
+  (39/39 en 720 y 1080). Overlap exact-ID top15 base
   justa: RAW 456 unique/92 repet./56 pares (J med .124) vs ADAPTED 461/88/50
   (J med .138) — diversifica ligeramente; duplicados within-job/topic persisten
   (Photos el peor: 278).
@@ -35,9 +37,14 @@
 - **Estado: `READY_FOR_HUMAN_REVIEW`** — pendiente la revisión humana externa
   (Photos CURRENT/PEXELS/TIE; Video RAW/ADAPTED/TIE/BOTH_UNUSABLE). NO se
   afirma `PROVIDER_FIT_VALIDATED`/`ADAPTED_BETTER`/Pexels default.
-- Suite en rama: **`1625 passed, 0 failed`** (1586 previos + 39 nuevos). Comun
-  `test(evaluation): benchmark Pexels provider fit` (sin merge/push/reindex).
-  Marcador `PEXELS_PROVIDER_FIT_BENCHMARK_READY_FOR_HUMAN_REVIEW`.
+- Hardening offline: `raw_1080` corregido, `newIdsIntroducedByAdaptation`
+  renombrado y una adaptedQuery con múltiples sourceQueries compara/mappea cada
+  source conservando una sola request. `raw-vs-adapted.json` regenerado sin
+  requests, redescargas ni contact sheets.
+- Suite en rama: **`1626 passed, 0 failed`** (1586 previos + 40 nuevos).
+  Commits `test(evaluation): benchmark Pexels provider fit` +
+  `fix(evaluation): harden Pexels provider fit benchmark` (sin merge/push/reindex).
+  Marcador `PEXELS_PROVIDER_FIT_BENCHMARK_HARDENED`.
 
 ## Investigación cerrada: `pexels-visual-supply-benchmark` — COMPLETED / VERIFIED / CLOSED (mergeada a `main`)
 

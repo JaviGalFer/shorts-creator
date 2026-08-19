@@ -113,9 +113,10 @@ sujeto/variante/acción, normaliza espacios.
 
 Por query (39 comparaciones; hechos técnicos, sin juicio de relevancia):
 
-- `total_results` RAW vs ADAPTED: `adapted_raw > adapted` en **29/39**, igual en
-  **9/39**, mayor en **1/39**. Mediana totales RAW=6439 vs ADAPTED=6026 (la
-  adaptación reduce el ruido del sufijo estático, esperado).
+- `total_results` RAW vs ADAPTED: ADAPTED devuelve menos en **29/39**, igual en
+  **9/39**, y más en **1/39**. Mediana totales RAW=6439 vs ADAPTED=6026. Esto
+  demuestra un cambio/restricción del conjunto recuperado; NO permite inferir
+  mayor relevancia ni menor ruido antes de la revisión humana.
 - Portrait supply: RAW **39/39** con >=720x1280 y **39/39** con >=1080x1920;
   ADAPTADO **39/39** y **39/39** (indistinguibles en supply).
 - Overlap top15 RAW↔ADAPTED: media 9.0/15, rango 3–14; overlap top3 media 1.67
