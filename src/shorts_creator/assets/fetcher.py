@@ -175,6 +175,7 @@ def _process_scene(
     wikimedia_cache: dict[str, list] | None = None,
     provider_credentials: dict | None = None,
     request_visuals: dict | None = None,
+    mix_counts: dict | None = None,
 ) -> dict:
     from shorts_creator.assets.executor import execute_visual_sourcing_plan_v2
     from shorts_creator.assets.router import build_visual_sourcing_plan_v2
@@ -218,7 +219,7 @@ def _process_scene(
 
     # Step b: route
     route_result = build_visual_sourcing_plan_v2(
-        canonical_plan, request_visuals=request_visuals
+        canonical_plan, request_visuals=request_visuals, mix_counts=mix_counts
     )
     if not route_result.get("ok") or route_result.get("sourcingPlan") is None:
         diag = route_result.get("diagnostics", {})
@@ -426,6 +427,10 @@ def fetch_assets(
     excluded_file_urls: set[str] = set()
     wikimedia_cache: dict[str, list] = {}
 
+    # Real selected-kind counter used by MIXED best-effort diversity tie-breaks.
+    # Updated ONLY after a scene produces resolved/selected assets.
+    mix_counts: dict[str, int] = {"IMAGE": 0, "VIDEO": 0}
+
     for scene_index, scene, vp in v2_entries:
         result = _process_scene(
             scene_index=scene_index,
@@ -439,9 +444,14 @@ def fetch_assets(
             wikimedia_cache=wikimedia_cache,
             provider_credentials=provider_credentials,
             request_visuals=request_visuals,
+            mix_counts=mix_counts,
         )
         combined_resolved.extend(result["resolved"])
         combined_unresolved.extend(result["unresolved"])
+        for resolved in result["resolved"]:
+            kind = resolved.get("mediaKind")
+            if kind in mix_counts:
+                mix_counts[kind] += 1
 
     # 7. Apply bridge
     combined_executor_result = {

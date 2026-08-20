@@ -13,6 +13,7 @@ from typing import Any, Mapping
 from shorts_creator.assets.candidates import CandidateAttribution, CandidateEnvelope, CandidateSemanticMetadata, RAW
 from shorts_creator.assets.providers.pexels import MALFORMED_RESPONSE, PEXELS_USER_AGENT, PexelsClientError, get_json, resolve_pexels_api_key
 from shorts_creator.contracts.visual_media import VIDEO
+from shorts_creator.contracts.visual_terms import medium_neutral_query
 
 PEXELS_VIDEOS_SEARCH_PATH = "/v1/videos/search"
 PEXELS_VIDEOS_PARAMS: Mapping[str, str | int] = {
@@ -148,8 +149,9 @@ def map_video_response(response: Mapping[str, Any], query_used: str) -> PexelsVi
 
 
 def search_pexels_videos(query_used: str, *, api_key: str | None = None, timeout: int = 30) -> PexelsVideoSearchResult:
-    response = get_json(path=PEXELS_VIDEOS_SEARCH_PATH, params={"query": query_used, **PEXELS_VIDEOS_PARAMS}, api_key=api_key if api_key is not None else resolve_pexels_api_key(), timeout=timeout)
-    mapped = map_video_response(response.data, query_used)
+    effective = medium_neutral_query(query_used) or query_used
+    response = get_json(path=PEXELS_VIDEOS_SEARCH_PATH, params={"query": effective, **PEXELS_VIDEOS_PARAMS}, api_key=api_key if api_key is not None else resolve_pexels_api_key(), timeout=timeout)
+    mapped = map_video_response(response.data, effective)
     return PexelsVideoSearchResult(mapped.status, mapped.candidates, response.telemetry)
 
 
