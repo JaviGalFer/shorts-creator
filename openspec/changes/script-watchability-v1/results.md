@@ -76,7 +76,7 @@ Evaluación cualitativa previa (sin CTA promocional en ambos):
 | cierre scene 5 (16w) | *Los delfines son maestros del trabajo en equipo en la caza, lo que les da ventaja.* |
 | CTA promocional | **ausente** |
 | moraleja genérica | **ausente** (cierre con consecuencia concreta "lo que les da ventaja") |
-| word count final | 61 (hooks 10 / closing 16; historia: 45 → 68 → 65 → 61) |
+| word count final | 61 (hooks 10 / closing 16; ladder de propuestas: 45 → 68 → 65 → 61) |
 | duration (render) | **27.92s** (rango 27–33) — `durationOk true`, `maxDurationOk true` |
 | repairs | **2** (EXPAND then COMPRESS, dentro de `maxRepairs 2`), decision final **PASS** |
 | assets | 5/5 resolvidos (Pexels Video), `ASSETS_READY`, `assetValidation PASS` |
@@ -87,9 +87,14 @@ El guion original (pre-repair) era de **45 palabras** (por escena [8,9,9,8,11]),
 `below_minimum_words` (min 47). El fitting hizo:
 
 1. **EXPAND** (targets [12,14,13,12,17]) con los prompts acotados ("SOLO lo necesario",
-   cláusula corta por escena) → se sobre-ajustó temporalmente (~81w, proyección 37.1s).
-2. **COMPRESS** (targets [11,14,13,11,16], "recorta con decisión") → propuesta 65w.
+   cláusula corta por escena) propuso 68w, pero el candidato realmente aplicado se
+   sobre-ajustó a ~81w (proyección 37.1s; el paso siguiente entra con `currentWords=81`).
+2. **COMPRESS** (targets [11,14,13,11,16], "recorta con decisión") propuso 65w.
 3. **PASS** → final 61w [10,11,12,12,16], render 27.92s in-range.
+
+> Nota de métricas: `45 → 68 → 65 → 61` es la ladder de **propuestas** por paso (inicial 45,
+> EXPAND propuso 68, COMPRESS propuso 65, final 61); `~81w` es el **candidato aplicado real**
+> tras EXPAND. Ambas provienen de metadata y representan métricas distintas.
 
 Trazado watchability del guion FINAL entregado (lo que importa al público):
 - **hook:** conservado y con contenido primero ("...cazan en grupo con asombrosa precisión,
