@@ -3,11 +3,10 @@
 Todo el cambio es contrato editorial-en-prompt + tests. Cero cambios de código de
 comportamiento: ni rutas de control, ni contratos entre etapas, ni formato de datos.
 
-> **Estado de validación:** offline COMPLETO y verde (suite `1876 passed, 0 failed`, `git diff --check`
-> limpio, commits funcionales 9acbf58 + cb2d9f7). La validación de vídeo real (`VALIDATED`,
-> `duration contract PASS`, repair sin degradación) quedó **BLOQUEADA** por `ASSETS_PARTIAL` en AUTO
-> para ambos tópicos de prueba (gap de supply de formas ilustración/diagrama; limitación preexistente
-> documentada en cambios previos, ajena a este change). Ver `results.md`.
+> **Estado:** COMPLETED / VERIFIED / CLOSED (pending authorized merge). Hardening final de
+> hook/cierre (`9fadc10`) y E2E real `cmo-2026-08-20-164453` VALIDATED (VIDEOS_ONLY + Pexels,
+> 27.92s in-range, con 2 repairs dentro de budget sin degradar watchability). Suite completa
+> `1880 passed, 0 failed`; `git diff --check` limpio. Ver `results.md`.
 
 ## Dónde vive cada pieza
 

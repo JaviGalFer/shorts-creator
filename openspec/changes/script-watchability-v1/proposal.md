@@ -6,8 +6,7 @@ etapas, persistencia, formato de datos, integración externa ni componentes dist
 OpenSpec se crea por decisión de sesión para dejar decisión editorial útil; no exige
 session requerida (solo Level 2 la exigiría).
 
-**Estado: BLOCKED — offline COMPLETO y verde; validación de vídeo real pendiente de**
-**resolver el gap de supply de assets en AUTO** (limitación preexistente, ajena al change).
+**Estado: COMPLETED / VERIFIED / CLOSED (pending authorized merge).**
 
 ## Contexto
 

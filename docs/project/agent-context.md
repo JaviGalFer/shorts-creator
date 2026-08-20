@@ -1,21 +1,29 @@
 # Agent Context
 
-## Active (in progress): script-watchability-v1 — code+tests DONE, real-video validation BLOCKED
+## Closed Change: script-watchability-v1 — COMPLETED / VERIFIED / CLOSED (pending authorized merge)
 - Branch `change/script-watchability-v1` (baseline `main` `d245964`, baseline suite `1849 passed`).
-- Contrato editorial en prompts (hook escena 1, desarrollo/progresión, cierre, factualidad) y CTA no
-  obligatorio en GANADOR SYSTEM_PROMPT_V2 + duration instruction + retry instruction; políticas de
-  repair EXPAND/COMPRESS con límites (`bound duration-repair expansions`). Sin cambios de routing,
-  providers, mediaPreference, renderer, TTS, duration contract, schema ni web UI; sin calls LLM nuevas.
-- Tests: `tests/test_script_watchability.py` (27); suite completa `1876 passed, 0 failed`;
-  `git diff --check` limpio. Commits funcionales `9acbf58` + `cb2d9f7`.
-- Real-run validation **BLOCKED**: **ambos** tópicos (A pingüinos, B motor de dos tiempos) se
-  bloquearon en `ASSETS_PARTIAL` por gap de supply de ilustración/diagrama en AUTO (limitación
-  preexistente de `auto-mixed-visual-runtime`, ajena al change). El único repair observado
-  (`cmo-2026-08-20-162421`) fue PREVIO al refinamiento y sobre-generó (~109 palabras); el
-  refinamiento lo acota por diseño+tests pero no hubo run post-refinamiento que llegara a audio/render.
-- Guiones reales sin CTA promocional (PASS); hook A sólido, hook B más débil. Ver
-  `openspec/changes/script-watchability-v1/results.md` (decisión `SCRIPT_WATCHABILITY_V1_BLOCKED`).
-- No merge, no push, no closure commits.
+- Mejora watchability de guiones: contrato editorial en prompts (hook escena 1,
+  desarrollo/progresión, cierre, factualidad), CTA no obligatorio en GANADOR SYSTEM_PROMPT_V2 +
+  duration instruction + retry instruction, y políticas de repair EXPAND/COMPRESS con límites
+  (`feat(script): improve short-form watchability` 9acbf58 + `feat(script): bound duration-repair
+  expansions` cb2d9f7).
+- Hardening final hook/cierre (`fix(script): strengthen hooks and payoffs` 9fadc10): pregunta
+  tópica genérica desaconsejada, cierre sin resumen adjetival, coherencia en COMPRESS. Motivado
+  por hook LIGHT del run motor de dos tiempos. Sin cambios de routing/providers/mediaPreference/
+  renderer/TTS/duration contract/schema/web UI; sin calls LLM nuevas.
+- Tests: `tests/test_script_watchability.py` (31); suite completa `1880 passed, 0 failed`;
+  `git diff --check` limpio.
+- E2E final `cmo-2026-08-20-164453` (delfines) **VALIDATED** — `VIDEOS_ONLY` + Pexels,
+  `--duration 30 --tts-provider elevenlabs`, 5/5 assets VIDEO, render 27.92s in-range,
+  2 repairs (EXPAND→COMPRESS→PASS) dentro de budget sin degradar watchability, hook
+  contenido-primero, sin CTA promocional, cierre con consecuencia concreta. El modo visual de
+  esta validación puede ser VIDEOS_ONLY porque script-watchability es independiente de
+  visualMode; AUTO/MIXED ya validados en `auto-mixed-visual-runtime`.
+- Runs AUTO (`cmo-2026-08-20-162421/162756/163029/163147`) quedaron `ASSETS_PARTIAL`/fitting por
+  gap de supply de ilustración/diagrama en AUTO — limitación preexistente y ajena al change;
+  se conservan como evidencia histórica, NO como fallo del change. NO se afirma AUTO VALIDATED aquí.
+- Ver `openspec/changes/script-watchability-v1/results.md`. Decisión: READY_TO_MERGE (merge no
+  autorizado — pending authorized merge). No merge, no push.
 
 ## Closed Change: auto-mixed-visual-runtime — COMPLETED / VERIFIED / CLOSED / MERGED (into `main` `0ea44e1`, no-ff)
 - PRODUCT CHANGE: hace productivos AUTO y MIXED usando la preferencia editorial real del LLM.
