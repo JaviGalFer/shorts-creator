@@ -2,7 +2,7 @@
 
 **Última actualización:** 2026-08-20
 
-## Cambio cerrado: `auto-mixed-visual-runtime` — COMPLETED / VERIFIED / CLOSED (pending authorized merge)
+## Cambio cerrado: `auto-mixed-visual-runtime` — COMPLETED / VERIFIED / CLOSED / MERGED (merge `0ea44e1`, no-ff)
 
 - AUTO y MIXED usan la preferencia editorial real del LLM (`mediaPreference`
   explícito por segmento) con routing multi-kind y fallback compatible, sin

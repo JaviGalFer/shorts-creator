@@ -1,6 +1,6 @@
 # Agent Context
 
-## Closed Change: auto-mixed-visual-runtime — COMPLETED / VERIFIED / CLOSED (pending authorized merge)
+## Closed Change: auto-mixed-visual-runtime — COMPLETED / VERIFIED / CLOSED / MERGED (into `main` `0ea44e1`, no-ff)
 - PRODUCT CHANGE: hace productivos AUTO y MIXED usando la preferencia editorial real del LLM.
 - Prompt V2 emite `mediaPreference` explícito por segmento (VIDEO_PREFERRED/IMAGE_PREFERRED/EITHER); guard estricto `MEDIA_PREFERENCE_MISSING` bajo AUTO/MIXED (generación/retries/validación final). Planes históricos persistentes intactos.
 - Router multi-kind (preferred → fallback) y reconciliación de `mediaDecision` con los media kinds supervivientes a constraints/source policy: una source policy que excluye Pexels reconcilia `resolvedKind=IMAGE` y NO notifica `PREFERRED_MEDIA_EXHAUSTED` (ese reason solo para kind primario permitido que agotó candidatos en runtime).
