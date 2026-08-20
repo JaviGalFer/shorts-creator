@@ -18,7 +18,7 @@
   suite `1758 passed, 0 failed`; `git diff --check` clean.
 - Merged into `main` by `5b340db`.
 
-## Cambio cerrado: `pexels-video-runtime-mvp` — COMPLETED / VERIFIED / CLOSED
+## Cambio cerrado: `pexels-video-runtime-mvp` — COMPLETED / VERIFIED / CLOSED / MERGED (no-ff, merge `bfabf4d`)
 
 - PRODUCT CHANGE. FIRST REAL VIDEO E2E antes de más research de Video. Reusa los
   contratos `IMAGE | VIDEO` existentes; Pexels Video explicit opt-in
@@ -35,8 +35,7 @@
   efectivo (`visualMode` canónico; `mode: images` solo para IMAGES_ONLY).
 - Primer E2E Video real `la-2026-08-19-235138` (delfines): `VALIDATED`, 4/4
   VIDEO, 1080x1920 H.264, narración-only, subtitles, 18.52s en rango 18–22s
-  PASS. `pexels.video.stock` `AVAILABLE`. Suite `1809 passed`; solo queda el
-  merge autorizado.
+  PASS. `pexels.video.stock` `AVAILABLE`. Suite `1809 passed`.
 
 ## Cambio cerrado: `pexels-photo-selection-benchmark` — COMPLETED / VERIFIED / CLOSED
 

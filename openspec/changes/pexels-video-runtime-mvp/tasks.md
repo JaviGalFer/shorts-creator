@@ -1,6 +1,6 @@
 # Tasks: pexels-video-runtime-mvp
 
-**Status: COMPLETED / VERIFIED / CLOSED. Two functional slices.
+**Status: COMPLETED / VERIFIED / CLOSED. Two functional slices.**
 
 ## Preconditions
 

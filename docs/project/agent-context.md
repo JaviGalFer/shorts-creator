@@ -1,6 +1,6 @@
 # Agent Context
 
-## Closed Change: pexels-video-runtime-mvp — COMPLETED / VERIFIED / CLOSED
+## Closed Change: pexels-video-runtime-mvp — COMPLETED / VERIFIED / CLOSED / MERGED (into `main` `bfabf4d`, no-ff)
 - PRODUCT CHANGE: first real canonical Video E2E (`la-2026-08-19-235138`,
   dolphins) reached `VALIDATED` with 4/4 VIDEO segments, one narration-only
   audio stream, 1080x1920 H.264, subtitles, duration PASS. `pexels.video.stock`
@@ -16,7 +16,6 @@
   cross-scene reservation, and narrow VIDEO sparse-metadata partial-match
   policy (`PROVIDER_METADATA_PARTIAL_MATCH`). Effective visual-mode metadata
   aligned in `resolvedConfig.visuals`. Full suite `1809 passed`.
-- Only the authorized merge remains.
 
 ## Closed Change: pexels-photo-selection-benchmark — COMPLETED / VERIFIED / CLOSED
 - Evaluation-only investigation that froze a candidate-ordering benchmark before
