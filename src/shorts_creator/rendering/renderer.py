@@ -11,6 +11,7 @@ from typing import Any
 
 from shorts_creator.validation import asset as asset_validation
 from shorts_creator.contracts.duration import evaluate_requested_duration_compliance
+from shorts_creator.contracts.visual_media import IMAGES_ONLY, normalize_visual_mode
 
 FPS = 25
 MAX_SEGMENT_DURATION = 20.0
@@ -1382,6 +1383,25 @@ def render_job(
     subtitle_style = req.get("subtitles", {}).get("style", "shorts_upper_dynamic")
     voice_provider = audio_config.get("provider", "edge_tts")
     voice_id = audio_config.get("voice", "es-ES-AlvaroNeural")
+    visuals_request = req.get("visuals") or {}
+    if not isinstance(visuals_request, dict):
+        visuals_request = {}
+    try:
+        effective_visual_mode = normalize_visual_mode(visuals_request).visual_mode
+    except ValueError:
+        # Malformed/conflicting request visuals: preserve the historical
+        # image-only default rather than failing the render.
+        effective_visual_mode = IMAGES_ONLY
+
+    def _resolve_visuals() -> dict:
+        resolved_visuals = {
+            "visualMode": effective_visual_mode,
+            "allowGeneratedImages": visuals_request.get("allowGeneratedImages", False),
+        }
+        if effective_visual_mode == IMAGES_ONLY:
+            resolved_visuals["mode"] = "images"
+        return resolved_visuals
+
     resolved = {
         "durationProfile": req.get("durationProfile", "short_25_30"),
         "duration": {
@@ -1405,10 +1425,7 @@ def render_job(
             "backgroundBox": req.get("subtitles", {}).get("backgroundBox", False),
             "globalOffsetMs": audio_config.get("globalOffsetMs", 0),
         },
-        "visuals": {
-            "mode": req.get("visuals", {}).get("mode", "images"),
-            "allowGeneratedImages": req.get("visuals", {}).get("allowGeneratedImages", False),
-        },
+        "visuals": _resolve_visuals(),
         "music": {
             "enabled": music_enabled if music_enabled else False,
             "source": music_path_str if music_enabled else "none",
