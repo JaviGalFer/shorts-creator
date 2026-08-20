@@ -2,6 +2,23 @@
 
 **Última actualización:** 2026-08-20
 
+## Cambio activo: `script-watchability-v1` — code+tests DONE, real-video validation BLOCKED
+
+- Contrato editorial en prompts (hook escena 1, desarrollo/progresión, cierre,
+  factualidad) y CTA no obligatorio en GANADOR SYSTEM_PROMPT_V2 + duration
+  instruction + retry instruction; políticas de repair EXPAND/COMPRESS con
+  límites (`bound duration-repair expansions`). Sin cambios de routing,
+  providers, mediaPreference, renderer, TTS, duration contract, schema ni web UI.
+- Tests: `tests/test_script_watchability.py` (27); suite `1876 passed, 0 failed`;
+  `git diff --check` limpio. Commits `9acbf58` + `cb2d9f7` (rama
+  `change/script-watchability-v1`, baseline `d245964`).
+- Real-run validation **BLOCKED**: ambos tópicos (A pingüinos, B motor de dos
+  tiempos) se bloquearon en `ASSETS_PARTIAL` por supply de ilustración/diagrama
+  en AUTO (preexistente, ajena al change). El único repair real fue pre-refinamiento
+  y sobre-generó (~109 palabras); su acotación está solo cubierta por diseño+tests.
+- Decisión: `SCRIPT_WATCHABILITY_V1_BLOCKED`. Ver
+  `openspec/changes/script-watchability-v1/results.md`. No merge, no push.
+
 ## Cambio cerrado: `auto-mixed-visual-runtime` — COMPLETED / VERIFIED / CLOSED / MERGED (merge `0ea44e1`, no-ff)
 
 - AUTO y MIXED usan la preferencia editorial real del LLM (`mediaPreference`

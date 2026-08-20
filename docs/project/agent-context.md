@@ -1,5 +1,22 @@
 # Agent Context
 
+## Active (in progress): script-watchability-v1 — code+tests DONE, real-video validation BLOCKED
+- Branch `change/script-watchability-v1` (baseline `main` `d245964`, baseline suite `1849 passed`).
+- Contrato editorial en prompts (hook escena 1, desarrollo/progresión, cierre, factualidad) y CTA no
+  obligatorio en GANADOR SYSTEM_PROMPT_V2 + duration instruction + retry instruction; políticas de
+  repair EXPAND/COMPRESS con límites (`bound duration-repair expansions`). Sin cambios de routing,
+  providers, mediaPreference, renderer, TTS, duration contract, schema ni web UI; sin calls LLM nuevas.
+- Tests: `tests/test_script_watchability.py` (27); suite completa `1876 passed, 0 failed`;
+  `git diff --check` limpio. Commits funcionales `9acbf58` + `cb2d9f7`.
+- Real-run validation **BLOCKED**: **ambos** tópicos (A pingüinos, B motor de dos tiempos) se
+  bloquearon en `ASSETS_PARTIAL` por gap de supply de ilustración/diagrama en AUTO (limitación
+  preexistente de `auto-mixed-visual-runtime`, ajena al change). El único repair observado
+  (`cmo-2026-08-20-162421`) fue PREVIO al refinamiento y sobre-generó (~109 palabras); el
+  refinamiento lo acota por diseño+tests pero no hubo run post-refinamiento que llegara a audio/render.
+- Guiones reales sin CTA promocional (PASS); hook A sólido, hook B más débil. Ver
+  `openspec/changes/script-watchability-v1/results.md` (decisión `SCRIPT_WATCHABILITY_V1_BLOCKED`).
+- No merge, no push, no closure commits.
+
 ## Closed Change: auto-mixed-visual-runtime — COMPLETED / VERIFIED / CLOSED / MERGED (into `main` `0ea44e1`, no-ff)
 - PRODUCT CHANGE: hace productivos AUTO y MIXED usando la preferencia editorial real del LLM.
 - Prompt V2 emite `mediaPreference` explícito por segmento (VIDEO_PREFERRED/IMAGE_PREFERRED/EITHER); guard estricto `MEDIA_PREFERENCE_MISSING` bajo AUTO/MIXED (generación/retries/validación final). Planes históricos persistentes intactos.
