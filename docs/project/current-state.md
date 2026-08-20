@@ -6,7 +6,7 @@
 
 - Objetivo: exponer el pipeline canónico (`run_pipeline`) a través de una pequeña Web UI
   (FastAPI + Angular) sin duplicar lógica de pipeline y sin romper la CLI.
-- Rama `change/web-ui-mvp`; baseline `main` `059552d`; Slice 1 committed.
+- Rama `change/web-ui-mvp`; baseline `main` `059552d`; Slice 1 committed (`caa33c5`).
 - **Slice 1 (COMPLETED / TESTED / REVIEWED / APPROVED):** límite de invocación reutilizable
   con identidad de job explícita.
   - `run_pipeline(job_id=<id seguro>)` → `build_script_command` → `bin/generate_script.py

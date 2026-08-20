@@ -2,7 +2,7 @@
 
 ## Active Change: web-ui-mvp — IN PROGRESS (Slice 1 APPROVED, committed; Slices 2/3/4 pending)
 
-- Rama `change/web-ui-mvp`, baseline `main` `059552d`, Slice 1 committed.
+- Rama `change/web-ui-mvp`, baseline `main` `059552d`, Slice 1 committed (`caa33c5`).
 - Objetivo: exponer `run_pipeline` (runner canónico) a través de una pequeña Web UI
   (FastAPI + Angular) sin duplicar pipeline y sin romper la CLI. El backend Web invoca el
   MISMO `run_pipeline` en proceso; NUNCA ejecuta `bin/run_job.py` como API interna.
