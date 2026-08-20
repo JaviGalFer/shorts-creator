@@ -1,6 +1,6 @@
 # Design: pexels-video-runtime-mvp
 
-**Status: ACTIVE. PRODUCT CHANGE. Two functional slices maximum.**
+**Status: COMPLETED / VERIFIED / CLOSED. Product change, merge pending.**
 
 ## Boundaries
 

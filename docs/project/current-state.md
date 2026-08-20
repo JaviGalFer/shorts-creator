@@ -18,23 +18,25 @@
   suite `1758 passed, 0 failed`; `git diff --check` clean.
 - Merged into `main` by `5b340db`.
 
-## Change activo: `pexels-video-runtime-mvp` — ACTIVE / PRODUCT CHANGE
+## Cambio cerrado: `pexels-video-runtime-mvp` — COMPLETED / VERIFIED / CLOSED
 
-- FIRST REAL VIDEO E2E BEFORE FURTHER VIDEO RESEARCH. Maximum two functional
-  slices: VIDEO asset runtime through metadata/assets, then prepare/render plus
-  bounded real validation.
-- Reuses existing `IMAGE | VIDEO` contracts. Pexels Video stays explicit opt-in;
-  MVP uses RAW ordering only, without query adaptation, diversity/dedup, smart
-  clip selection, Video audio or OpenCLIP-on-MP4.
-- Slice 1 COMPLETE: capability-aware `visualMode` routing, Pexels Video
-  adapter/portrait MP4 choice, lifecycle/downloader, bounded semantic
-  degradation, pixel NOT_APPLICABLE and public asset transport.
-- Slice 2 COMPLETE: prepare/renderTimeline transport, media-aware validation,
-  VIDEO FFmpeg inputs (`-stream_loop -1`, mute, 1080x1920 crop, LOOP_FROM_START),
-  selected-only cross-scene reservation and VIDEO sparse-metadata
-  partial-match policy. First real Video E2E `la-2026-08-19-235138` (dolphins)
-  reached `VALIDATED` with 4/4 VIDEO segments. `pexels.video.stock` is
-  `AVAILABLE` (explicit opt-in only). Suite: `1801 passed`; Closure pending.
+- PRODUCT CHANGE. FIRST REAL VIDEO E2E antes de más research de Video. Reusa los
+  contratos `IMAGE | VIDEO` existentes; Pexels Video explicit opt-in
+  (`--asset-providers pexels --visual-mode videos-only`), sin query adaptation,
+  diversity/dedup, smart clip selection, Video audio ni OpenCLIP sobre MP4.
+- Slice 1 COMPLETE: capability-aware `visualMode` routing, adapter Pexels Video
+  con selección determinista de portrait MP4, lifecycle/downloader (con fix de
+  User-Agent), degradación semántica acotada, pixel NOT_APPLICABLE y transporte
+  público vía bridge/assets-stage.
+- Slice 2 COMPLETE: prepare/renderTimeline, validación media-aware
+  (ffprobe/Docker vs Pillow), inputs VIDEO `-stream_loop -1` / mute / crop
+  1080x1920 / LOOP_FROM_START, reserva cross-scene selected-only y política
+  sparse-metadata partial-match. `resolvedConfig.visuals` alinea el modo
+  efectivo (`visualMode` canónico; `mode: images` solo para IMAGES_ONLY).
+- Primer E2E Video real `la-2026-08-19-235138` (delfines): `VALIDATED`, 4/4
+  VIDEO, 1080x1920 H.264, narración-only, subtitles, 18.52s en rango 18–22s
+  PASS. `pexels.video.stock` `AVAILABLE`. Suite `1809 passed`; solo queda el
+  merge autorizado.
 
 ## Cambio cerrado: `pexels-photo-selection-benchmark` — COMPLETED / VERIFIED / CLOSED
 

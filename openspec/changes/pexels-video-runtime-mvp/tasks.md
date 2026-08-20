@@ -1,6 +1,6 @@
 # Tasks: pexels-video-runtime-mvp
 
-**Status: ACTIVE. PRODUCT CHANGE. Two functional slices maximum.**
+**Status: COMPLETED / VERIFIED / CLOSED. Two functional slices.
 
 ## Preconditions
 
@@ -32,6 +32,16 @@
       segments resolved, `VALIDATED`, 1080x1920, one narration audio stream, no
       Pexels clip audio, duration compliant.
 - [x] Flip `pexels.video.stock` to AVAILABLE (explicit opt-in only).
+- [x] Fix effective visual-mode metadata in `resolvedConfig.visuals`
+      (`visualMode` canonical enum; legacy `mode: images` only for IMAGES_ONLY).
+
+## Closure
+
+- [x] Full suite `1809 passed, 0 failed`; `git diff --check` clean.
+- [x] Review against `main`: no material problems beyond the
+      `resolvedConfig.visuals` bug, now fixed.
+- [x] Documented in `results.md`.
+- [ ] Merge only in a separate authorized session.
 
 ## Out Of Scope
 

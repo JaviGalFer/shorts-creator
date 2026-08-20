@@ -2,7 +2,8 @@
 
 ## Status
 
-ACTIVE. PRODUCT CHANGE. Two functional slices maximum.
+**COMPLETED / VERIFIED / CLOSED.** Product change, four commits on the branch,
+merge pending authorization.
 
 ## Objective
 
@@ -38,3 +39,9 @@ Deliver the first real canonical shorts-creator E2E using Pexels Video clips:
    metadata without using filename extensions as a media contract.
 4. `pexels.video.stock` remains PLANNED until Slice 2 validation, smokes and
    renderer support are complete.
+
+## Outcome
+
+All success criteria met. Pexels Video is `AVAILABLE` through explicit
+`--asset-providers pexels --visual-mode videos-only`. The first real Video E2E
+`la-2026-08-19-235138` reached `VALIDATED`. See `results.md`.
