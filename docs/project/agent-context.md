@@ -1,6 +1,6 @@
 # Agent Context
 
-## Active Change: web-ui-mvp — IN PROGRESS (Slice 1 APPROVED, committed; Slice 2 IMPLEMENTED / TESTED / APPROVED, commit autorizado; Slice 3/4 pending)
+## Active Change: web-ui-mvp — IN PROGRESS (Slice 1 APPROVED, committed; Slice 2 APPROVED, committed `f0d2efa`; Slice 3 IMPLEMENTED / TESTED / REVIEWED / APPROVED / COMMITTED; Slice 4 pending)
 
 - Rama `change/web-ui-mvp`, baseline `main` `059552d`, Slice 1 committed (`caa33c5`).
 - Objetivo: exponer `run_pipeline` (runner canónico) a través de una pequeña Web UI
@@ -23,11 +23,12 @@
   metadata cargado no validada); fix `_validate_explicit_metadata_identity`; Review retry
   `SLICE_1_APPROVED` con F1 CLOSED. Triple invariante final:
   `requested jobId == directorio canónico == metadata.jobId`.
-- Siguiente trabajo: **Slice 2 Backend / Job API** (FastAPI). Slice 3 (Angular) y Slice 4
-  (executor/servidor real) son PLANNED, NO implementados. El task "executor web" se completó
-  dentro del propio Slice 2 con `LocalJobExecutor` (max_workers=1, admisión acotada, reconciliación
-  de stale QUEUED/RUNNING→INTERRUPTED); el servidor Uvicorn queda para el despliegue del Slice 4.
-- Slice 2 (implementado en rama, **APPROVED**, commit autorizado `feat(web): add backend job API`):
+- Siguiente trabajo (tras Slice 2: Slice 3 APPROVED/committed; Slice 4 como último slice): Slice 4
+  (integración/hardening). El task "executor web" se completó dentro del propio Slice 2 con
+  `LocalJobExecutor` (max_workers=1, admisión acotada, reconciliación de stale
+  QUEUED/RUNNING→INTERRUPTED); el servidor Uvicorn queda para el despliegue del Slice 4.
+  Slice 4 es PENDING, aún NO implementado.
+- Slice 2 (implementado en rama, **APPROVED**, committed `f0d2efa` — `feat(web): add backend job API`):
   backend FastAPI en `src/shorts_creator/web/`
   (`exceptions`, `dto`, `repository`, `projection`, `executor`, `service`, `capabilities`,
   `dependencies`, `routes/{health,jobs,media}`, `app`). DTO allowlist (extra="forbid"), errores
@@ -44,6 +45,20 @@
   requirements.txt: +fastapi/uvicorn/httpx. 60 tests web (`tests/test_web_*` + `test_web_lifecycle`);
   suite completa `1971 passed`; diff-check limpio; smoke production lifespan PASSED.
 - Corrección docs (tasks.md→agente): el executor web ya NO es Slice 4; se implementó en Slice 2.
+- Slice 3 (rebuild arquitectónico de la UI, **IMPLEMENTED / TESTED / REVIEWED / APPROVED / COMMITTED**):
+  Angular 21.2.x standalone (sin `AppModule`), feature-first bajo `web/frontend/`, según skill
+  `angular-architecture`. El spike previo (`frontend/`, `AppModule`, polling con `setInterval`)
+  fue descartado y eliminado. Node 20.20.0 / npm 10.8.2; build `@angular/build:application`,
+  tests Vitest `@angular/build:unit-test`; checkpoint `npm install` + `npm run build` OK.
+  Estructura: `features/generator/{model,data-access,application,generator-page,generator-form,
+  job-progress,job-result}` (sin `core`/`shared` vacíos). Dependencias UI → `GeneratorFacade` →
+  `ShortsApiClient` → FastAPI; transport DTO snake_case → mapper → modelo camelCase. Polling
+  `timer(0, 1000)` + `exhaustMap` (sin solapamiento) + `takeWhile(..., true)` (incluye terminal)
+  + `takeUntilDestroyed`; sin `setInterval`/NgRx/Nx. Capacidades desde `/api/v1/capabilities`;
+  preview/download `/api/v1/jobs/{id}/video|download`; sin paths. Errores mapeados a
+  `{code,message,status}`. 49 tests frontend (`*.spec.ts`); `npm test` 49 passed; `npm run build`
+  OK (76.88 kB transfer); backend `1971 passed, 0 failed`; `git diff --check` limpio. Review
+  formal: `SLICE_3_APPROVED`.
 
 ### Seguridad — invariantes (HIGH PRIORITY, especificado no desplegado)
 - El Web API expone RECURSOS DE DOMINIO, nunca FILESYSTEM.

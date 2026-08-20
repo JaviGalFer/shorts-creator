@@ -1,0 +1,47 @@
+<section class="job-progress" aria-live="polite">
+  @if (job; as current) {
+    <header class="job-progress__header">
+      <span class="badge" [attr.data-state]="current.executionState">{{ current.executionState }}</span>
+      @if (polling) {
+        <span class="badge badge--muted">actualizando…</span>
+      }
+    </header>
+
+    <dl class="job-progress__meta">
+      @if (current.currentStage) {
+        <div class="meta-row">
+          <dt>Etapa actual</dt>
+          <dd>{{ current.currentStage }}</dd>
+        </div>
+      }
+      @if (current.lastCompletedStage) {
+        <div class="meta-row">
+          <dt>Última etapa completada</dt>
+          <dd>{{ current.lastCompletedStage }}</dd>
+        </div>
+      }
+    </dl>
+
+    @if (current.warnings.length > 0) {
+      <div class="notes notes--warning">
+        <h4>Avisos</h4>
+        <ul>
+          @for (warning of current.warnings; track warning) {
+            <li>{{ warning }}</li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (current.reviewReasons.length > 0) {
+      <div class="notes notes--review">
+        <h4>Motivos de revisión</h4>
+        <ul>
+          @for (reason of current.reviewReasons; track reason) {
+            <li>{{ reason }}</li>
+          }
+        </ul>
+      </div>
+    }
+  }
+</section>

@@ -1,0 +1,75 @@
+:host {
+  display: block;
+}
+
+.job-progress {
+  border-top: 1px solid var(--color-border);
+  padding-top: 1.5rem;
+}
+
+.job-progress__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+}
+
+.badge--muted {
+  color: var(--color-muted);
+}
+
+.job-progress__meta {
+  margin: 1rem 0 0;
+}
+
+.meta-row {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  padding: 0.25rem 0;
+}
+
+.meta-row dt {
+  color: var(--color-muted);
+}
+
+.meta-row dd {
+  margin: 0;
+}
+
+.notes {
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  border-left: 3px solid var(--color-border);
+  padding-left: 1rem;
+}
+
+.notes h4 {
+  margin: 0 0 0.375rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+}
+
+.notes ul {
+  margin: 0;
+  padding-left: 1.125rem;
+}
+
+.notes--warning {
+  border-left-color: var(--color-warning);
+}
+
+.notes--review {
+  border-left-color: var(--color-review);
+}

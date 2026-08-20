@@ -1,0 +1,102 @@
+<form [formGroup]="form" class="generator-form" (ngSubmit)="submit()" novalidate>
+  <fieldset class="fieldset">
+    <legend class="fieldset__legend">Tema</legend>
+    <label class="field">
+      <span class="field__label">¿De qué trata el vídeo?</span>
+      <textarea
+        class="field__control field__control--textarea"
+        formControlName="topic"
+        rows="3"
+        placeholder="Ej. La vida de los delfines"
+        [attr.aria-invalid]="form.controls.topic.touched && form.controls.topic.invalid"></textarea>
+      @if (form.controls.topic.touched && form.controls.topic.hasError('required')) {
+        <small class="field__error">El tema es obligatorio.</small>
+      }
+    </label>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset__legend">Duración</legend>
+    <div class="field-row">
+      <label class="field">
+        <span class="field__label">Preset</span>
+        <select class="field__control" formControlName="durationPreset">
+          <option [ngValue]="null">Automática</option>
+          @for (preset of presets; track preset.id) {
+            <option [ngValue]="preset.id">{{ preset.id }} ({{ preset.targetSec }}s)</option>
+          }
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="field__label">Segundos ({{ minSec }}–{{ maxSec }})</span>
+        <input
+          class="field__control"
+          type="number"
+          formControlName="durationSeconds"
+          [min]="minSec"
+          [max]="maxSec"
+          [attr.aria-invalid]="form.controls.durationSeconds.touched && form.controls.durationSeconds.invalid" />
+        @if (form.controls.durationSeconds.touched && form.controls.durationSeconds.hasError('min')) {
+          <small class="field__error">Mínimo {{ minSec }}s.</small>
+        }
+      </label>
+    </div>
+    @if (hasDurationConflict) {
+      <small class="field__error">Elige preset o segundos, no ambos.</small>
+    }
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset__legend">Voz y audio</legend>
+    <div class="field-row">
+      <label class="field">
+        <span class="field__label">Proveedor TTS</span>
+        <select class="field__control" formControlName="ttsProvider">
+          <option [ngValue]="null">Por defecto</option>
+          @for (provider of ttsProviders; track provider.id) {
+            <option [ngValue]="provider.id">{{ provider.id }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="field__label">Voz</span>
+        <input class="field__control" type="text" formControlName="voice" placeholder="Automática" />
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset__legend">Visual</legend>
+    <label class="field">
+      <span class="field__label">Modo visual</span>
+      <select class="field__control" formControlName="visualMode">
+        <option [ngValue]="null">Por defecto</option>
+        @for (mode of visualModes; track mode) {
+          <option [ngValue]="mode">{{ mode }}</option>
+        }
+      </select>
+    </label>
+
+    <div class="field">
+      <span class="field__label">Proveedores de assets</span>
+      <div class="checkbox-list">
+        @for (provider of providers; track provider.id) {
+          <label class="checkbox">
+            <input
+              type="checkbox"
+              [checked]="isProviderSelected(provider.id)"
+              (change)="toggleProvider(provider.id, $event)" />
+            <span>{{ provider.id }}</span>
+            <small class="checkbox__meta">{{ provider.runtimeStatus }}</small>
+          </label>
+        }
+      </div>
+    </div>
+  </fieldset>
+
+  <button class="submit" type="submit" [disabled]="busy || form.invalid">
+    {{ busy ? 'Generando…' : 'Generar vídeo' }}
+  </button>
+</form>

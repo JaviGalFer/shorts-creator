@@ -2,7 +2,7 @@
 
 **Última actualización:** 2026-08-20
 
-## Cambio activo: `web-ui-mvp` — IN PROGRESS (Slice 1 COMPLETED / TESTED / REVIEWED / APPROVED; Slice 2 IMPLEMENTED / TESTED / APPROVED — pendiente commit; Slices 3/4 pendientes)
+## Cambio activo: `web-ui-mvp` — IN PROGRESS (Slice 1 APPROVED/committed; Slice 2 APPROVED/committed `f0d2efa`; Slice 3 IMPLEMENTED / TESTED / REVIEWED / APPROVED / COMMITTED; Slice 4 pendiente)
 
 - Objetivo: exponer el pipeline canónico (`run_pipeline`) a través de una pequeña Web UI
   (FastAPI + Angular) sin duplicar lógica de pipeline y sin romper la CLI.
@@ -33,7 +33,7 @@
   - Review formal (retry): **`SLICE_1_APPROVED`**; finding previo de identidad del
     metadata cargado CLOSED; triple invariante final `requested jobId == directorio
     canónico == metadata.jobId`.
-- **Slice 2 (IMPLEMENTED / TESTED / APPROVED, pendiente commit):** backend FastAPI en
+- **Slice 2 (IMPLEMENTED / TESTED / APPROVED, committed `f0d2efa`):** backend FastAPI en
   `src/shorts_creator/web/` (`exceptions`, `dto`, `repository`, `projection`, `executor`,
   `service`, `capabilities`, `dependencies`, `routes/{health,jobs,media}` y `app`).
   - DTO allowlist estricto (`extra="forbid"`); errores centralizados con códigos estables
@@ -64,8 +64,32 @@
     `test_web_lifecycle`); suite completa `1971 passed, 0 failed`; `git diff --check` limpio.
   - Smoke production lifespan PASSED (wiring en startup, reconcile 1 vez, `_shutdown=True`
     al salir). Ver `openspec/changes/web-ui-mvp/specs/job-api.md`.
-- **NO implementado todavía:** Angular (Slice 3), executor/servidor Uvicorn de despliegue
-  (Slice 4), polling, autenticación, persitencia avanzada, Docker/UI.
+- **Slice 3 (IMPLEMENTED / TESTED / REVIEWED / APPROVED / COMMITTED):** rebuild arquitectónico
+  de la UI Angular bajo `web/frontend/` (el spike anterior en `frontend/` fue descartado y
+  eliminado). Angular 21.2.x standalone (sin `AppModule`), feature-first, según la skill
+  `angular-architecture`. Review formal: **`SLICE_3_APPROVED`**.
+  - Workspace Angular standalone mínimo (`@angular/build:application` + tests Vitest
+    `@angular/build:unit-test`); Node 20.20.0, npm 10.8.2. Checkpoint `npm install` y
+    `npm run build` OK sobre el shell limpio.
+  - Estructura feature-first: `features/generator/{model,data-access,application,
+    generator-page,generator-form,job-progress,job-result}`; sin `core/`/`shared` vacíos.
+  - Dependencias: UI → `GeneratorFacade` → `ShortsApiClient` → FastAPI; transport DTO
+    (snake_case) → mapper → modelo de aplicación (camelCase).
+  - `GeneratorPage` = composición; `GeneratorForm` Reactive Form (sin HTTP); `JobProgress`
+    y `JobResult` presentacionales (sin polling ni `HttpClient`); `ShortsApiClient` solo
+    transporte HTTP; `GeneratorFacade` orquestación/estado (signals + computed).
+  - Polling lifecycle-safe: `timer(0, 1000)` + `exhaustMap` (sin solapamiento) +
+    `takeWhile(..., true)` (incluye resultado terminal) + `takeUntilDestroyed`; sin
+    `setInterval`; sin NgRx/Nx/event bus.
+  - Capacidades desde `GET /api/v1/capabilities` (nunca duplicadas); preview/download vía
+    `/api/v1/jobs/{id}/video` y `/api/v1/jobs/{id}/download`; sin paths de filesystem.
+  - Errores API mapeados a `{code, message, status}` saneado (nunca raw/traceback).
+  - Tests: 49 (`*.spec.ts` co-located). `npm test -- --watch=false`: 49 passed.
+    `npm run build`: OK (producción, 76.88 kB transfer). Backend
+    `python3 -m pytest -q tests`: `1971 passed, 0 failed`. `git diff --check` limpio.
+- **NO implementado todavía:** executor/servidor Uvicorn de despliegue (Slice 4), build de
+  producción servido por FastAPI, volumen persistente, autenticación, persitencia avanzada,
+  Docker/UI.
 - **Seguridad/API de diseño planificada y especificada, NO desplegada:** API nunca acepta/
   devuelve paths; recursos job-scoped por UUID; DTO allowlist; errores centralizados
   saneados; UUID no es autorización. Ver `openspec/changes/web-ui-mvp/specs/web-security.md`.

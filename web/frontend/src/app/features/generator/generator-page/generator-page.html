@@ -1,0 +1,26 @@
+<main class="generator">
+  <header class="generator__header">
+    <h1 class="generator__title">Shorts Creator</h1>
+    <p class="generator__subtitle">Genera un vídeo corto vertical a partir de un tema.</p>
+  </header>
+
+  <app-generator-form
+    [capabilities]="facade.capabilities()"
+    [busy]="facade.creatingJob() || facade.polling()"
+    (generate)="onGenerate($event)"></app-generator-form>
+
+  @if (facade.error(); as error) {
+    <p class="generator__error" role="alert">{{ error.message }}</p>
+  }
+
+  @if (facade.currentJob(); as job) {
+    @if (!facade.isTerminal()) {
+      <app-job-progress [job]="job" [polling]="facade.polling()"></app-job-progress>
+    } @else {
+      <app-job-result
+        [job]="job"
+        [videoUrl]="facade.videoUrl()"
+        [downloadUrl]="facade.downloadUrl()"></app-job-result>
+    }
+  }
+</main>

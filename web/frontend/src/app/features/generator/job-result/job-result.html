@@ -1,0 +1,69 @@
+<section class="job-result" aria-live="polite">
+  @if (job; as current) {
+    <header class="job-result__header">
+      <h2 class="job-result__title">Resultado</h2>
+      <span class="badge" [attr.data-state]="current.executionState">{{ current.executionState }}</span>
+    </header>
+
+    @if (isReviewRequired) {
+      <div class="outcome outcome--review">
+        <h3>Revisión requerida</h3>
+        <p>El vídeo se generó pero requiere revisión manual.</p>
+        @if (current.reviewReasons.length > 0) {
+          <ul>
+            @for (reason of current.reviewReasons; track reason) {
+              <li>{{ reason }}</li>
+            }
+          </ul>
+        }
+      </div>
+    } @else if (isAssetsPartial) {
+      <div class="outcome outcome--partial">
+        <h3>Assets parciales</h3>
+        <p>El vídeo se generó con una cobertura de assets incompleta.</p>
+        @if (current.warnings.length > 0) {
+          <ul>
+            @for (warning of current.warnings; track warning) {
+              <li>{{ warning }}</li>
+            }
+          </ul>
+        }
+      </div>
+    } @else if (isFailed) {
+      <div class="outcome outcome--failed">
+        <h3>Generación fallida</h3>
+        <p>El trabajo terminó con un error.</p>
+        @if (current.warnings.length > 0) {
+          <ul>
+            @for (warning of current.warnings; track warning) {
+              <li>{{ warning }}</li>
+            }
+          </ul>
+        }
+      </div>
+    } @else if (isInterrupted) {
+      <div class="outcome outcome--interrupted">
+        <h3>Interrumpido</h3>
+        <p>El trabajo se interrumpió antes de finalizar.</p>
+      </div>
+    } @else {
+      <div class="outcome outcome--done">
+        <h3>Completado</h3>
+        <p>El vídeo se generó correctamente.</p>
+      </div>
+    }
+
+    @if (current.pipelineStatus) {
+      <p class="job-result__status">Estado del pipeline: {{ current.pipelineStatus }}</p>
+    }
+
+    @if (videoUrl) {
+      <div class="job-result__media">
+        <video class="job-result__video" [src]="videoUrl" controls playsinline></video>
+        @if (downloadUrl) {
+          <a class="job-result__download" [href]="downloadUrl" download>Descargar vídeo</a>
+        }
+      </div>
+    }
+  }
+</section>

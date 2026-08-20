@@ -3,7 +3,8 @@
 Cambio único `change/web-ui-mvp`, cuatro slices.
 
 **Estado general: IN PROGRESS — Slice 1 aprobado y committed; Slice 2 IMPLEMENTED / TESTED /
-APPROVED (commit autorizado); Slices 3/4 pending.**
+ APPROVED y committed (`f0d2efa`); Slice 3 IMPLEMENTED / TESTED / REVIEWED / APPROVED /
+ COMMITTED; Slice 4 pending.**
 No marcar el cambio global como completo.
 
 > OpenSpec regularizado después de la implementación de Slice 1 y antes del Review formal
@@ -48,7 +49,7 @@ No marcar el cambio global como completo.
 
 ## Slice 2 — Backend / Job API
 
-**Estado: IMPLEMENTED / TESTED / APPROVED** (commit autorizado: `feat(web): add backend job API`).
+**Estado: IMPLEMENTED / TESTED / APPROVED / COMMITTED — `f0d2efa feat(web): add backend job API`.**
 
 - [x] Shell FastAPI (`web/backend`) en `src/shorts_creator/web/` (`app`, `dependencies`,
       `routes/{health,jobs,media}`).
@@ -71,13 +72,36 @@ No marcar el cambio global como completo.
 
 ## Slice 3 — UI Angular
 
-Estado: PENDING.
+**Estado: IMPLEMENTED / TESTED / REVIEWED / APPROVED / COMMITTED.**
 
-- [ ] Formulario de generación (topic, duration, tts, voice, visual mode, asset providers).
-- [ ] Progreso de job por stage.
-- [ ] Estado final + presentación `ASSETS_PARTIAL` / `REVIEW_REQUIRED`.
-- [ ] Preview MP4 + acción de descarga.
-- [ ] Polling (~1s) hasta estado terminal.
+Rebuild arquitectónico bajo `web/frontend/` (el spike anterior en `frontend/` fue descartado y
+eliminado). Angular 21.2.x standalone (sin `AppModule`), feature-first, según la skill
+`angular-architecture`. Review formal: `SLICE_3_APPROVED`.
+
+- [x] Workspace Angular standalone mínimo bajo `web/frontend/` (Angular 21.2.x, Node 20.20.0,
+      npm 10.8.2; build de aplicación `@angular/build:application`, tests Vitest
+      `@angular/build:unit-test`).
+- [x] Checkpoint de entorno: `npm install` y `npm run build` OK sobre el shell limpio.
+- [x] Estructura feature-first: `features/generator/{model,data-access,application,
+      generator-page,generator-form,job-progress,job-result}`; sin `core/`/`shared` vacíos.
+- [x] Dependencias: UI → `GeneratorFacade` → `ShortsApiClient` → FastAPI; transport DTO
+      (snake_case) → mapper → modelo de aplicación (camelCase).
+- [x] `GeneratorPage` = composición; `GeneratorForm` Reactive Form (sin HTTP); `JobProgress`
+      y `JobResult` presentacionales (sin polling ni `HttpClient`); `ShortsApiClient` solo
+      transporte HTTP; `GeneratorFacade` orquestación/estado (signals + computed).
+- [x] Polling lifecycle-safe: `timer(0, 1000)` + `exhaustMap` (sin solapamiento) +
+      `takeWhile(..., true)` (incluye resultado terminal) + `takeUntilDestroyed`.
+- [x] Sin `setInterval`; sin NgRx/Nx/event bus.
+- [x] Capacidades desde `GET /api/v1/capabilities` (nunca duplicadas); preview/download vía
+      `/api/v1/jobs/{id}/video` y `/api/v1/jobs/{id}/download`; sin paths de filesystem.
+- [x] Errores API mapeados a `{code, message, status}` saneado (nunca raw/traceback).
+- [x] Tests: 49 (`*.spec.ts` co-located) — mapeo DTO→modelo, loading de capabilities, mapeo
+      form→command, create job, transiciones de estado, polling QUEUED/RUNNING, no
+      solapamiento, stop en FINISHED/FAILED/INTERRUPTED, cleanup de lifecycle, presentación
+      REVIEW_REQUIRED/ASSETS_PARTIAL, URLs video/download, mapeo de errores saneado.
+- [x] `npm test -- --watch=false`: 49 passed. `npm run build`: OK (producción, 76.88 kB
+      transfer). Backend `python3 -m pytest -q tests`: `1971 passed, 0 failed`.
+      `git diff --check` limpio.
 
 ## Slice 4 — Integración / hardening
 
