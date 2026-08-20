@@ -103,18 +103,26 @@ Devuelve SOLO JSON válido, sin markdown, sin explicaciones.
 - La primera frase debe contener pronto una razón concreta para seguir viendo: un hecho
   sorprendente concreto, una consecuencia inesperada, una contradicción, un mecanismo
   intrigante o una pregunta concreta con contenido.
+- Una pregunta que solo pregunta si el espectador conoce o sabe cómo funciona el tema NO es
+  por sí sola un hook fuerte. Evita como opener genérico «¿Sabes cómo funciona X?»,
+  «¿Te has preguntado cómo funciona X?» o «¿Conoces X?», salvo que la misma frase aporte de
+  inmediato un hecho, contradicción, mecanismo o consecuencia concreta. Es preferible que la
+  primera frase entregue contenido desde el primer momento.
 - Evita introducciones como «Hoy vamos a hablar de...», «En este vídeo veremos...»,
   «Te voy a contar...», «Prepárate para...» o «Seguro que alguna vez...».
-- «¿Sabías que...?» no está prohibido, pero nunca debe usarse como muletilla vacía. No
-  retrases el dato interesante con frases como «Hay algo increíble...», «Lo que ocurre después
-  te sorprenderá...» o «Pero primero...». El vídeo empieza aportando valor desde la primera
-  frase; sin clickbait sin payoff.
+- «¿Sabías que...?» no está prohibido ni se prohíben las preguntas buenas, pero nunca debe
+  usarse como muletilla vacía. No retrases el dato interesante con frases como «Hay algo
+  increíble...», «Lo que ocurre después te sorprenderá...» o «Pero primero...». El vídeo
+  empieza aportando valor desde la primera frase; sin clickbait sin payoff.
 
 ### Cierre
 - No es obligatorio un CTA de seguimiento. El cierre por defecto es el último dato,
   consecuencia o payoff del vídeo.
-- Evita patrones genéricos y moralejas artificiales: «nos enseña que...», «es una lección
-  de...», «así que la próxima vez...», «finalmente...», «en conclusión...».
+- Evita cierres que solo reevalúan o resumen el tema con adjetivos genéricos: «X es eficiente
+  y versátil», «X es increíble/fascinante», «por eso X es tan importante».
+- Prefiere cerrar con una última consecuencia concreta, una propiedad específica, un payoff o
+  una implicación directa de lo explicado.
+- Evita moralejas artificiales: «nos enseña que...», «es una lección de...», «así que la próxima vez...», «finalmente...», «en conclusión...».
 
 ## Reglas de subtítulos (subtitle)
 - Frase corta y memorable, máximo 7 palabras
@@ -299,7 +307,8 @@ Cuando el mensaje indique minimumWords y maximumWords:
 - no añadas nuevas ideas durante una compresión;
 - elimina primero redundancias, intensificadores, introducciones prescindibles y repeticiones;
 - conserva el significado principal de cada escena, y preserva prioritariamente el hook, los hechos concretos, la causa/efecto y el payoff;
-- no conviertas un hook concreto en una introducción genérica;
+- no conviertas un hook concreto en una introducción genérica ni en una pregunta vacía de «¿sabes cómo funciona X?»;
+- no reduzcas el cierre a adjetivos genéricos («X es eficiente y versátil»): conserva un dato, consecuencia o payoff concreto;
 - cuenta las palabras de voiceover separándolas por espacios antes de responder;
 - si el borrador supera maximumWords, vuelve a recortarlo y sigue recortando antes de devolver el JSON.
 
@@ -333,7 +342,8 @@ Para COMPRESS recorta primero por este orden: 1) redundancia, 2) intensificadore
 la reducción debe acercar la duración real al objetivo; recortar solo 1-2 palabras por
 escena no basta si el objetivo exige más. Preserva prioritariamente
 hook, hechos concretos, causa/efecto, mecanismo, payoff y tono. No conviertas un hook
-concreto en una introducción genérica.
+concreto en una introducción genérica ni en una pregunta vacía, ni reduzcas el cierre a
+adjetivos genéricos.
 
 Sigue el objetivo operativo como guidance: la duración
 TTS real medida posteriormente es la autoridad, no un conteo exacto de palabras."""
@@ -1426,7 +1436,8 @@ def _build_voiceover_repair_prompt(
             "duración real al objetivo; recortar solo 1-2 palabras por escena no basta si el",
             "objetivo exige más.",
             "Preserva prioritariamente hook, hechos concretos, causa/efecto, mecanismo, payoff y tono.",
-            "No conviertas un hook concreto en una introducción genérica.",
+            "No conviertas un hook concreto en una introducción genérica ni en una pregunta vacía, ni",
+            "reduzcas el cierre a adjetivos genéricos.",
         ]
 
     if allow_generated_images:

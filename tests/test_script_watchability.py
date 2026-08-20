@@ -121,6 +121,34 @@ class TestInitialPromptEditorialContract:
         for banned in ("Síguenos para más", "No olvides dejar tu like", "Comenta"):
             assert banned not in SYSTEM_PROMPT_V2
 
+    def test_generic_topical_question_explicitly_discouraged(self):
+        s = " ".join(SYSTEM_PROMPT_V2.split())
+        assert "pregunta que solo pregunta si el espectador conoce o sabe cómo funciona el tema" in s
+        assert "NO es por sí sola un hook fuerte" in s
+        assert "¿Sabes cómo funciona X?" in s
+        assert "¿Te has preguntado cómo funciona X?" in s
+        assert "¿Conoces X?" in s
+
+    def test_question_with_concrete_content_remains_allowed(self):
+        s = " ".join(SYSTEM_PROMPT_V2.split())
+        assert "ni se prohíben las preguntas buenas" in s
+        assert "salvo que la misma frase aporte de inmediato un hecho" in s
+        assert "entregue contenido desde el primer momento" in s
+
+    def test_generic_adjective_only_closing_discouraged(self):
+        s = " ".join(SYSTEM_PROMPT_V2.split())
+        assert "adjetivos genéricos" in s
+        assert "X es eficiente y versátil" in s
+        assert "X es increíble/fascinante" in s
+        assert "por eso X es tan importante" in s
+
+    def test_concrete_payoff_closing_preferred(self):
+        s = " ".join(SYSTEM_PROMPT_V2.split())
+        assert "última consecuencia concreta" in s
+        assert "propiedad específica" in s
+        assert "payoff" in s
+        assert "implicación directa de lo explicado" in s
+
 
 # ── CTA consistency across surfaces ─────────────────────────────────────────
 
