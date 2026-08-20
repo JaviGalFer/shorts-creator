@@ -77,8 +77,8 @@ Devuelve SOLO JSON válido, sin markdown, sin explicaciones.
 - La duración total, palabras totales y palabras por escena se especifican en las instrucciones dinámicas. Respeta esos valores.
 - Mínimo 7 palabras por escena
 - Frases contundentes, sin relleno
-- El hook (primera escena) debe abrir con algo sorprendente (paradoja, amenaza, cifra, pregunta fuerte)
-- El CTA de seguimiento debe incluirse DENTRO de la voz en off de la última escena, no como escena separada.
+- La escena 1 es el hook real que el espectador escucha primero: abre directamente con el elemento más interesante (ver «Contrato editorial»).
+- El cierre remata naturalmente con el último dato o payoff; no es obligatorio pedir seguimiento ni suscripción.
 
 ## Reglas de narración (voiceover)
 - En español de España (no latinoamericano)
@@ -87,6 +87,42 @@ Devuelve SOLO JSON válido, sin markdown, sin explicaciones.
 - Tono divulgativo y preciso
 - No inventar datos factuales
 - Priorizar datos concretos cuando apliquen: fechas, cifras, nombres propios
+
+## Contrato editorial (watchability)
+- Cada frase debe aportar información o progresión. Prefiere un mecanismo, una relación
+  causa/efecto, un dato concreto, un ejemplo específico o un contraste a los adjetivos y
+  al énfasis sin información.
+- Evita recapitulaciones innecesarias, el tono escolar y las moralejas artificiales.
+- Las escenas deben sentirse como una progresión: hook → contexto mínimo → mecanismo/tensión
+  → consecuencia/payoff → cierre. No son una lista independiente de hechos. `narrativeFunction`
+  puede reflejar el rol de cada escena en esa progresión, sin imponer una secuencia rígida.
+- Factualidad primero: nunca inventes cifras, fechas, nombres, mecanismos ni hechos para hacer
+  el texto más atractivo. Si no existe un dato concreto seguro, explica el mecanismo con precisión.
+
+### Hook (escena 1)
+- La primera frase debe contener pronto una razón concreta para seguir viendo: un hecho
+  sorprendente concreto, una consecuencia inesperada, una contradicción, un mecanismo
+  intrigante o una pregunta concreta con contenido.
+- Una pregunta que solo pregunta si el espectador conoce o sabe cómo funciona el tema NO es
+  por sí sola un hook fuerte. Evita como opener genérico «¿Sabes cómo funciona X?»,
+  «¿Te has preguntado cómo funciona X?» o «¿Conoces X?», salvo que la misma frase aporte de
+  inmediato un hecho, contradicción, mecanismo o consecuencia concreta. Es preferible que la
+  primera frase entregue contenido desde el primer momento.
+- Evita introducciones como «Hoy vamos a hablar de...», «En este vídeo veremos...»,
+  «Te voy a contar...», «Prepárate para...» o «Seguro que alguna vez...».
+- «¿Sabías que...?» no está prohibido ni se prohíben las preguntas buenas, pero nunca debe
+  usarse como muletilla vacía. No retrases el dato interesante con frases como «Hay algo
+  increíble...», «Lo que ocurre después te sorprenderá...» o «Pero primero...». El vídeo
+  empieza aportando valor desde la primera frase; sin clickbait sin payoff.
+
+### Cierre
+- No es obligatorio un CTA de seguimiento. El cierre por defecto es el último dato,
+  consecuencia o payoff del vídeo.
+- Evita cierres que solo reevalúan o resumen el tema con adjetivos genéricos: «X es eficiente
+  y versátil», «X es increíble/fascinante», «por eso X es tan importante».
+- Prefiere cerrar con una última consecuencia concreta, una propiedad específica, un payoff o
+  una implicación directa de lo explicado.
+- Evita moralejas artificiales: «nos enseña que...», «es una lección de...», «así que la próxima vez...», «finalmente...», «en conclusión...».
 
 ## Reglas de subtítulos (subtitle)
 - Frase corta y memorable, máximo 7 palabras
@@ -270,7 +306,9 @@ Cuando el mensaje indique minimumWords y maximumWords:
 - nunca devuelvas un total superior a maximumWords;
 - no añadas nuevas ideas durante una compresión;
 - elimina primero redundancias, intensificadores, introducciones prescindibles y repeticiones;
-- conserva el significado principal de cada escena;
+- conserva el significado principal de cada escena, y preserva prioritariamente el hook, los hechos concretos, la causa/efecto y el payoff;
+- no conviertas un hook concreto en una introducción genérica ni en una pregunta vacía de «¿sabes cómo funciona X?»;
+- no reduzcas el cierre a adjetivos genéricos («X es eficiente y versátil»): conserva un dato, consecuencia o payoff concreto;
 - cuenta las palabras de voiceover separándolas por espacios antes de responder;
 - si el borrador supera maximumWords, vuelve a recortarlo y sigue recortando antes de devolver el JSON.
 
@@ -290,8 +328,24 @@ No devuelvas title, hook, summary, subtitle, targetDurationSec, visualPlan ni
 ningún otro campo. Conserva todas las escenas, su orden y sus sceneNumber.
 No modifiques estructura, significado principal ni planes visuales.
 
-Para EXPAND puedes añadir detalle relevante. Para COMPRESS elimina redundancia
-conservando significado. Sigue el objetivo operativo como guidance: la duración
+Para EXPAND añade contenido por este orden de prioridad: 1) causa o mecanismo,
+2) detalle concreto relevante, 3) consecuencia, 4) ejemplo útil. Añade SOLO lo
+necesario para acercarte al objetivo global sin superarlo: una cláusula corta por
+escena suele bastar; no es necesario agotar las cuatro categorías en cada escena.
+NO repitas lo mismo con otras palabras, ni reformules para ocupar espacio; NO añadas
+adjetivos, moralejas, introducciones, llamadas a la acción, ideas ajenas al tema o la
+escena, ni inventes datos.
+Preserva especialmente la fuerza del hook de la escena 1, la causalidad, el payoff y el tono.
+
+Para COMPRESS recorta primero por este orden: 1) redundancia, 2) intensificadores,
+3) contexto prescindible, 4) conectores, 5) frases accesorias. Recorta con decisión:
+la reducción debe acercar la duración real al objetivo; recortar solo 1-2 palabras por
+escena no basta si el objetivo exige más. Preserva prioritariamente
+hook, hechos concretos, causa/efecto, mecanismo, payoff y tono. No conviertas un hook
+concreto en una introducción genérica ni en una pregunta vacía, ni reduzcas el cierre a
+adjetivos genéricos.
+
+Sigue el objetivo operativo como guidance: la duración
 TTS real medida posteriormente es la autoridad, no un conteo exacto de palabras."""
 
 
@@ -445,7 +499,7 @@ def _build_duration_prompt_instruction_v2(budget: dict, strictness: str) -> str:
         f"Prefiere {budget.get('preferredSceneCount', 5)} escenas (~{budget.get('targetSceneDurationSec', 6)}s por escena)."
     )
     lines.append(f"- Mínimo 7 palabras por escena. Aproximadamente {per_scene_low}-{per_scene_high} palabras por escena.")
-    lines.append(f"- El CTA debe incluirse dentro de la voz en off de la última escena, no como escena separada.")
+    lines.append(f"- Si el cierre necesita algún remate o CTA, va dentro de la voz en off de la última escena, nunca como escena separada; el último dato o payoff puede ser el cierre sin CTA.")
     lines.append(f"- NO uses frases de relleno, CTA repetido, oraciones duplicadas ni pausas dramáticas falsas.")
     lines.append(
         f"\n## Presupuesto global de palabras (contrato)\n"
@@ -975,7 +1029,7 @@ def _build_retry_instruction_v2(
         f"- DEBEN SER ENTRE {min_scenes} Y {max_scenes} ESCENAS. "
         f"Mínimo {min_scenes}, máximo {max_scenes}. Prefiere {preferred_scenes} (~{scene_seconds}s por escena)."
     )
-    lines.append("- El CTA debe estar DENTRO de la última escena, nunca como escena aparte.")
+    lines.append("- Si el cierre necesita algún remate o CTA, va dentro de la última escena, nunca como escena aparte; el payoff puede cerrar sin CTA.")
     lines.append("- Cada escena debe tener al menos 7 palabras de voiceover.")
     lines.append("- Cada escena DEBE tener visualPlan v2 completo con _schemaVersion=2.")
     lines.append("- No incluyas campos prohibidos en visualPlan.")
@@ -1358,6 +1412,33 @@ def _build_voiceover_repair_prompt(
         f"- Revisa que los `sceneNumber` sean {expected}.",
         "- Las restricciones visuales no son editables durante esta reparación.",
     ]
+
+    if direction == "EXPAND":
+        lines += [
+            "",
+            "## Política editorial EXPAND",
+            "",
+            "Añade contenido por este orden de prioridad: causa o mecanismo, detalle concreto",
+            "relevante, consecuencia, ejemplo útil. Añade solo lo necesario para acercarte al",
+            "objetivo global sin superarlo; una cláusula corta por escena suele bastar.",
+            "NO repitas lo mismo con otras palabras, ni reformules para ocupar espacio; no añadas",
+            "adjetivos, moralejas, introducciones, llamadas a la acción, ideas ajenas al tema o la",
+            "escena, ni inventes datos.",
+            "Preserva especialmente la fuerza del hook de la escena 1, la causalidad, el payoff y el tono.",
+        ]
+    else:
+        lines += [
+            "",
+            "## Política editorial COMPRESS",
+            "",
+            "Recorta primero por este orden: redundancia, intensificadores, contexto prescindible,",
+            "conectores, frases accesorias. Recorta con decisión: la reducción debe acercar la",
+            "duración real al objetivo; recortar solo 1-2 palabras por escena no basta si el",
+            "objetivo exige más.",
+            "Preserva prioritariamente hook, hechos concretos, causa/efecto, mecanismo, payoff y tono.",
+            "No conviertas un hook concreto en una introducción genérica ni en una pregunta vacía, ni",
+            "reduzcas el cierre a adjetivos genéricos.",
+        ]
 
     if allow_generated_images:
         lines.append("- El gate de imágenes generadas NO se modifica en esta reparación.")

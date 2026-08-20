@@ -2,6 +2,20 @@
 
 **Última actualización:** 2026-08-20
 
+## Cambio cerrado: `script-watchability-v1` — COMPLETED / VERIFIED / CLOSED (pending authorized merge)
+
+- Mejora watchability de guiones: contrato editorial en prompts (hook escena 1,
+  desarrollo/progresión, cierre, factualidad) y CTA no obligatorio; políticas de repair
+  EXPAND/COMPRESS con límites. Hardening final hook/cierre (pregunta tópica genérica
+  desaconsejada, cierre sin resumen adjetival).
+- Ramas `change/script-watchability-v1`; tests `test_script_watchability.py` (31); suite
+  `1880 passed, 0 failed`; `git diff --check` limpio. Commits `9acbf58` + `cb2d9f7` + `9fadc10`.
+- E2E final `cmo-2026-08-20-164453` (delfines) **VALIDATED** — `VIDEOS_ONLY` + Pexels,
+  27.92s in-range, 2 repairs, hook contenido-primero, sin CTA. Runs AUTO previos quedaron
+  `ASSETS_PARTIAL` por supply de ilustración/diagrama (limitación preexistente, ajena al change),
+  conservados como evidencia histórica.
+- Decisión: `READY_TO_MERGE` (merge no autorizado). Ver `openspec/changes/script-watchability-v1/results.md`.
+
 ## Cambio cerrado: `auto-mixed-visual-runtime` — COMPLETED / VERIFIED / CLOSED / MERGED (merge `0ea44e1`, no-ff)
 
 - AUTO y MIXED usan la preferencia editorial real del LLM (`mediaPreference`
