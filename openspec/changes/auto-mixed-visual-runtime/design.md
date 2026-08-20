@@ -39,6 +39,8 @@ Distinguimos:
 
 La detección se hace sobre la estructura raw del payload ANTES de canonicalizar (antes de que el default borre la información de presencia). Error estructurado: `MEDIA_PREFERENCE_MISSING`.
 
+Este comportamiento es ESTRICTO durante la generación AUTO/MIXED (generación, retries y validación final): una generación final AUTO/MIXED sin `mediaPreference` se considera inválida y no se tolera silenciosamente — provoca retries correctivos y, agotados los intentos, termina en REVIEW_REQUIRED.
+
 Compatibilidad histórica: planes persistidos sin mediaPreference continúan canonicalizando a IMAGE_PREFERRED cuando no se están regenerando. No se reescribe metadata histórica.
 
 ## Normas de implementación
@@ -128,3 +130,13 @@ No se toca FFmpeg. El renderer ya soporta IMAGE/VIDEO por entrada y `build_rende
 - `script/generator.py`: semántica `mediaPreference` en system prompt + ejemplo; bloque por `visual_mode`; guardia `MEDIA_PREFERENCE_MISSING` sobre payload crudo solo en AUTO/MIXED; regla 8 de queries neutrales; retry correctivo.
 
 Diferencia frente al Plan: el guard de ausencia se implementa en `_validate_and_canonicalize_script_v2` con `visual_mode` como parámetro (None en repairs), y el `queryUsed` efectivo se centraliza en el adapter de Pexels Video (búsqueda y evaluación usan la misma query neutralizada).
+## Estado / Cierre
+
+**COMPLETED / VERIFIED / CLOSED — pending authorized merge.**
+
+Baseline `1809` → Slice 1 `1843` → final `1849 passed, 0 failed`; `git diff --check` limpio.
+
+AUTO E2E `cmo-2026-08-20-152730` VALIDATED (8 IMAGE + 1 VIDEO; mediaDecision==mediaKind,
+sin fallback). MIXED E2E `por-2026-08-20-153502` ASSETS_PARTIAL (9/10, mezcla editorial
+5 IMAGE + 4 VIDEO; 1 ilustración sin cobertura supply). Mixed local smoke PASS
+(IMAGE/VIDEO/IMAGE, 1080x1920, 19.08s). Ver `results.md`.

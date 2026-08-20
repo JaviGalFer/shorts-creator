@@ -1,5 +1,7 @@
 # Propuesta: auto-mixed-visual-runtime
 
+**Estado: COMPLETED / VERIFIED / CLOSED — pending authorized merge.**
+
 ## Contexto
 
 `pexels-video-runtime-mvp` (COMPLETADO / CLOSED) dejó VIDEO productivo bajo VIDEOS_ONLY:

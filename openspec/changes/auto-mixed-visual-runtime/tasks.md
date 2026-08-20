@@ -16,12 +16,22 @@
 
 **Estado: Slice 1 COMPLETE**
 
-## Slice 2 — Mixed runtime + E2E (futura, pendiente)
+## Slice 2 — Mixed runtime + E2E (completada)
 
-- [ ] Hardening executor fallback (restricciones modo duro).
-- [ ] Regression mixta IMAGE/VIDEO prepare/render (fixture).
-- [ ] Real AUTO E2E (30s, elevenlabs, wikimedia_commons,pixabay,pexels).
-- [ ] Real MIXED E2E (mismos providers).
-- [ ] Docs/closure.
+- [x] Hardening A: prompt sin contradicción (ejemplo de queries medium-neutral).
+- [x] Hardening B: reconciliación `mediaDecision` con media kinds supervivientes (source-policy); `PREFERRED_MEDIA_EXHAUSTED` solo para kind primario permitido que agotó candidatos.
+- [x] Hardening C: `mediaDecision` preservado en TODOS los terminales del executor (incl. SEMANTIC POSTCONDITION, PROVIDER_UNAVAILABLE, dry-run, no-candidates).
+- [x] Hardening D: guardia `MEDIA_PREFERENCE_MISSING` estricta en AUTO/MIXED; design.md actualizado (no se tolera silenciosamente).
+- [x] Mixed local render smoke (prepare/render/validate real, IMAGE/VIDEO/IMAGE, 1080x1920, PASS).
+- [x] Real AUTO E2E `cmo-2026-08-20-152730` VALIDATED (8 IMAGE + 1 VIDEO, mediaDecision==mediaKind, sin fallback).
+- [x] Real MIXED E2E `por-2026-08-20-153502` ASSETS_PARTIAL (9/10, mezcla 5 IMAGE + 4 VIDEO).
+- [x] Verificación del comportamiento LLM: mediaPreference explícito, sin default histórico.
+- [x] Suite completa 1849 passed, 0 failed; `git diff --check` limpio.
 
-**Estado: Slice 2 pending**
+**Estado: Slice 2 COMPLETE**
+
+## Estado del change
+
+**COMPLETED / VERIFIED / CLOSED — pending authorized merge.**
+
+Baseline `1809` → Slice 1 `1843` → final `1849 passed, 0 failed`.
