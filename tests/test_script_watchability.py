@@ -160,7 +160,8 @@ class TestRepairSystemPromptPolicy:
         sp = VOICEOVER_REPAIR_SYSTEM_PROMPT
         assert "NO repitas lo mismo" in sp
         assert "reformules para ocupar espacio" in sp
-        assert "NO añadas adjetivos, moralejas" in sp
+        assert "NO añadas" in sp
+        assert "moralejas, introducciones" in sp
         assert "ni inventes datos" in sp
 
     def test_compress_policy(self):

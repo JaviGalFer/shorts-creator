@@ -320,13 +320,18 @@ ningún otro campo. Conserva todas las escenas, su orden y sus sceneNumber.
 No modifiques estructura, significado principal ni planes visuales.
 
 Para EXPAND añade contenido por este orden de prioridad: 1) causa o mecanismo,
-2) detalle concreto relevante, 3) consecuencia, 4) ejemplo útil. NO repitas lo mismo
-con otras palabras, ni reformules para ocupar espacio; NO añadas adjetivos, moralejas,
-introducciones, llamadas a la acción, ideas ajenas al tema o la escena, ni inventes datos.
+2) detalle concreto relevante, 3) consecuencia, 4) ejemplo útil. Añade SOLO lo
+necesario para acercarte al objetivo global sin superarlo: una cláusula corta por
+escena suele bastar; no es necesario agotar las cuatro categorías en cada escena.
+NO repitas lo mismo con otras palabras, ni reformules para ocupar espacio; NO añadas
+adjetivos, moralejas, introducciones, llamadas a la acción, ideas ajenas al tema o la
+escena, ni inventes datos.
 Preserva especialmente la fuerza del hook de la escena 1, la causalidad, el payoff y el tono.
 
 Para COMPRESS recorta primero por este orden: 1) redundancia, 2) intensificadores,
-3) contexto prescindible, 4) conectores, 5) frases accesorias. Preserva prioritariamente
+3) contexto prescindible, 4) conectores, 5) frases accesorias. Recorta con decisión:
+la reducción debe acercar la duración real al objetivo; recortar solo 1-2 palabras por
+escena no basta si el objetivo exige más. Preserva prioritariamente
 hook, hechos concretos, causa/efecto, mecanismo, payoff y tono. No conviertas un hook
 concreto en una introducción genérica.
 
@@ -1404,7 +1409,8 @@ def _build_voiceover_repair_prompt(
             "## Política editorial EXPAND",
             "",
             "Añade contenido por este orden de prioridad: causa o mecanismo, detalle concreto",
-            "relevante, consecuencia, ejemplo útil.",
+            "relevante, consecuencia, ejemplo útil. Añade solo lo necesario para acercarte al",
+            "objetivo global sin superarlo; una cláusula corta por escena suele bastar.",
             "NO repitas lo mismo con otras palabras, ni reformules para ocupar espacio; no añadas",
             "adjetivos, moralejas, introducciones, llamadas a la acción, ideas ajenas al tema o la",
             "escena, ni inventes datos.",
@@ -1416,7 +1422,9 @@ def _build_voiceover_repair_prompt(
             "## Política editorial COMPRESS",
             "",
             "Recorta primero por este orden: redundancia, intensificadores, contexto prescindible,",
-            "conectores, frases accesorias.",
+            "conectores, frases accesorias. Recorta con decisión: la reducción debe acercar la",
+            "duración real al objetivo; recortar solo 1-2 palabras por escena no basta si el",
+            "objetivo exige más.",
             "Preserva prioritariamente hook, hechos concretos, causa/efecto, mecanismo, payoff y tono.",
             "No conviertas un hook concreto en una introducción genérica.",
         ]
