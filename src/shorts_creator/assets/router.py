@@ -11,6 +11,7 @@ Actual image generation belongs to a future executor/downloader module.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from shorts_creator.assets.capabilities import (
@@ -24,6 +25,7 @@ from shorts_creator.contracts.visual_specificity import assess_query_specificity
 from shorts_creator.contracts.visual_media import (
     IMAGE,
     VIDEO,
+    MediaStrategyDecision,
     normalize_visual_mode,
     resolve_media_strategy,
 )
@@ -206,6 +208,11 @@ MATRIX_WARNINGS: dict[str, dict[str, list[str]]] = {
 }
 
 GENERATED_PROVIDERS: frozenset[str] = frozenset({"freeai", "pollinations"})
+
+# assetPreferences that describe the medium rather than a visual form: they
+# must never be appended to subject-derived search queries (the media decision
+# belongs to mediaPreference, not to the query wording).
+MEDIUM_ONLY_ASSET_PREFS: frozenset[str] = frozenset({"photograph", "stock"})
 
 # ── Default request config ──────────────────────────────────────────────────
 
@@ -415,7 +422,7 @@ def _derive_search_queries(
                 _add(q, f"scene.searchQueries[{i}]")
 
     subjects = canonical_plan.get("subjects") or []
-    if isinstance(subjects, list):
+    if isinstance(subjects, list) and asset_preference not in MEDIUM_ONLY_ASSET_PREFS:
         for i, subj in enumerate(subjects):
             if not isinstance(subj, str) or not subj.strip():
                 continue
@@ -581,12 +588,18 @@ def _capability_kind(provider: str, media_kind: str) -> str | None:
     return None
 
 
-def _resolve_segment_media_kind(
+def _resolve_segment_media_strategy(
     asset_preference: str,
     editorial_preference: str | None,
     request_visuals: dict,
-) -> tuple[str | None, tuple[str, ...]]:
-    """Resolve a kind from pure policy and static capability evidence."""
+    runtime_override: frozenset | None = None,
+):
+    """Resolve the media strategy decision from pure policy and static evidence.
+
+    ``runtime_override`` (a set of media kinds) replaces the statically-derived
+    available kinds. It is used to reconcile the decision with the media kinds
+    that actually survive constraints/source policy.
+    """
     policy = normalize_visual_mode(request_visuals)
     image_supported = asset_preference in ROUTING_MATRIX
     video_capability = get_provider_capability("pexels.video.stock")
@@ -594,14 +607,82 @@ def _resolve_segment_media_kind(
         video_capability is not None
         and get_visual_form_fit(video_capability, asset_preference) != UNSUPPORTED
     )
-    video_available = video_capability is not None and video_capability.runtime_status == AVAILABLE
-    decision = resolve_media_strategy(
+    if runtime_override is not None:
+        runtime_available_kinds = frozenset(runtime_override)
+    else:
+        video_available = video_capability is not None and video_capability.runtime_status == AVAILABLE
+        runtime_available_kinds = (
+            ({IMAGE} if image_supported else set()) | ({VIDEO} if video_available else set())
+        )
+    return resolve_media_strategy(
         policy=policy,
         editorial_preference=editorial_preference,
         form_supported_kinds=({IMAGE} if image_supported else set()) | ({VIDEO} if video_supported else set()),
-        runtime_available_kinds=({IMAGE} if image_supported else set()) | ({VIDEO} if video_available else set()),
+        runtime_available_kinds=runtime_available_kinds,
     )
-    return decision.resolved_kind, decision.degradations
+
+
+def _ordered_media_levels(
+    decision,
+    policy,
+    mix_counts: dict | None,
+) -> tuple[str, tuple[str, ...], MediaStrategyDecision]:
+    """Order the media levels for candidate building.
+
+    Returns (resolved_kind, ordered_kinds, effective_decision).
+
+    - PREFERRED/OVERRIDDEN_BY_USER: preferred kind first, compatible fallback(s)
+      after, in deterministic contract order.
+    - EITHER under MIXED: if real selected-kind counts are available, the
+      least-used kind goes first (diversity best-effort); ties break by the
+      deterministic contract order.
+    - Hard modes: a single level (no cross-media fallback).
+    """
+    eligible = tuple(
+        k for k in decision.allowed_kinds
+        if k in decision.form_supported_kinds and k in decision.runtime_available_kinds
+    )
+    if not eligible:
+        return decision.resolved_kind, (), decision
+    if (
+        decision.preference_status == "EITHER"
+        and policy.mixed_diversity_preferred
+        and isinstance(mix_counts, dict)
+        and len(eligible) >= 2
+    ):
+        counts = {k: mix_counts.get(k, 0) for k in eligible}
+        ordered = tuple(
+            sorted(eligible, key=lambda k: (counts[k], 0 if k == IMAGE else 1))
+        )
+    else:
+        preferred = (
+            decision.resolved_kind
+            if decision.resolved_kind in eligible
+            else eligible[0]
+        )
+        ordered = (preferred,) + tuple(k for k in eligible if k != preferred)
+    resolved = ordered[0]
+    effective = decision if resolved == decision.resolved_kind else replace(decision, resolved_kind=resolved)
+    return resolved, ordered, effective
+
+
+def _decision_to_dict(decision) -> dict:
+    return {
+        "visualMode": decision.visual_mode,
+        "editorialPreference": decision.editorial_preference,
+        "allowedKinds": list(decision.allowed_kinds),
+        "formSupportedKinds": list(decision.form_supported_kinds),
+        "runtimeAvailableKinds": list(decision.runtime_available_kinds),
+        "resolvedKind": decision.resolved_kind,
+        "preferenceStatus": decision.preference_status,
+        "degradations": list(decision.degradations),
+        "fallbackKinds": [
+            k for k in decision.allowed_kinds
+            if k in decision.form_supported_kinds
+            and k in decision.runtime_available_kinds
+            and k != decision.resolved_kind
+        ],
+    }
 
 
 # ── Routing engine ──────────────────────────────────────────────────────────
@@ -613,6 +694,7 @@ def _route_segment(
     request_visuals: dict,
     seg_warnings: list[dict],
     routing_decisions: list[str],
+    mix_counts: dict | None = None,
 ) -> dict[str, Any]:
     asset_pref = segment.get("assetPreference", "")
     if not isinstance(asset_pref, str) or not asset_pref:
@@ -666,8 +748,9 @@ def _route_segment(
             "unsupportedReasons": [f"assetPreference '{asset_pref}' not in routing matrix"],
         }
 
+    policy = normalize_visual_mode(request_visuals)
     try:
-        selected_media_kind, media_degradations = _resolve_segment_media_kind(
+        decision = _resolve_segment_media_strategy(
             asset_pref, segment.get("mediaPreference"), request_visuals,
         )
     except ValueError as exc:
@@ -678,39 +761,23 @@ def _route_segment(
             "routingStatus": "UNROUTABLE", "warnings": [],
             "unsupportedReasons": [str(exc)],
         }
-    if selected_media_kind is None:
+    if decision.resolved_kind is None:
         return {
             "segmentIndex": segment_idx, "assetPreference": asset_pref,
             "searchQueries": search_queries, "generationPrompts": generation_prompts,
             "providerCandidates": [], "excludedProviders": [],
             "routingStatus": "UNROUTABLE", "warnings": [],
-            "unsupportedReasons": list(media_degradations),
+            "unsupportedReasons": list(decision.degradations),
         }
 
-    # ── Build initial candidate list ─────────────────────────────────────
-    candidates: list[dict[str, Any]] = []
+    # Candidate kinds the strategy attempts, in deterministic contract order.
+    candidate_kinds = tuple(
+        k for k in decision.allowed_kinds
+        if k in decision.form_supported_kinds and k in decision.runtime_available_kinds
+    )
+
+    # ── Build candidates grouped by media kind ─────────────────────────
     excluded: list[dict[str, Any]] = []
-
-    for priority_rank, (provider, support_strength) in enumerate(matrix_row, start=1):
-        if selected_media_kind == VIDEO and provider != "pexels":
-            continue
-        capability_id = _capability_kind(provider, selected_media_kind)
-        if capability_id is None:
-            continue
-        reason = f"{asset_pref} preference — {provider} {support_strength} support"
-        pw = list(MATRIX_WARNINGS.get(asset_pref, {}).get(provider, []))
-
-        c = _make_candidate(
-            provider=provider,
-            priority=priority_rank,
-            support_strength=support_strength,
-            reason=reason,
-            candidate_status="included",
-            warnings=pw,
-            capability_id=capability_id,
-            media_kind=selected_media_kind,
-        )
-        candidates.append(c)
 
     # Add providers NOT in the matrix row as excluded (complete audit)
     for provider in sorted(ALLOWED_PROVIDERS):
@@ -720,110 +787,166 @@ def _route_segment(
                 f"provider does not support assetPreference='{asset_pref}' in v2 routing matrix",
             ))
 
-    # ── Apply constraints in order ───────────────────────────────────────
-
-    # 1. blockedProviders
-    blocked = set(request_visuals.get("blockedProviders") or [])
-    for c in candidates[:]:
-        if c["provider"] in blocked:
-            candidates.remove(c)
-            excluded.append(_make_excluded(
-                c["provider"],
-                f"blocked by request_visuals.blockedProviders",
-                availability="blocked",
+    groups_by_kind: dict[str, list[dict[str, Any]]] = {}
+    for level_kind in candidate_kinds:
+        level_candidates: list[dict[str, Any]] = []
+        for priority_rank, (provider, support_strength) in enumerate(matrix_row, start=1):
+            if level_kind == VIDEO and provider != "pexels":
+                continue
+            capability_id = _capability_kind(provider, level_kind)
+            if capability_id is None:
+                continue
+            reason = f"{asset_pref} preference — {provider} {support_strength} support"
+            pw = list(MATRIX_WARNINGS.get(asset_pref, {}).get(provider, []))
+            level_candidates.append(_make_candidate(
+                provider=provider,
+                priority=priority_rank,
+                support_strength=support_strength,
+                reason=reason,
+                candidate_status="included",
+                warnings=pw,
+                capability_id=capability_id,
+                media_kind=level_kind,
             ))
-            routing_decisions.append(
-                f"segment[{segment_idx}] {asset_pref}: {c['provider']} excluded (blocked)"
-            )
+        groups_by_kind[level_kind] = level_candidates
 
-    # 2. allowSearchProviders
+    groups: list[tuple[str, list[dict[str, Any]]]] = list(groups_by_kind.items())
+
+    # ── Apply constraints across all levels ─────────────────────────────
+    blocked = set(request_visuals.get("blockedProviders") or [])
+    for _, level_cands in groups:
+        for c in level_cands[:]:
+            if c["provider"] in blocked:
+                level_cands.remove(c)
+                excluded.append(_make_excluded(
+                    c["provider"], "blocked by request_visuals.blockedProviders", availability="blocked",
+                ))
+                routing_decisions.append(
+                    f"segment[{segment_idx}] {asset_pref}: {c['provider']} excluded (blocked)"
+                )
+
     if not request_visuals.get("allowSearchProviders", True):
-        for c in candidates[:]:
-            if PROVIDER_QUERY_STRATEGY.get(c["provider"]) == "search":
-                candidates.remove(c)
-                excluded.append(_make_excluded(
-                    c["provider"],
-                    "search providers disabled: request_visuals.allowSearchProviders=false",
-                ))
-                routing_decisions.append(
-                    f"segment[{segment_idx}] {asset_pref}: {c['provider']} excluded (search disabled)"
-                )
+        for _, level_cands in groups:
+            for c in level_cands[:]:
+                if PROVIDER_QUERY_STRATEGY.get(c["provider"]) == "search":
+                    level_cands.remove(c)
+                    excluded.append(_make_excluded(
+                        c["provider"],
+                        "search providers disabled: request_visuals.allowSearchProviders=false",
+                    ))
+                    routing_decisions.append(
+                        f"segment[{segment_idx}] {asset_pref}: {c['provider']} excluded (search disabled)"
+                    )
 
-    # 3. allowStockAssets
     if not request_visuals.get("allowStockAssets", True):
-        for c in candidates[:]:
-            if c["provider"] in ("pexels", "pixabay"):
-                candidates.remove(c)
-                excluded.append(_make_excluded(
-                    c["provider"],
-                    "stock assets disabled: request_visuals.allowStockAssets=false",
-                ))
-                routing_decisions.append(
-                    f"segment[{segment_idx}] {asset_pref}: {c['provider']} excluded (stock disabled)"
-                )
+        for _, level_cands in groups:
+            for c in level_cands[:]:
+                if c["provider"] in ("pexels", "pixabay"):
+                    level_cands.remove(c)
+                    excluded.append(_make_excluded(
+                        c["provider"],
+                        "stock assets disabled: request_visuals.allowStockAssets=false",
+                    ))
+                    routing_decisions.append(
+                        f"segment[{segment_idx}] {asset_pref}: {c['provider']} excluded (stock disabled)"
+                    )
 
-    # 4. allowArchiveAssets (only for archive/painting/map/document)
     if not request_visuals.get("allowArchiveAssets", True) and _is_archive_only_pref(asset_pref):
-        for c in candidates[:]:
-            if c["provider"] == "wikimedia_commons":
-                candidates.remove(c)
-                excluded.append(_make_excluded(
-                    c["provider"],
-                    f"archive assets disabled for '{asset_pref}': request_visuals.allowArchiveAssets=false",
-                ))
-                routing_decisions.append(
-                    f"segment[{segment_idx}] {asset_pref}: {c['provider']} excluded (archive disabled for {asset_pref})"
-                )
+        for _, level_cands in groups:
+            for c in level_cands[:]:
+                if c["provider"] == "wikimedia_commons":
+                    level_cands.remove(c)
+                    excluded.append(_make_excluded(
+                        c["provider"],
+                        f"archive assets disabled for '{asset_pref}': request_visuals.allowArchiveAssets=false",
+                    ))
+                    routing_decisions.append(
+                        f"segment[{segment_idx}] {asset_pref}: {c['provider']} excluded (archive disabled for {asset_pref})"
+                    )
 
-    # 5. generated double gate
     gen_ok, gen_block_reason = _generation_gates_open(canonical_plan, request_visuals)
     if not gen_ok:
-        for c in candidates[:]:
-            if _is_generated_provider(c["provider"]):
-                candidates.remove(c)
-                excluded.append(_make_excluded(
-                    c["provider"],
-                    gen_block_reason or "generated images blocked",
-                ))
-                routing_decisions.append(
-                    f"segment[{segment_idx}] {asset_pref}: {c['provider']} excluded (generated blocked)"
-                )
+        for _, level_cands in groups:
+            for c in level_cands[:]:
+                if _is_generated_provider(c["provider"]):
+                    level_cands.remove(c)
+                    excluded.append(_make_excluded(
+                        c["provider"], gen_block_reason or "generated images blocked",
+                    ))
+                    routing_decisions.append(
+                        f"segment[{segment_idx}] {asset_pref}: {c['provider']} excluded (generated blocked)"
+                    )
     else:
-        for c in candidates:
-            if _is_generated_provider(c["provider"]):
-                c["warnings"] = list(c.get("warnings") or [])
-                pw = PROVIDER_WARNINGS.get(c["provider"], [])
-                for w in pw:
-                    if w not in c["warnings"]:
-                        c["warnings"].append(w)
+        for _, level_cands in groups:
+            for c in level_cands:
+                if _is_generated_provider(c["provider"]):
+                    c["warnings"] = list(c.get("warnings") or [])
+                    for w in PROVIDER_WARNINGS.get(c["provider"], []):
+                        if w not in c["warnings"]:
+                            c["warnings"].append(w)
 
-    # ── Source policy / priority ordering ────────────────────────────────
+    # ── Source policy / priority per media kind, then reconcile ─────────
     source_providers = request_visuals.get("sourceProviders") or []
-    if source_providers:
-        # Explicit provider list: use only those providers, preserving list order.
-        candidates, excluded = _apply_source_policy(candidates, excluded, source_providers)
-    else:
-        # Pexels Photos is an explicit opt-in runtime provider, never a fallback.
-        for c in candidates[:]:
-            if c["provider"] == "pexels":
-                candidates.remove(c)
-                excluded.append(_make_excluded(
-                    "pexels",
-                    "Pexels Photos requires explicit request_visuals.sourceProviders opt-in",
-                ))
-        policy = request_visuals.get("providerPriorityPolicy", "balanced")
-        candidates = _apply_priority_policy(
-            candidates, canonical_plan, request_visuals, policy, asset_pref
-        )
+    surviving: list[str] = []
+    for level_kind, level_cands in groups:
+        if not level_cands:
+            continue
+        if source_providers:
+            kept, dropped = _apply_source_policy(level_cands, [], source_providers)
+            excluded.extend(dropped)
+            level_cands = kept
+        else:
+            # Pexels is an explicit opt-in runtime provider, never an implicit
+            # fallback when no source policy is declared.
+            for c in level_cands[:]:
+                if c["provider"] == "pexels":
+                    level_cands.remove(c)
+                    excluded.append(_make_excluded(
+                        "pexels",
+                        "pexels requires explicit request_visuals.sourceProviders opt-in",
+                    ))
+            policy_name = request_visuals.get("providerPriorityPolicy", "balanced")
+            level_cands = _apply_priority_policy(
+                level_cands, canonical_plan, request_visuals, policy_name, asset_pref
+            )
+        # Pexels capabilities are selected by media kind, never by provider alone.
+        if level_kind == IMAGE:
+            for c in level_cands[:]:
+                if c["provider"] == "pexels" and not _pexels_photos_supports(asset_pref):
+                    level_cands.remove(c)
+                    excluded.append(_make_excluded(
+                        "pexels",
+                        f"Pexels Photos does not support assetPreference='{asset_pref}' as a direct visual form",
+                    ))
+        groups_by_kind[level_kind] = level_cands
+        if level_cands:
+            surviving.append(level_kind)
 
-    # Pexels capabilities are selected by media kind, never by provider alone.
-    for c in candidates[:]:
-        if c["provider"] == "pexels" and c.get("mediaKind") == IMAGE and not _pexels_photos_supports(asset_pref):
-            candidates.remove(c)
-            excluded.append(_make_excluded(
-                "pexels",
-                f"Pexels Photos does not support assetPreference='{asset_pref}' as a direct visual form",
-            ))
+    # ── Reconcile the decision with the kinds that really survive ───────
+    if not surviving:
+        return {
+            "segmentIndex": segment_idx, "assetPreference": asset_pref,
+            "searchQueries": search_queries, "generationPrompts": generation_prompts,
+            "providerCandidates": [], "excludedProviders": excluded,
+            "routingStatus": "UNROUTABLE", "warnings": [],
+            "unsupportedReasons": list(decision.degradations),
+        }
+    if set(surviving) != set(decision.runtime_available_kinds):
+        decision = _resolve_segment_media_strategy(
+            asset_pref, segment.get("mediaPreference"), request_visuals,
+            runtime_override=frozenset(surviving),
+        )
+    _resolved_kind, ordered_kinds, decision = _ordered_media_levels(decision, policy, mix_counts)
+
+    # ── Assemble final candidate list in media-preference order ─────────
+    candidates: list[dict[str, Any]] = []
+    for level_kind in ordered_kinds:
+        level_cands = groups_by_kind.get(level_kind)
+        if level_cands:
+            candidates.extend(level_cands)
+
+    for i, c in enumerate(candidates, start=1):
+        c["priority"] = i
 
     # ── Compute routing status ───────────────────────────────────────────
     status = _compute_routing_status(candidates, asset_pref, segment_idx)
@@ -853,6 +976,7 @@ def _route_segment(
         "routingStatus": status,
         "warnings": segment_warnings,
         "unsupportedReasons": [],
+        "mediaDecision": _decision_to_dict(decision),
     }
 
 
@@ -969,6 +1093,7 @@ def build_visual_sourcing_plan_v2(
     canonical_plan: dict,
     scene: dict | None = None,
     request_visuals: dict | None = None,
+    mix_counts: dict | None = None,
 ) -> dict[str, Any]:
     """Build a visual sourcing plan from a canonicalized v2 VisualPlan.
 
@@ -977,6 +1102,11 @@ def build_visual_sourcing_plan_v2(
                         ``canonicalize_visual_plan_v2``).
         scene: Optional scene dict (reserved for future use; currently unused).
         request_visuals: Optional request-level visual configuration dict.
+        mix_counts: Optional real selected-kind counts (IMAGE/VIDEO).  Used by
+                    MIXED diversity best-effort to tie-break EITHER segments
+                    toward the least-used kind.  Must be supplied by the caller
+                    (the fetcher) and updated ONLY after a selected/resolved
+                    asset; never from routing/attempts.
 
     Returns:
         ``{ok, sourcingPlan, diagnostics}``
@@ -1041,7 +1171,8 @@ def build_visual_sourcing_plan_v2(
             ))
             continue
         routed = _route_segment(
-            canonical_plan, seg, req_config, seg_warnings, routing_decisions
+            canonical_plan, seg, req_config, seg_warnings, routing_decisions,
+            mix_counts=mix_counts,
         )
         segments.append(routed)
 

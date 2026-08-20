@@ -170,7 +170,7 @@ def _mock_canonicalizer_fail(plan):
     }
 
 
-def _mock_router_ok(plan, scene=None, request_visuals=None):
+def _mock_router_ok(plan, scene=None, request_visuals=None, mix_counts=None):
     return {
         "ok": True,
         "sourcingPlan": {
@@ -206,7 +206,7 @@ def _mock_router_ok(plan, scene=None, request_visuals=None):
     }
 
 
-def _mock_router_fail(plan, scene=None, request_visuals=None):
+def _mock_router_fail(plan, scene=None, request_visuals=None, mix_counts=None):
     return {
         "ok": False,
         "sourcingPlan": None,
@@ -260,7 +260,7 @@ class TestRequestVisualsPlumbing:
 
         captured: dict = {}
 
-        def spy_router(plan, scene=None, request_visuals=None):
+        def spy_router(plan, scene=None, request_visuals=None, mix_counts=None):
             captured["request_visuals"] = request_visuals
             return _mock_router_ok(plan, scene=scene, request_visuals=request_visuals)
 
@@ -290,7 +290,7 @@ class TestRequestVisualsPlumbing:
 
         captured: dict = {}
 
-        def spy_router(plan, scene=None, request_visuals=None):
+        def spy_router(plan, scene=None, request_visuals=None, mix_counts=None):
             captured["request_visuals"] = request_visuals
             return _mock_router_ok(plan, scene=scene, request_visuals=request_visuals)
 

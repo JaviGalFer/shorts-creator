@@ -146,10 +146,15 @@ def _map_resolved_asset(
         "visualFidelityAssessment": asset.get("visualFidelityAssessment"),
         "durationFraction": vs_entry.get("durationFraction", 1.0),
         "transition": vs_entry.get("transition", "cut"),
+        "mediaDecision": copy.deepcopy(asset["mediaDecision"]) if "mediaDecision" in asset else None,
+        "mediaFallback": asset.get("mediaFallback", False),
     }
 
     for k in V2_LEGACY_FIELDS:
         segment.pop(k, None)
+
+    if "mediaFallbackReason" in asset:
+        segment["mediaFallbackReason"] = asset["mediaFallbackReason"]
 
     # Provider-specific provenance is additive so historical provider shapes
     # remain unchanged while future attribution/UI can consume primitives.
@@ -211,10 +216,15 @@ def _map_unresolved_segment(
             unresolved.get("providerAttempts",
             unresolved.get("attemptedProviders", [])) or []
         ),
+        "mediaDecision": copy.deepcopy(unresolved["mediaDecision"]) if "mediaDecision" in unresolved else None,
+        "mediaFallback": unresolved.get("mediaFallback", False),
     }
 
     for k in V2_LEGACY_FIELDS:
         segment.pop(k, None)
+
+    if "mediaFallbackReason" in unresolved:
+        segment["mediaFallbackReason"] = unresolved["mediaFallbackReason"]
 
     return segment
 
@@ -427,6 +437,8 @@ def apply_visual_assets_v2_to_metadata(
                     "scoreReasons": [],
                     "queryUsed": "",
                     "generationPromptUsed": None,
+                    "mediaDecision": None,
+                    "mediaFallback": False,
                     "durationFraction": scene_index[sn][si].get(
                         "durationFraction", 1.0
                     ),

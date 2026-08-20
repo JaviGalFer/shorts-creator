@@ -14,6 +14,7 @@ from pathlib import Path
 from shorts_creator.contracts.duration import calculate_word_budget, resolve_requested_duration, resolve_scene_plan
 from shorts_creator.contracts.visual import ALLOWED_ASSET_PREFERENCES, canonicalize_visual_plan_v2
 from shorts_creator.contracts.visual_specificity import assess_visual_plan_specificity
+from shorts_creator.contracts.visual_media import AUTO, IMAGES_ONLY, MIXED, VIDEOS_ONLY
 from shorts_creator.infrastructure.metadata_store import save_metadata
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -124,6 +125,7 @@ Cada segmento en visualSequence debe contener:
 |-------|------|-------------|
 | `segmentIndex` | int | Índice secuencial desde 1 |
 | `assetPreference` | string | Tipo de asset para este segmento. Debe estar incluido en `assetPreferences` de la escena. |
+| `mediaPreference` | string | IMAGE_PREFERRED, VIDEO_PREFERRED o EITHER (ver «Semántica de mediaPreference»). Obligatorio cuando la request lo exige (AUTO/MIXED). |
 | `durationFraction` | float | Fracción de la duración de la escena. Suma de todos los segmentos = 1.0. |
 | `searchQuery` | string or null | Query específica para este segmento |
 | `transition` | string | "cut" o "fade" |
@@ -157,6 +159,7 @@ Reglas:
 5. "X of Y" no es una muletilla de abstracción ("future of YouTube", "history of everything"). Es válido cuando nombra O describe concretamente un sujeto recuperable (por ejemplo, "Statue of Liberty", "map of Spain", "portrait of Marie Curie", "diagram of human heart").
 6. Cada query debe aportar términos sustantivos discriminativos: si una query se puede borrar y la escena no pierde nada visual, es demasiado vaga.
 7. En una escena final de cierre o CTA sin nuevo sujeto visual concreto, reutiliza un sujeto o entidad concreta ya establecido previamente en el mismo guion (por ejemplo, un youtuber o marca ya nombrado) en lugar de inventar una entidad o producir abstracciones editoriales como "legacy", "popular culture" o "future of X".
+8. Las queries describen el sujeto recuperable, no el medio: no añadas palabras de medio (photograph, photo, image, picture, video, footage, clip, stock). La decisión del medio (imagen fija vs vídeo) pertenece a `mediaPreference`, no a la query.
 
 ### Campos PROHIBIDOS en visualPlan
 
@@ -176,6 +179,16 @@ No incluyas ninguno de estos campos. No los conviertas a equivalentes v2. Simple
 - `emphasize`: Destacar o enfatizar un detalle concreto
 
 __ASSET_PREFERENCES_BLOCK__
+
+### Semántica de mediaPreference
+
+`mediaPreference` decide el medio editorial ideal para el segmento. NO decide providers, capabilityId, disponibilidad, APIs ni fallback runtime (eso lo resuelve el pipeline): solo si el segmento se comunica mejor con una imagen fija o con vídeo real.
+
+- `VIDEO_PREFERRED`: el movimiento real aporta información o engagement — acción, comportamiento, desplazamiento, interacción, animales, procesos visibles, paisajes dinámicos, B-roll natural.
+- `IMAGE_PREFERRED`: un visual fijo comunica mejor — diagramas, mapas, documentos, fotografías históricas, comparaciones estáticas, gráficos, ilustraciones.
+- `EITHER`: ambos medios funcionan de forma comparable para el contenido del segmento.
+
+No existe una matriz rígida visualIntent→mediaKind: la decisión es editorial y contextual para cada segmento.
 
 ### Transiciones permitidas
 
@@ -201,7 +214,7 @@ __ASSET_PREFERENCES_BLOCK__
         "visualIntent": "explain",
         "subjects": ["aurora boreal", "partículas solares", "atmósfera terrestre"],
         "searchQueries": [
-          "aurora borealis solar particles atmosphere photograph",
+          "aurora borealis solar particles atmosphere",
           "aurora borealis formation magnetosphere diagram"
         ],
         "assetPreferences": ["photograph", "diagram"],
@@ -209,14 +222,16 @@ __ASSET_PREFERENCES_BLOCK__
           {
             "segmentIndex": 1,
             "assetPreference": "photograph",
-            "searchQuery": "aurora borealis night sky photograph",
+            "mediaPreference": "VIDEO_PREFERRED",
+            "searchQuery": "aurora borealis night sky",
             "durationFraction": 0.5,
             "transition": "cut"
           },
           {
             "segmentIndex": 2,
             "assetPreference": "diagram",
-            "searchQuery": "aurora borealis formation magnetosphere diagram",
+            "mediaPreference": "IMAGE_PREFERRED",
+            "searchQuery": "aurora borealis magnetosphere formation diagram",
             "durationFraction": 0.5,
             "transition": "fade"
           }
@@ -471,10 +486,59 @@ def _build_generated_images_gate_block(allow_generated_images: bool) -> str:
     )
 
 
-def _build_user_prompt_v2(topic: str, budget: dict, strictness: str, *, allow_generated_images: bool) -> str:
+def _build_media_preference_block(visual_mode: str | None) -> str:
+    """Build the request-scoped mediaPreference guidance for the user prompt.
+
+    AUTO/MIXED require an explicit per-segment editorial media decision. Hard
+    modes (IMAGES_ONLY/VIDEOS_ONLY) keep the user policy as the authority; the
+    instruction only asks for the coherent preference so the plan reflects it.
+    """
+    mode = (visual_mode or "").strip().upper().replace("-", "_")
+    if mode in (AUTO, MIXED):
+        return (
+            "## Decisión editorial de medio (mediaPreference)\n\n"
+            "- AUTO/MIXED: cada segmento de `visualSequence[]` DEBE incluir "
+            "`mediaPreference` con uno de estos valores: VIDEO_PREFERRED, "
+            "IMAGE_PREFERRED o EITHER.\n"
+            "- VIDEO_PREFERRED: el movimiento real aporta información o engagement "
+            "(acción, comportamiento, desplazamiento, interacción, animales, procesos "
+            "visibles, paisajes dinámicos, B-roll).\n"
+            "- IMAGE_PREFERRED: un visual fijo comunica mejor (diagramas, mapas, "
+            "documentos, fotos históricas, comparaciones estáticas, gráficos, "
+            "ilustraciones).\n"
+            "- EITHER: ambos medios funcionan de forma comparable.\n"
+            "- La decisión es editorial y contextual por segmento: no existe una matriz "
+            "rígida visualIntent→mediaKind. NO decidas providers, capabilityId, "
+            "disponibilidad, APIs ni fallback runtime.\n"
+        )
+    if mode == IMAGES_ONLY:
+        return (
+            "## Decisión editorial de medio (mediaPreference)\n\n"
+            "- IMAGES_ONLY: todos los segmentos usan IMAGE_PREFERRED. La política "
+            "del usuario impone IMAGE; el runtime es la autoridad final.\n"
+        )
+    if mode == VIDEOS_ONLY:
+        return (
+            "## Decisión editorial de medio (mediaPreference)\n\n"
+            "- VIDEOS_ONLY: usa VIDEO_PREFERRED cuando la escena pueda satisfacerse "
+            "con footage real; si una forma exacta es necesaria, mantenla. La política "
+            "del usuario impone VIDEO; el runtime es la autoridad final.\n"
+        )
+    return ""
+
+
+def _build_user_prompt_v2(
+    topic: str,
+    budget: dict,
+    strictness: str,
+    *,
+    allow_generated_images: bool,
+    visual_mode: str | None = None,
+) -> str:
     """Build the v2 user prompt — neutral, no historical domain requirements."""
     duration_instruction = _build_duration_prompt_instruction_v2(budget, strictness)
     gate = _build_generated_images_gate_block(allow_generated_images)
+    media_block = _build_media_preference_block(visual_mode)
     return (
         f"Genera un guion divulgativo muy atractivo para vídeo vertical sobre: {topic}. "
         f"Quiero que el arranque tenga máxima retención, que cada escena tenga un plan visual detallado "
@@ -488,7 +552,40 @@ def _build_user_prompt_v2(topic: str, budget: dict, strictness: str, *, allow_ge
         f"sujeto, reutiliza un sujeto concreto ya presentado en lugar de producir abstracciones.\n\n"
         f"{duration_instruction}\n\n"
         f"{gate}"
+        f"{media_block}"
     )
+
+
+def _missing_media_preferences(script_data: dict) -> list[dict]:
+    """Return MEDIA_PREFERENCE_MISSING errors for segments omitted the key.
+
+    Runs on the RAW LLM payload BEFORE canonicalization so the historical
+    IMAGE_PREFERRED default cannot mask an omitted field.
+    """
+    errors: list[dict] = []
+    for scene in script_data.get("scenes", []):
+        if not isinstance(scene, dict):
+            continue
+        sn = scene.get("sceneNumber")
+        vp = scene.get("visualPlan")
+        if not isinstance(vp, dict):
+            continue
+        vs = vp.get("visualSequence")
+        if not isinstance(vs, list):
+            continue
+        for si, seg in enumerate(vs):
+            if not isinstance(seg, dict):
+                continue
+            if "mediaPreference" not in seg:
+                errors.append({
+                    "sceneNumber": sn,
+                    "code": "MEDIA_PREFERENCE_MISSING",
+                    "path": f"scenes[{sn}].visualPlan.visualSequence[{si}].mediaPreference",
+                    "message": (
+                        f"scene {sn} segment {si + 1}: mediaPreference is required under AUTO/MIXED"
+                    ),
+                })
+    return errors
 
 
 def _validate_and_canonicalize_script_v2(
@@ -496,6 +593,7 @@ def _validate_and_canonicalize_script_v2(
     *,
     allow_generated_images: bool,
     scene_plan: dict | None = None,
+    visual_mode: str | None = None,
 ) -> tuple[dict | None, list[dict], list[dict]]:
     """Validate and canonicalize a v2 script.
 
@@ -572,6 +670,15 @@ def _validate_and_canonicalize_script_v2(
 
     if errors:
         return None, errors, warnings_list
+
+    # AUTO/MIXED require an explicit per-segment mediaPreference decision. The
+    # presence check runs on the RAW payload BEFORE canonicalization so the
+    # historical IMAGE_PREFERRED default cannot mask an omitted field.
+    if visual_mode in (AUTO, MIXED):
+        missing_media = _missing_media_preferences(script_data)
+        if missing_media:
+            errors.extend(missing_media)
+            return None, errors, warnings_list
 
     # ── Per-scene canonicalization ───────────────────────────────────
     all_ok = True
@@ -809,6 +916,23 @@ def _build_retry_instruction_v2(
             lines.append("- Evita abstracciones editoriales como \"popular culture\", \"future of X\", \"impact of X\", \"why X matters\", \"famous early ...\", \"viral ... screenshot\".")
             lines.append("- \"X of Y\" es válido cuando nombra O describe concretamente un sujeto recuperable (por ejemplo, \"Statue of Liberty\", \"map of Spain\", \"portrait of Marie Curie\", \"diagram of human heart\"). Rechaza solo abstracciones editoriales vacías como \"future of X\", \"impact of X\", \"why X matters\".")
             lines.append("")
+
+    media_preference_issues = [
+        issue for issue in structural_issues
+        if issue.get("code") == "MEDIA_PREFERENCE_MISSING"
+    ]
+    if media_preference_issues:
+        lines.append("### Decisión editorial de medio ausente")
+        lines.append("")
+        lines.append("Bajo AUTO/MIXED cada segmento de `visualSequence[]` DEBE incluir `mediaPreference`:")
+        lines.append("")
+        lines.append("- `VIDEO_PREFERRED`: el movimiento real aporta información o engagement (acción, comportamiento, desplazamiento, interacción, animales, procesos visibles, paisajes dinámicos, B-roll).")
+        lines.append("- `IMAGE_PREFERRED`: un visual fijo comunica mejor (diagramas, mapas, documentos, fotos históricas, comparaciones estáticas, gráficos, ilustraciones).")
+        lines.append("- `EITHER`: ambos medios funcionan de forma comparable.")
+        lines.append("")
+        lines.append("Añade el campo `mediaPreference` a TODOS los segmentos omitidos. La decisión es editorial y contextual: ")
+        lines.append("no decidas providers, capabilityId, disponibilidad, APIs ni fallback runtime. No inventes una matriz rígida visualIntent→mediaKind.")
+        lines.append("")
 
     # Closed enum — always present, every branch
     lines.append(_build_asset_preference_constraint_block(allow_generated_images))
@@ -1460,6 +1584,7 @@ def generate_script(
     }
     if visual_mode not in (None, *visual_mode_map):
         raise ValueError(f"INVALID_VISUAL_MODE: {visual_mode!r}")
+    effective_visual_mode = visual_mode_map[visual_mode] if visual_mode else None
     video_context = ""
     if visual_mode == "videos-only":
         video_context = (
@@ -1472,6 +1597,7 @@ def generate_script(
     base_prompt = _build_user_prompt_v2(
         topic, provisional_budget, strictness,
         allow_generated_images=allow_generated_images,
+        visual_mode=effective_visual_mode,
     ) + video_context
 
     if dry_run:
@@ -1521,6 +1647,7 @@ def generate_script(
             # V2 structural validation
             canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
                 script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
+                visual_mode=effective_visual_mode,
             )
             v2_structural_issues = v2_errs
             v2_valid = canonical is not None
@@ -1554,7 +1681,8 @@ def generate_script(
                     allow_generated_images=allow_generated_images,
                 )
                 base_retry = _build_user_prompt_v2(topic, retry_budget, strictness,
-                                                   allow_generated_images=allow_generated_images) + video_context
+                                                   allow_generated_images=allow_generated_images,
+                                                   visual_mode=effective_visual_mode) + video_context
                 current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
             elif word_count > retry_budget["maximumWords"]:
                 # Case B — valid structure but excessive duration: compress the
@@ -1580,7 +1708,8 @@ def generate_script(
                     allow_generated_images=allow_generated_images,
                 )
                 base_retry = _build_user_prompt_v2(topic, retry_budget, strictness,
-                                                   allow_generated_images=allow_generated_images) + video_context
+                                                   allow_generated_images=allow_generated_images,
+                                                   visual_mode=effective_visual_mode) + video_context
                 current_prompt = f"{base_retry}\n\n---\n{retry_inst}"
 
             print(f"Retry {retries}/{MAX_SCRIPT_ATTEMPTS - 1}: generated {word_count} words, "
@@ -1725,6 +1854,7 @@ def generate_script(
         # ── V2 validation ───────────────────────────────────────
         canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
             script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
+            visual_mode=effective_visual_mode,
         )
         v2_structural_issues = v2_errs
         v2_valid = canonical is not None
@@ -1981,6 +2111,7 @@ def generate_script(
 
     canonical, v2_errs, _ = _validate_and_canonicalize_script_v2(
         script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
+        visual_mode=effective_visual_mode,
     )
     v2_valid = canonical is not None
     if not v2_valid:
@@ -2017,6 +2148,7 @@ def generate_script(
     script_to_persist = script_data
     canonical_final, _, _ = _validate_and_canonicalize_script_v2(
         script_data, allow_generated_images=allow_generated_images, scene_plan=scene_plan,
+        visual_mode=effective_visual_mode,
     )
     if canonical_final is not None:
         script_to_persist = canonical_final

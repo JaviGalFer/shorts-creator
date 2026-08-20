@@ -2,6 +2,27 @@
 
 **Última actualización:** 2026-08-20
 
+## Cambio cerrado: `auto-mixed-visual-runtime` — COMPLETED / VERIFIED / CLOSED (pending authorized merge)
+
+- AUTO y MIXED usan la preferencia editorial real del LLM (`mediaPreference`
+  explícito por segmento) con routing multi-kind y fallback compatible, sin
+  debilitar IMAGES_ONLY/VIDEOS_ONLY.
+- Prompt V2 emite mediaPreference + guard `MEDIA_PREFERENCE_MISSING` estricto.
+  Router multi-kind con reconciliación de `mediaDecision` frente a los media
+  kinds supervivientes a constraints/source policy; `mediaFallback`/
+  `PREFERRED_MEDIA_EXHAUSTED` distinguen fallback runtime de degradación.
+  MIXED diversity best-effort EITHER-only (selected-only counts).
+  Queries VIDEO medium-neutrales (`medium_neutral_query`).
+- Suite: baseline `1809` → Slice 1 `1843` → final `1849 passed, 0 failed`;
+  `git diff --check` limpio.
+- Mixed local smoke PASS (`mixed-local-smoke`: IMAGE/VIDEO/IMAGE, 1080x1920,
+  19.08s, validate PASS). AUTO E2E `cmo-2026-08-20-152730` VALIDATED
+  (8 IMAGE + 1 VIDEO, sin fallback). Real MIXED runtime run `por-2026-08-20-153502`
+  ASSETS_PARTIAL (9/10, mezcla editorial 5 IMAGE + 4 VIDEO). Modos duros sin
+  regresión. Limitación aceptada: supply de ilustración/diagrama puede dar
+  ASSETS_PARTIAL.
+- Ver `openspec/changes/auto-mixed-visual-runtime/`.
+
 ## Cambio cerrado: `pexels-photos-runtime` — COMPLETED / VERIFIED / CLOSED
 
 - Pexels Photos is `AVAILABLE` as an explicit opt-in IMAGE/STOCK provider. It

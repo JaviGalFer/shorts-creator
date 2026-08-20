@@ -1,5 +1,14 @@
 # Agent Context
 
+## Closed Change: auto-mixed-visual-runtime — COMPLETED / VERIFIED / CLOSED (pending authorized merge)
+- PRODUCT CHANGE: hace productivos AUTO y MIXED usando la preferencia editorial real del LLM.
+- Prompt V2 emite `mediaPreference` explícito por segmento (VIDEO_PREFERRED/IMAGE_PREFERRED/EITHER); guard estricto `MEDIA_PREFERENCE_MISSING` bajo AUTO/MIXED (generación/retries/validación final). Planes históricos persistentes intactos.
+- Router multi-kind (preferred → fallback) y reconciliación de `mediaDecision` con los media kinds supervivientes a constraints/source policy: una source policy que excluye Pexels reconcilia `resolvedKind=IMAGE` y NO notifica `PREFERRED_MEDIA_EXHAUSTED` (ese reason solo para kind primario permitido que agotó candidatos en runtime).
+- `mediaDecision` (reusando MediaStrategyDecision) persistido por segmento router→executor→bridge→`assets[].segments[]` en TODOS los terminales (incl. SEMANTIC POSTCONDITION, PROVIDER_UNAVAILABLE). `mediaFallback` distingue fallback runtime de degradación de estrategia.
+- MIXED: diversity best-effort EITHER-only con contadores de assets seleccionados (selected-only), sin cuotas ni optimizer global.
+- Queries VIDEO medium-neutrales (`medium_neutral_query` en visual_terms): `queryUsed` efectivo y búsqueda comparten la misma intención; IMAGE intacto.
+- Evidence: baseline `1809` → Slice 1 `1843` → final `1849 passed, 0 failed`; diff-check limpio. Mixed local smoke PASS (IMAGE/VIDEO/IMAGE, 1080x1920, 19.08s). AUTO E2E `cmo-2026-08-20-152730` VALIDATED (8 IMAGE + 1 VIDEO, mediaDecision==mediaKind, sin fallback). Real MIXED runtime run `por-2026-08-20-153502` ASSETS_PARTIAL (9/10, mezcla editorial 5 IMAGE + 4 VIDEO; 1 ilustración sin cobertura supply). Modos duros sin regresión. Limitación aceptada: supply de ilustración/diagrama puede dar ASSETS_PARTIAL. Ver `openspec/changes/auto-mixed-visual-runtime/`.
+
 ## Closed Change: pexels-video-runtime-mvp — COMPLETED / VERIFIED / CLOSED / MERGED (into `main` `bfabf4d`, no-ff)
 - PRODUCT CHANGE: first real canonical Video E2E (`la-2026-08-19-235138`,
   dolphins) reached `VALIDATED` with 4/4 VIDEO segments, one narration-only

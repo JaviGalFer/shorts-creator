@@ -66,6 +66,36 @@ SPECIFICITY_WEAK_TERMS: frozenset[str] = frozenset({
     "section",
 })
 
+# Pure medium/filler words removed from VIDEO queries so the retrievable
+# content is decoupled from medium wording.  They overlap the historical
+# GENERIC_FILLER vocabulary where possible; "footage"/"clip(s)" were
+# previously unclassified.  Visual FORMS (diagram, infographic, illustration,
+# map, document, painting, archive, ...) are deliberately NOT included.
+MEDIUM_MARKERS: frozenset[str] = frozenset({
+    "image", "images", "photo", "photos", "photograph", "photographs",
+    "picture", "pictures", "video", "videos", "footage", "clip", "clips",
+    "stock",
+})
+
+_MEDIUM_MARKER_RE = re.compile(
+    r"\b(" + "|".join(sorted(MEDIUM_MARKERS, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def medium_neutral_query(query: Any) -> str | None:
+    """Return ``query`` without medium marker words.
+
+    Only removes medium/filler words; visual-form nouns are preserved.  When
+    stripping would empty the query, the ORIGINAL query is returned so the
+    existing guards decide validity.  Non-string input returns None.
+    """
+    if not isinstance(query, str):
+        return query
+    neutral = _MEDIUM_MARKER_RE.sub(" ", query)
+    neutral = re.sub(r"\s{2,}", " ", neutral).strip()
+    return neutral or query
+
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 

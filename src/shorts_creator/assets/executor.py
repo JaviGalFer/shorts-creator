@@ -53,6 +53,12 @@ ALLOWED_EXECUTOR_STATUSES: frozenset[str] = frozenset({
     "RESOLVED", "NO_RESULTS", "DOWNLOAD_FAILED", "PROVIDER_ERROR",
 })
 
+# Runtime cross-media fallback marker: the preferred kind was available at
+# strategy time but its candidates were exhausted at runtime and a compatible
+# fallback kind served the segment.  Distinct from strategy degradation
+# (MEDIA_PREFERENCE_UNAVAILABLE), which is computed before sourcing.
+PREFERRED_MEDIA_EXHAUSTED = "PREFERRED_MEDIA_EXHAUSTED"
+
 LEGACY_V1_FIELDS: frozenset[str] = frozenset({
     "editorialRole", "visualTemporalIntent", "strategy",
     "primaryAssetType", "secondaryAssetType", "style",
@@ -471,13 +477,15 @@ def execute_visual_sourcing_plan_v2(
             candidates = []
 
         if not candidates:
-            unresolved_segments.append({
+            unresolved_no_cands = {
                 "segmentIndex": segment_idx,
                 "assetPreference": asset_pref,
                 "status": "PROVIDER_UNAVAILABLE",
                 "reason": "no provider candidates",
                 "attemptedProviders": [],
-            })
+            }
+            _apply_media_decision_outcome(unresolved_no_cands, seg)
+            unresolved_segments.append(unresolved_no_cands)
             diagnostics["summary"]["providerUnavailable"] += 1
             continue
 
@@ -527,7 +535,7 @@ def execute_visual_sourcing_plan_v2(
                 })
                 diagnostics["summary"]["dryRunAttempts"] += 1
             else:
-                unresolved_segments.append({
+                unresolved_entry = {
                     "segmentIndex": segment_idx,
                     "assetPreference": asset_pref,
                     "status": "PROVIDER_UNAVAILABLE",
@@ -537,7 +545,9 @@ def execute_visual_sourcing_plan_v2(
                         else "no provider candidates remain after filtering"
                     ),
                     "attemptedProviders": attempted,
-                })
+                }
+                _apply_media_decision_outcome(unresolved_entry, seg)
+                unresolved_segments.append(unresolved_entry)
                 diagnostics["summary"]["providerUnavailable"] += 1
             continue
 
@@ -587,6 +597,8 @@ def execute_visual_sourcing_plan_v2(
                 provider_credentials=provider_credentials,
             )
 
+            _apply_media_decision_outcome(provider_result, seg)
+
             status = provider_result.get("status", "")
             reason = provider_result.get("reason", "")
 
@@ -631,7 +643,7 @@ def execute_visual_sourcing_plan_v2(
                     "returned RESOLVED without a RELEVANT semanticAssessment",
                     "",
                 ))
-                unresolved_segments.append({
+                unresolved_postcondition = {
                     "segmentIndex": segment_idx,
                     "assetPreference": asset_pref,
                     "status": "PROVIDER_ERROR",
@@ -639,7 +651,9 @@ def execute_visual_sourcing_plan_v2(
                     "searchQueriesTried": resolved_result.get("searchQueriesTried", []),
                     "reason": "SEMANTIC POSTCONDITION VIOLATION: RESOLVED without RELEVANT semanticAssessment",
                     "providerAttempts": provider_attempts,
-                })
+                }
+                _apply_media_decision_outcome(unresolved_postcondition, seg)
+                unresolved_segments.append(unresolved_postcondition)
                 diagnostics["summary"]["providerError"] += 1
         else:
             if last_non_terminal is not None:
@@ -647,7 +661,7 @@ def execute_visual_sourcing_plan_v2(
                 unresolved_segments.append(last_non_terminal)
                 _increment_live_unresolved(last_non_terminal, diagnostics)
             else:
-                unresolved_segments.append({
+                unresolved_entry = {
                     "segmentIndex": segment_idx,
                     "assetPreference": asset_pref,
                     "status": "PROVIDER_UNAVAILABLE",
@@ -658,7 +672,9 @@ def execute_visual_sourcing_plan_v2(
                     ),
                     "attemptedProviders": attempted,
                     "providerAttempts": provider_attempts,
-                })
+                }
+                _apply_media_decision_outcome(unresolved_entry, seg)
+                unresolved_segments.append(unresolved_entry)
                 diagnostics["summary"]["providerUnavailable"] += 1
 
     return {
@@ -701,6 +717,25 @@ def _search_semantic_ok(resolved: dict, strategy: str) -> bool:
     ):
         return True
     return False
+
+
+def _apply_media_decision_outcome(result: dict, segment: dict) -> None:
+    """Annotate a live result with the planned media decision.
+
+    The planned mediaDecision comes from the routing segment. The actual kind is
+    taken from the candidate/resolved result. When they differ, the preferred
+    kind was exhausted at runtime (NO_RESULTS/DOWNLOAD_FAILED/PROVIDER_ERROR)
+    and the segment was served by a compatible fallback kind.
+    """
+    decision = (segment or {}).get("mediaDecision") if isinstance(segment, dict) else None
+    result["mediaDecision"] = dict(decision) if isinstance(decision, dict) else None
+    result["mediaFallback"] = False
+    if result.get("status") == "RESOLVED" and isinstance(decision, dict):
+        planned = decision.get("resolvedKind")
+        actual = result.get("mediaKind") or "IMAGE"
+        if planned is not None and actual != planned:
+            result["mediaFallback"] = True
+            result["mediaFallbackReason"] = PREFERRED_MEDIA_EXHAUSTED
 
 
 def _evaluate_semantic(segment: dict, candidate: dict) -> dict:
@@ -1010,6 +1045,7 @@ def _resolve_wikimedia(
                 "assetPreference": asset_pref,
                 "status": "RESOLVED",
                 "provider": "wikimedia_commons",
+                "mediaKind": IMAGE,
                 "assetPath": relative_path,
                 "fileSize": dl_result["size"],
                 "sourceUrl": native.get("sourceUrl", ""),
@@ -1211,6 +1247,7 @@ def _resolve_pixabay(
                 "assetPreference": asset_pref,
                 "status": "RESOLVED",
                 "provider": "pixabay",
+                "mediaKind": IMAGE,
                 "assetPath": relative_path,
                 "fileSize": dl_result["size"],
                 "sourceUrl": native.get("sourceUrl", ""),
@@ -1445,6 +1482,7 @@ def _resolve_pexels_photos(
                 "status": "RESOLVED",
                 "provider": "pexels",
                 "capabilityId": selected.capability_id,
+                "mediaKind": IMAGE,
                 "providerAssetId": selected.provider_asset_id,
                 "pexelsPhotoId": provenance.pexels_photo_id,
                 "assetPath": relative_path,
