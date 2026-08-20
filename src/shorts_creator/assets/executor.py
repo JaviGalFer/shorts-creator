@@ -23,7 +23,7 @@ from shorts_creator.assets.candidates import (
     PIXEL_REJECTED,
     select_first_accepted,
 )
-from shorts_creator.contracts.visual_media import IMAGE
+from shorts_creator.contracts.visual_media import IMAGE, VIDEO
 
 from shorts_creator.assets.semantic import (
     RELEVANT,
@@ -194,6 +194,7 @@ _MIME_TO_EXT: dict[str, str] = {
     "image/png": ".png",
     "image/webp": ".webp",
     "image/gif": ".gif",
+    "video/mp4": ".mp4",
 }
 
 
@@ -683,7 +684,23 @@ def _search_semantic_ok(resolved: dict, strategy: str) -> bool:
     if strategy != "search":
         return True
     sem = resolved.get("semanticAssessment") or {}
-    return sem.get("verdict") == RELEVANT
+    if sem.get("verdict") == RELEVANT:
+        return True
+    if resolved.get("mediaKind") != VIDEO:
+        return False
+    degradation = resolved.get("semanticDegradation")
+    if (
+        sem.get("verdict") == "UNSCORABLE"
+        and degradation == "PROVIDER_METADATA_INSUFFICIENT"
+    ):
+        return True
+    if (
+        sem.get("verdict") == "IRRELEVANT"
+        and degradation == "PROVIDER_METADATA_PARTIAL_MATCH"
+        and sem.get("matchedAnchors")
+    ):
+        return True
+    return False
 
 
 def _evaluate_semantic(segment: dict, candidate: dict) -> dict:
@@ -703,6 +720,7 @@ def _apply_visual_fidelity_gate(
     absolute_path: Path,
     query_used: str,
     warnings: list[dict],
+    media_kind: str = IMAGE,
 ) -> tuple[bool, dict]:
     """Post-download pixel gate (provider-agnostic: file + queryUsed only).
 
@@ -711,6 +729,11 @@ def _apply_visual_fidelity_gate(
     candidate. DISABLED/UNAVAILABLE are fail-soft bypasses (allow=True) with a
     warning, so the gate never blocks the pipeline when it cannot run.
     """
+    if media_kind == VIDEO:
+        return True, {
+            "status": "NOT_APPLICABLE", "verdict": "BYPASS",
+            "reasonCode": "UNSUPPORTED_MEDIA_KIND", "mediaKind": VIDEO,
+        }
     assessment = score_visual_fidelity(absolute_path, query_used)
     status = assessment.get("status")
     verdict = assessment.get("verdict")
@@ -757,8 +780,14 @@ def _try_live_resolution(
             provider_credentials,
         )
 
-    if provider == "pexels":
+    if provider == "pexels" and candidate.get("capabilityId") == "pexels.photos.stock":
         return _resolve_pexels_photos(
+            candidate, segment, provider_config, job_dir, warnings,
+            asset_namespace, excluded_source_urls, excluded_file_urls,
+            provider_credentials,
+        )
+    if provider == "pexels" and candidate.get("capabilityId") == "pexels.video.stock":
+        return _resolve_pexels_videos(
             candidate, segment, provider_config, job_dir, warnings,
             asset_namespace, excluded_source_urls, excluded_file_urls,
             provider_credentials,
@@ -1468,6 +1497,176 @@ def _resolve_pexels_photos(
             "status": "PROVIDER_ERROR", "provider": "pexels",
             "searchQueriesTried": query_texts, "reason": "PROVIDER_ERROR",
         }
+
+
+def _resolve_pexels_videos(
+    candidate: dict,
+    segment: dict,
+    provider_config: dict,
+    job_dir: str,
+    warnings: list[dict],
+    asset_namespace: str | None = None,
+    excluded_source_urls: set[str] | None = None,
+    excluded_file_urls: set[str] | None = None,
+    provider_credentials: dict[str, dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Resolve RAW Pexels Video candidates through the shared lifecycle."""
+    segment_idx = segment.get("segmentIndex")
+    asset_pref = segment.get("assetPreference", "")
+    creds = provider_credentials or {}
+    api_key = (creds.get("pexels", {}) or {}).get("apiKey", "")
+    if not isinstance(api_key, str) or not api_key.strip():
+        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": "MISSING_API_KEY", "provider": "pexels", "mediaKind": VIDEO, "capabilityId": "pexels.video.stock", "reason": "PEXELS_API_KEY not configured in provider_credentials"}
+    _, queries = _dispatch_inputs(candidate, segment)
+    query_texts = _extract_query_texts(queries)
+    try:
+        from shorts_creator.assets.providers.pexels import PexelsClientError
+        from shorts_creator.assets.providers.pexels_videos import (
+            NO_RESULTS as PEXELS_NO_RESULTS,
+            PROVIDER_METADATA_INSUFFICIENT,
+            PROVIDER_METADATA_PARTIAL_MATCH,
+            bind_lifecycle_positions,
+            download_pexels_video,
+            search_pexels_videos,
+        )
+
+        native_by_envelope: dict[int, dict] = {}
+        provenance_by_envelope: dict[int, Any] = {}
+        semantic_assessments: dict[int, dict] = {}
+        fidelity_assessments: dict[int, dict] = {}
+        download_results: dict[int, tuple[str, Path, dict]] = {}
+        download_errors: list[dict] = []
+        telemetry: list[dict[str, str]] = []
+
+        def envelopes() -> Iterable[CandidateEnvelope]:
+            stream_rank = 0
+            local_seen_source_urls: set[str] = set()
+            local_seen_file_urls: set[str] = set()
+            for query_index, query_text in enumerate(query_texts):
+                result = search_pexels_videos(query_text, api_key=api_key)
+                if result.telemetry:
+                    telemetry.append(dict(result.telemetry))
+                if result.status == PEXELS_NO_RESULTS:
+                    continue
+                page = []
+                for item in result.candidates:
+                    envelope = item.envelope
+                    if not envelope.acquisition_url:
+                        continue
+                    source_url = envelope.source_url or ""
+                    acquisition_url = envelope.acquisition_url
+                    # Global sets represent clips already SELECTED by earlier
+                    # scenes. Skip those, but do not reserve a discovered
+                    # clip globally until it is actually selected.
+                    if excluded_source_urls is not None and source_url in excluded_source_urls:
+                        continue
+                    if excluded_file_urls is not None and acquisition_url in excluded_file_urls:
+                        continue
+                    # Local dedup: avoid evaluating the same clip twice within
+                    # this resolver (across queries/pages of the same segment).
+                    if source_url and source_url in local_seen_source_urls:
+                        continue
+                    if acquisition_url and acquisition_url in local_seen_file_urls:
+                        continue
+                    if source_url:
+                        local_seen_source_urls.add(source_url)
+                    if acquisition_url:
+                        local_seen_file_urls.add(acquisition_url)
+                    page.append(item)
+                positioned = bind_lifecycle_positions(tuple(page), query_index=query_index, provider_rank_start=stream_rank)
+                stream_rank += len(positioned)
+                for item in positioned:
+                    envelope = item.envelope
+                    native_by_envelope[id(envelope)] = {
+                        "provider": "pexels", "queryUsed": envelope.query_used or query_text,
+                        "title": envelope.semantic_metadata.title or "",
+                        "tags": list(envelope.semantic_metadata.tags),
+                    }
+                    provenance_by_envelope[id(envelope)] = item
+                    yield envelope
+
+        def evaluate_semantic(envelope: CandidateEnvelope) -> dict:
+            assessment = _evaluate_semantic(segment, native_by_envelope[id(envelope)])
+            if assessment.get("verdict") == "UNSCORABLE" and assessment.get("anchorTerms"):
+                assessment = dict(assessment)
+                assessment["allowUnscorable"] = True
+                assessment["semanticDegradation"] = PROVIDER_METADATA_INSUFFICIENT
+            elif (
+                assessment.get("verdict") == "IRRELEVANT"
+                and asset_pref == "photograph"
+                and assessment.get("anchorTerms")
+                and assessment.get("matchedAnchors")
+                and not (native_by_envelope[id(envelope)].get("tags") or [])
+            ):
+                # Pexels Video photograph with sparse provider metadata: the
+                # slug matched at least one discriminative anchor but not enough
+                # for the generic threshold. Keep the original IRRELEVANT
+                # verdict, but degrade explicitly instead of rejecting.
+                assessment = dict(assessment)
+                assessment["allowSemanticDegradation"] = True
+                assessment["semanticDegradation"] = PROVIDER_METADATA_PARTIAL_MATCH
+            semantic_assessments[id(envelope)] = assessment
+            return assessment
+
+        def download(envelope: CandidateEnvelope) -> str | None:
+            native = {"mimeType": envelope.mime_type, "fileUrl": envelope.acquisition_url}
+            relative_path, absolute_path = _compute_asset_paths(job_dir, segment_idx, native, asset_namespace)
+            result = download_pexels_video(envelope, absolute_path)
+            if result["ok"]:
+                download_results[id(envelope)] = (relative_path, absolute_path, result)
+                return str(absolute_path)
+            absolute_path.unlink(missing_ok=True)
+            download_errors.append({"sourceUrl": envelope.source_url or "", "fileUrl": envelope.acquisition_url or "", "error": result.get("error", "download failed")})
+            return None
+
+        def evaluate_fidelity(envelope: CandidateEnvelope, local_path: str) -> tuple[bool, dict]:
+            allowed, assessment = _apply_visual_fidelity_gate(Path(local_path), envelope.query_used or "", warnings, media_kind=envelope.media_kind)
+            fidelity_assessments[id(envelope)] = assessment
+            return allowed, assessment
+
+        selection = select_first_accepted(
+            envelopes(), semantic_evaluator=evaluate_semantic, downloader=download,
+            visual_fidelity_evaluator=evaluate_fidelity,
+            rejection_cleanup=lambda _candidate, path: Path(path).unlink(missing_ok=True),
+            limit=_MAX_CANDIDATE_ATTEMPTS,
+        )
+        if selection.selected is not None:
+            selected = selection.selected.candidate
+            provenance = provenance_by_envelope[id(selected)]
+            relative_path, _, result = download_results[id(selected)]
+            assessment = dict(semantic_assessments[id(selected)])
+            assessment.pop("allowUnscorable", None)
+            assessment.pop("allowSemanticDegradation", None)
+            # Selected-only cross-scene reservation: only a clip that actually
+            # became the segment's asset is excluded from later scenes.
+            if excluded_source_urls is not None and selected.source_url:
+                excluded_source_urls.add(selected.source_url)
+            if excluded_file_urls is not None and selected.acquisition_url:
+                excluded_file_urls.add(selected.acquisition_url)
+            resolved = {
+                "segmentIndex": segment_idx, "assetPreference": asset_pref, "status": "RESOLVED",
+                "provider": "pexels", "mediaKind": VIDEO, "capabilityId": selected.capability_id,
+                "providerAssetId": selected.provider_asset_id, "pexelsVideoId": provenance.pexels_video_id,
+                "pexelsVideoFileId": provenance.pexels_video_file_id, "assetPath": relative_path,
+                "fileSize": result["size"], "sourceUrl": selected.source_url or "", "fileUrl": selected.acquisition_url or "",
+                "author": selected.attribution.author or "", "authorUrl": selected.attribution.author_url or "",
+                "mimeType": "video/mp4", "width": selected.width, "height": selected.height,
+                "sourceDurationSec": provenance.source_duration_sec, "fps": provenance.fps,
+                "searchQueryUsed": selected.query_used or "", "queryIndex": selected.query_index,
+                "pexelsQueryRank": provenance.pexels_query_rank, "providerRank": selected.provider_rank,
+                "semanticAssessment": assessment, "visualFidelityAssessment": fidelity_assessments[id(selected)],
+                "pexelsRateLimitTelemetry": telemetry[-1] if telemetry else {},
+            }
+            if assessment.get("semanticDegradation"):
+                resolved["semanticDegradation"] = assessment["semanticDegradation"]
+            return resolved
+        status = "DOWNLOAD_FAILED" if download_errors else "NO_RESULTS"
+        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": status, "provider": "pexels", "mediaKind": VIDEO, "capabilityId": "pexels.video.stock", "searchQueriesTried": query_texts, "reason": "Pexels Video returned no candidate accepted by the lifecycle", "downloadErrors": download_errors}
+    except PexelsClientError as exc:
+        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": "PROVIDER_ERROR", "provider": "pexels", "mediaKind": VIDEO, "capabilityId": "pexels.video.stock", "searchQueriesTried": query_texts, "reason": exc.code}
+    except Exception:
+        warnings.append(_warn("PROVIDER_ERROR:pexels", "Pexels provider error", ""))
+        return {"segmentIndex": segment_idx, "assetPreference": asset_pref, "status": "PROVIDER_ERROR", "provider": "pexels", "mediaKind": VIDEO, "capabilityId": "pexels.video.stock", "searchQueriesTried": query_texts, "reason": "PROVIDER_ERROR"}
 
 
 def _increment_live_unresolved(

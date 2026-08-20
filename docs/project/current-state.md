@@ -16,9 +16,27 @@
   decreased 24847 → 24841, exact request count `UNKNOWN`.
 - Validation: Slice 1 `99` focused / `1751` full; Slice 2 `333` focused; closure
   suite `1758 passed, 0 failed`; `git diff --check` clean.
-- Next product direction: `pexels-video-runtime-mvp`, reusing the shared Pexels
-  client and potentially introducing the minimum generic `IMAGE | VIDEO`
-  transport contract in its first slice. No change opened here.
+- Merged into `main` by `5b340db`.
+
+## Cambio cerrado: `pexels-video-runtime-mvp` — COMPLETED / VERIFIED / CLOSED
+
+- PRODUCT CHANGE. FIRST REAL VIDEO E2E antes de más research de Video. Reusa los
+  contratos `IMAGE | VIDEO` existentes; Pexels Video explicit opt-in
+  (`--asset-providers pexels --visual-mode videos-only`), sin query adaptation,
+  diversity/dedup, smart clip selection, Video audio ni OpenCLIP sobre MP4.
+- Slice 1 COMPLETE: capability-aware `visualMode` routing, adapter Pexels Video
+  con selección determinista de portrait MP4, lifecycle/downloader (con fix de
+  User-Agent), degradación semántica acotada, pixel NOT_APPLICABLE y transporte
+  público vía bridge/assets-stage.
+- Slice 2 COMPLETE: prepare/renderTimeline, validación media-aware
+  (ffprobe/Docker vs Pillow), inputs VIDEO `-stream_loop -1` / mute / crop
+  1080x1920 / LOOP_FROM_START, reserva cross-scene selected-only y política
+  sparse-metadata partial-match. `resolvedConfig.visuals` alinea el modo
+  efectivo (`visualMode` canónico; `mode: images` solo para IMAGES_ONLY).
+- Primer E2E Video real `la-2026-08-19-235138` (delfines): `VALIDATED`, 4/4
+  VIDEO, 1080x1920 H.264, narración-only, subtitles, 18.52s en rango 18–22s
+  PASS. `pexels.video.stock` `AVAILABLE`. Suite `1809 passed`; solo queda el
+  merge autorizado.
 
 ## Cambio cerrado: `pexels-photo-selection-benchmark` — COMPLETED / VERIFIED / CLOSED
 

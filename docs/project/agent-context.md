@@ -1,5 +1,23 @@
 # Agent Context
 
+## Closed Change: pexels-video-runtime-mvp — COMPLETED / VERIFIED / CLOSED
+- PRODUCT CHANGE: first real canonical Video E2E (`la-2026-08-19-235138`,
+  dolphins) reached `VALIDATED` with 4/4 VIDEO segments, one narration-only
+  audio stream, 1080x1920 H.264, subtitles, duration PASS. `pexels.video.stock`
+  is `AVAILABLE` (explicit opt-in only via `--asset-providers pexels
+  --visual-mode videos-only`); Pexels Photos AVAILABLE without regression.
+- Slice 1: CLI/request policy, capability-aware routing, RAW Pexels Video
+  adapter and deterministic portrait MP4 selection, lifecycle/downloader
+  (incl. User-Agent fix), bounded semantic degradation, VIDEO pixel bypass,
+  public bridge transport and assets-stage contract.
+- Slice 2: prepare/renderTimeline transport, media-aware asset validation
+  (ffprobe/Docker for VIDEO, Pillow for IMAGE), VIDEO FFmpeg inputs
+  (`-stream_loop -1`, mute, crop 1080x1920, LOOP_FROM_START), selected-only
+  cross-scene reservation, and narrow VIDEO sparse-metadata partial-match
+  policy (`PROVIDER_METADATA_PARTIAL_MATCH`). Effective visual-mode metadata
+  aligned in `resolvedConfig.visuals`. Full suite `1809 passed`.
+- Only the authorized merge remains.
+
 ## Closed Change: pexels-photo-selection-benchmark — COMPLETED / VERIFIED / CLOSED
 - Evaluation-only investigation that froze a candidate-ordering benchmark before
   any candidate-level human preferences were supplied. It did not touch Pexels
@@ -37,11 +55,11 @@
 - Slice 1 and Slice 2 are complete: shared Pexels infrastructure, Photos
   candidate adapter, explicit opt-in routing, existing lifecycle/gates,
   provenance bridge and bounded real smoke. No Pexels Video implementation.
-- Closure complete; pending separate authorized merge only. Smoke A used
-  one search request and resolved one asset; Smoke B used five search requests,
-  resolved five of seven segments and ended `ASSETS_PARTIAL` for explainable
-  provider-fit/gate outcomes. OpenCLIP was not activated; pixel gate bypass was
-  recorded by the existing fail-soft contract.
+- Closure complete and merged into `main` by `5b340db`. Smoke A used one search
+  request and resolved one asset; Smoke B resolved five of seven segments and
+  ended `ASSETS_PARTIAL` for explainable provider-fit/gate outcomes; its exact
+  search-request count is UNKNOWN. OpenCLIP was not activated; pixel gate
+  bypass was recorded by the existing fail-soft contract.
 - Next product direction: `pexels-video-runtime-mvp`; it may introduce the
   minimum generic `IMAGE | VIDEO` transport contract in its first slice and
   should reuse the shared Pexels client. `pexels-photo-selection-evidence-extension`

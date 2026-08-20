@@ -11,6 +11,7 @@ from typing import Any
 
 from shorts_creator.validation import asset as asset_validation
 from shorts_creator.contracts.duration import evaluate_requested_duration_compliance
+from shorts_creator.contracts.visual_media import IMAGES_ONLY, normalize_visual_mode
 
 FPS = 25
 MAX_SEGMENT_DURATION = 20.0
@@ -157,6 +158,33 @@ def build_asset_base_filter(asset_type: str, focal_region: str, w: int, h: int, 
         )
     else:
         return "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,format=yuv420p"
+
+
+def build_video_normalize_filter(duration_sec: float) -> str:
+    """Normalize a VIDEO clip input to the canonical vertical output.
+
+    Produces exactly ``duration_sec`` of 1080x1920 / 25 fps / yuv420p video with
+    timestamps starting at zero. Motion filters are intentionally absent: native
+    clip motion is preserved.
+    """
+    return (
+        f"trim=duration={duration_sec},setpts=PTS-STARTPTS,"
+        f"fps=25,"
+        f"scale=1080:1920:force_original_aspect_ratio=increase,"
+        f"crop=1080:1920,setsar=1,format=yuv420p"
+    )
+
+
+def build_asset_input_args(media_kind: str, asset_path: str) -> list[str]:
+    """Return the FFmpeg input options for one timeline asset.
+
+    IMAGE loops a single frame; VIDEO loops the whole clip from its start so a
+    clip shorter than the editorial window can cover it. VIDEO clip audio is
+    never mapped by the filter graph.
+    """
+    if media_kind == "VIDEO":
+        return ['-stream_loop', '-1', '-i', asset_path]
+    return ['-loop', '1', '-i', asset_path]
 
 
 def build_overlay_filter(overlay_text: str, input_label: str, out_label: str) -> str:
@@ -860,6 +888,7 @@ def render_job(
         dur = entry["durationSec"]
         seg_idx = entry.get("segmentIndex", 1)
         asset_path = entry.get("assetPath") or ""
+        media_kind = entry.get("mediaKind", "IMAGE")
 
         if not asset_path:
             print(f"FATAL: entry scene={sn} has null assetPath — unresolved asset, aborting")
@@ -869,7 +898,7 @@ def render_job(
 
         img_rel = _to_docker_asset_path(project_root, video_rel, asset_path)
 
-        ffmpeg_args.extend(['-loop', '1', '-i', img_rel])
+        ffmpeg_args.extend(build_asset_input_args(media_kind, img_rel))
         video_ix = input_index
         input_index += 1
 
@@ -891,31 +920,37 @@ def render_job(
                 input_index += 1
 
         # Build visual filter chain
-        asset_type = entry.get("assetType", "broll")
-        w = entry.get("width", 0) or 0
-        h = entry.get("height", 0) or 0
-        focal_region = entry.get("focalRegion", "center")
-        motion_type = entry.get("motionType", "static")
-        overlay_text = entry.get("overlayText", "")
+        if media_kind == "VIDEO":
+            out_label = f"s{sn}_{seg_idx}"
+            normalize_filter = build_video_normalize_filter(dur)
+            filter_parts.append(f"[{video_ix}:v]{normalize_filter}[{out_label}]")
+        else:
+            asset_type = entry.get("assetType", "broll")
+            w = entry.get("width", 0) or 0
+            h = entry.get("height", 0) or 0
+            focal_region = entry.get("focalRegion", "center")
+            motion_type = entry.get("motionType", "static")
 
-        motion_filter = build_motion_filter(motion_type, dur, w, h)
+            motion_filter = build_motion_filter(motion_type, dur, w, h)
 
-        if asset_type in ("historical_map", "map", "document") and (w or h) and (w > h if w and h else False):
-            base = build_asset_base_filter(asset_type, focal_region, w, h, motion_type, dur)
-            if motion_type in ("slow_zoom_in", "slow_zoom_out"):
-                # base includes overlay but NOT trim; motion includes trim=end_frame+zoompan+d
-                out_label = f"s{sn}_{seg_idx}"
-                filter_parts.append(f"[{video_ix}:v]{base}[m_base_{out_label}];[m_base_{out_label}]{motion_filter}[{out_label}]")
-            else:
+            if asset_type in ("historical_map", "map", "document") and (w or h) and (w > h if w and h else False):
+                base = build_asset_base_filter(asset_type, focal_region, w, h, motion_type, dur)
+                if motion_type in ("slow_zoom_in", "slow_zoom_out"):
+                    # base includes overlay but NOT trim; motion includes trim=end_frame+zoompan+d
+                    out_label = f"s{sn}_{seg_idx}"
+                    filter_parts.append(f"[{video_ix}:v]{base}[m_base_{out_label}];[m_base_{out_label}]{motion_filter}[{out_label}]")
+                else:
+                    out_label = f"s{sn}_{seg_idx}"
+                    filter_parts.append(f"[{video_ix}:v]{base},{motion_filter}[{out_label}]")
+            elif motion_type in ("slow_zoom_in", "slow_zoom_out"):
+                base = build_asset_base_filter(asset_type, focal_region, w, h, motion_type, dur)
                 out_label = f"s{sn}_{seg_idx}"
                 filter_parts.append(f"[{video_ix}:v]{base},{motion_filter}[{out_label}]")
-        elif motion_type in ("slow_zoom_in", "slow_zoom_out"):
-            base = build_asset_base_filter(asset_type, focal_region, w, h, motion_type, dur)
-            out_label = f"s{sn}_{seg_idx}"
-            filter_parts.append(f"[{video_ix}:v]{base},{motion_filter}[{out_label}]")
-        else:
-            out_label = f"s{sn}_{seg_idx}"
-            filter_parts.append(f"[{video_ix}:v]{motion_filter}[{out_label}]")
+            else:
+                out_label = f"s{sn}_{seg_idx}"
+                filter_parts.append(f"[{video_ix}:v]{motion_filter}[{out_label}]")
+
+        overlay_text = entry.get("overlayText", "")
 
         # Overlay (only render if explicitly enabled or env var set)
         overlay_enabled = entry.get("overlayEnabled", False) or os.environ.get("ENABLE_EDITORIAL_OVERLAYS", "").lower() in ("true", "1")
@@ -1348,6 +1383,25 @@ def render_job(
     subtitle_style = req.get("subtitles", {}).get("style", "shorts_upper_dynamic")
     voice_provider = audio_config.get("provider", "edge_tts")
     voice_id = audio_config.get("voice", "es-ES-AlvaroNeural")
+    visuals_request = req.get("visuals") or {}
+    if not isinstance(visuals_request, dict):
+        visuals_request = {}
+    try:
+        effective_visual_mode = normalize_visual_mode(visuals_request).visual_mode
+    except ValueError:
+        # Malformed/conflicting request visuals: preserve the historical
+        # image-only default rather than failing the render.
+        effective_visual_mode = IMAGES_ONLY
+
+    def _resolve_visuals() -> dict:
+        resolved_visuals = {
+            "visualMode": effective_visual_mode,
+            "allowGeneratedImages": visuals_request.get("allowGeneratedImages", False),
+        }
+        if effective_visual_mode == IMAGES_ONLY:
+            resolved_visuals["mode"] = "images"
+        return resolved_visuals
+
     resolved = {
         "durationProfile": req.get("durationProfile", "short_25_30"),
         "duration": {
@@ -1371,10 +1425,7 @@ def render_job(
             "backgroundBox": req.get("subtitles", {}).get("backgroundBox", False),
             "globalOffsetMs": audio_config.get("globalOffsetMs", 0),
         },
-        "visuals": {
-            "mode": req.get("visuals", {}).get("mode", "images"),
-            "allowGeneratedImages": req.get("visuals", {}).get("allowGeneratedImages", False),
-        },
+        "visuals": _resolve_visuals(),
         "music": {
             "enabled": music_enabled if music_enabled else False,
             "source": music_path_str if music_enabled else "none",
@@ -1450,8 +1501,11 @@ def render_job(
                     break
 
             raw_path = ""
+            media_kind = "IMAGE"
             if asset_entry and asset_entry.get("segments"):
-                raw_path = asset_entry["segments"][0].get("path", "")
+                first_seg = asset_entry["segments"][0]
+                raw_path = first_seg.get("path", "")
+                media_kind = first_seg.get("mediaKind", "IMAGE")
             elif asset_entry and asset_entry.get("path"):
                 raw_path = asset_entry["path"]
 
@@ -1475,7 +1529,7 @@ def render_job(
                     vpath = rel
             if not vpath:
                 vpath = f"{video_dir.relative_to(project_root)}/scenes/scene-{scene_num:02}.jpg"
-            return {"visualType": "image", "visualPath": vpath}
+            return {"visualType": "video" if media_kind == "VIDEO" else "image", "visualPath": vpath}
 
         manifest = {
             "jobId": data["jobId"],

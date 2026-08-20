@@ -231,7 +231,11 @@ def select_first_accepted(
         if not isinstance(candidate, CandidateEnvelope):
             raise ValueError("INVALID_CANDIDATE_ENVELOPE")
         semantic_assessment = semantic_evaluator(candidate)
-        if semantic_assessment.get("verdict") != "RELEVANT":
+        if (
+            semantic_assessment.get("verdict") != "RELEVANT"
+            and not semantic_assessment.get("allowUnscorable")
+            and not semantic_assessment.get("allowSemanticDegradation")
+        ):
             attempts.append(CandidateAttempt(
                 candidate=candidate,
                 status=METADATA_REJECTED,

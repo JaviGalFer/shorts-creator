@@ -110,7 +110,7 @@ PROVIDER_CAPABILITIES: tuple[ProviderCapability, ...] = (
         media_kind=VIDEO,
         source_type=STOCK,
         query_strategy=SEARCH,
-        runtime_status=PLANNED,
+        runtime_status=AVAILABLE,
         requires_api_key=True,
         visual_form_fit=_pexels_form_fit(photograph_fit=CONDITIONAL_FIT),
         evidence_version="pexels-provider-fit-benchmark",

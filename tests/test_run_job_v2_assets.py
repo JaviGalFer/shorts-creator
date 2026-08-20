@@ -153,7 +153,7 @@ class TestV2AssetsContract:
         assert "STAGE_OUTPUT_CONTRACT_FAILED" in err
 
     def test_v2_assets_ready_supports_multiple_extensions(self, fake_job_dir):
-        for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+        for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4"]:
             assets_dir = fake_job_dir / "assets"
             if assets_dir.exists():
                 import shutil

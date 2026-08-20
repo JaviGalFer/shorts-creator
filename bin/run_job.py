@@ -50,7 +50,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--asset-providers",
         default=None,
         help="Comma-separated visual source providers to restrict to, in priority "
-             "order (e.g. wikimedia_commons,pixabay). Omitted -> default fallback.",
+              "order (e.g. wikimedia_commons,pixabay). Omitted -> default fallback.",
+    )
+    parser.add_argument(
+        "--visual-mode",
+        choices=["auto", "images-only", "videos-only", "mixed"],
+        default=None,
+        help="Hard visual media policy (default: historical images-only).",
     )
     return parser
 
@@ -75,6 +81,7 @@ def main() -> int:
         voice=args.voice,
         subtitle_timing_provider=args.subtitle_timing_provider,
         asset_providers=args.asset_providers,
+        visual_mode=args.visual_mode,
     )
 
 

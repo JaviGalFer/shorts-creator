@@ -13,8 +13,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from shorts_creator.assets.capabilities import DIRECT, get_provider_capability, get_visual_form_fit
+from shorts_creator.assets.capabilities import (
+    AVAILABLE,
+    DIRECT,
+    UNSUPPORTED,
+    get_provider_capability,
+    get_visual_form_fit,
+)
 from shorts_creator.contracts.visual_specificity import assess_query_specificity
+from shorts_creator.contracts.visual_media import (
+    IMAGE,
+    VIDEO,
+    normalize_visual_mode,
+    resolve_media_strategy,
+)
 
 # ── Schema constants ────────────────────────────────────────────────────────
 
@@ -207,6 +219,7 @@ DEFAULT_REQUEST_VISUALS: dict[str, Any] = {
     "sourceProviders": [],
     "maxQueriesPerSegment": 4,
     "providerPriorityPolicy": "balanced",
+    "visualMode": None,
 }
 
 # ── Diagnostics helpers ─────────────────────────────────────────────────────
@@ -352,6 +365,9 @@ def _validate_request_config(
                 "request_visuals.providerPriorityPolicy",
             ))
 
+    if "visualMode" in config:
+        canonical["visualMode"] = config["visualMode"]
+
     return canonical
 
 
@@ -485,6 +501,8 @@ def _make_candidate(
     candidate_status: str = "included",
     availability: str | None = None,
     warnings: list[str] | None = None,
+    capability_id: str | None = None,
+    media_kind: str | None = None,
 ) -> dict[str, Any]:
     av = availability or PROVIDER_AVAILABILITY.get(provider, "unknown")
     return {
@@ -498,6 +516,8 @@ def _make_candidate(
         "reason": reason,
         "exclusionReason": None if candidate_status == "included" else reason,
         "warnings": warnings or [],
+        "capabilityId": capability_id,
+        "mediaKind": media_kind,
     }
 
 
@@ -541,6 +561,47 @@ def _is_archive_only_pref(asset_preference: str) -> bool:
 def _pexels_photos_supports(asset_preference: str) -> bool:
     capability = get_provider_capability("pexels.photos.stock")
     return capability is not None and get_visual_form_fit(capability, asset_preference) == DIRECT
+
+
+def _capability_kind(provider: str, media_kind: str) -> str | None:
+    if provider in GENERATED_PROVIDERS and media_kind == IMAGE:
+        # Legacy generated providers are still routing-only candidates and have
+        # no static stock capability registry entry.
+        return f"{provider}.image.generated"
+    for capability_id in (
+        "pexels.photos.stock" if provider == "pexels" and media_kind == IMAGE else "",
+        "pexels.video.stock" if provider == "pexels" and media_kind == VIDEO else "",
+        f"{provider}.{media_kind.lower()}.stock",
+        "wikimedia_commons.image.stock" if provider == "wikimedia_commons" and media_kind == IMAGE else "",
+        "pixabay.image.stock" if provider == "pixabay" and media_kind == IMAGE else "",
+    ):
+        capability = get_provider_capability(capability_id)
+        if capability is not None:
+            return capability.capability_id
+    return None
+
+
+def _resolve_segment_media_kind(
+    asset_preference: str,
+    editorial_preference: str | None,
+    request_visuals: dict,
+) -> tuple[str | None, tuple[str, ...]]:
+    """Resolve a kind from pure policy and static capability evidence."""
+    policy = normalize_visual_mode(request_visuals)
+    image_supported = asset_preference in ROUTING_MATRIX
+    video_capability = get_provider_capability("pexels.video.stock")
+    video_supported = (
+        video_capability is not None
+        and get_visual_form_fit(video_capability, asset_preference) != UNSUPPORTED
+    )
+    video_available = video_capability is not None and video_capability.runtime_status == AVAILABLE
+    decision = resolve_media_strategy(
+        policy=policy,
+        editorial_preference=editorial_preference,
+        form_supported_kinds=({IMAGE} if image_supported else set()) | ({VIDEO} if video_supported else set()),
+        runtime_available_kinds=({IMAGE} if image_supported else set()) | ({VIDEO} if video_available else set()),
+    )
+    return decision.resolved_kind, decision.degradations
 
 
 # ── Routing engine ──────────────────────────────────────────────────────────
@@ -605,11 +666,37 @@ def _route_segment(
             "unsupportedReasons": [f"assetPreference '{asset_pref}' not in routing matrix"],
         }
 
+    try:
+        selected_media_kind, media_degradations = _resolve_segment_media_kind(
+            asset_pref, segment.get("mediaPreference"), request_visuals,
+        )
+    except ValueError as exc:
+        return {
+            "segmentIndex": segment_idx, "assetPreference": asset_pref,
+            "searchQueries": search_queries, "generationPrompts": generation_prompts,
+            "providerCandidates": [], "excludedProviders": [],
+            "routingStatus": "UNROUTABLE", "warnings": [],
+            "unsupportedReasons": [str(exc)],
+        }
+    if selected_media_kind is None:
+        return {
+            "segmentIndex": segment_idx, "assetPreference": asset_pref,
+            "searchQueries": search_queries, "generationPrompts": generation_prompts,
+            "providerCandidates": [], "excludedProviders": [],
+            "routingStatus": "UNROUTABLE", "warnings": [],
+            "unsupportedReasons": list(media_degradations),
+        }
+
     # ── Build initial candidate list ─────────────────────────────────────
     candidates: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
 
     for priority_rank, (provider, support_strength) in enumerate(matrix_row, start=1):
+        if selected_media_kind == VIDEO and provider != "pexels":
+            continue
+        capability_id = _capability_kind(provider, selected_media_kind)
+        if capability_id is None:
+            continue
         reason = f"{asset_pref} preference — {provider} {support_strength} support"
         pw = list(MATRIX_WARNINGS.get(asset_pref, {}).get(provider, []))
 
@@ -620,6 +707,8 @@ def _route_segment(
             reason=reason,
             candidate_status="included",
             warnings=pw,
+            capability_id=capability_id,
+            media_kind=selected_media_kind,
         )
         candidates.append(c)
 
@@ -727,10 +816,9 @@ def _route_segment(
             candidates, canonical_plan, request_visuals, policy, asset_pref
         )
 
-    # The Pexels Photos capability has direct evidence only for photographs.
-    # Do not turn an unsupported visual form into generic stock photography.
+    # Pexels capabilities are selected by media kind, never by provider alone.
     for c in candidates[:]:
-        if c["provider"] == "pexels" and not _pexels_photos_supports(asset_pref):
+        if c["provider"] == "pexels" and c.get("mediaKind") == IMAGE and not _pexels_photos_supports(asset_pref):
             candidates.remove(c)
             excluded.append(_make_excluded(
                 "pexels",
