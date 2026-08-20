@@ -1,6 +1,6 @@
 # Agent Context
 
-## Closed Change: script-watchability-v1 — COMPLETED / VERIFIED / CLOSED (pending authorized merge)
+## Closed Change: script-watchability-v1 — COMPLETED / VERIFIED / CLOSED / MERGED (into `main` `745db7f`, no-ff)
 - Branch `change/script-watchability-v1` (baseline `main` `d245964`, baseline suite `1849 passed`).
 - Mejora watchability de guiones: contrato editorial en prompts (hook escena 1,
   desarrollo/progresión, cierre, factualidad), CTA no obligatorio en GANADOR SYSTEM_PROMPT_V2 +
@@ -22,8 +22,7 @@
 - Runs AUTO (`cmo-2026-08-20-162421/162756/163029/163147`) quedaron `ASSETS_PARTIAL`/fitting por
   gap de supply de ilustración/diagrama en AUTO — limitación preexistente y ajena al change;
   se conservan como evidencia histórica, NO como fallo del change. NO se afirma AUTO VALIDATED aquí.
-- Ver `openspec/changes/script-watchability-v1/results.md`. Decisión: READY_TO_MERGE (merge no
-  autorizado — pending authorized merge). No merge, no push.
+- Ver `openspec/changes/script-watchability-v1/results.md`. Merged no-ff a `main` `745db7f`.
 
 ## Closed Change: auto-mixed-visual-runtime — COMPLETED / VERIFIED / CLOSED / MERGED (into `main` `0ea44e1`, no-ff)
 - PRODUCT CHANGE: hace productivos AUTO y MIXED usando la preferencia editorial real del LLM.
