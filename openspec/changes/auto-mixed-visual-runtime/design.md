@@ -49,7 +49,7 @@ Compatibilidad histórica: planes persistidos sin mediaPreference continúan can
 
 - `SYSTEM_PROMPT_V2`: añadir `mediaPreference` a la tabla de `visualSequence[]` con la semántica editorial, y al JSON de ejemplo.
 - `_build_user_prompt_v2` / retry: bloque request-scoped según `visualMode` (AUTO/MIXED exigen emisión; hard modes indican la preferencia coherente).
-- `_validate_and_canonicalize_script_v2`: nueva señal `visual_mode`; en AUTO/MIXED, si el payload crudo contiene segmentos sin la clave `mediaPreference`, emitir error `MEDIA_PREFERENCE_MISSING` (provoca retry). Emitir el error SOLO una vez por script (si ya hubo reparación con recurrencia, se deja pasar para no bloquear convergencia: en el último intento se tolera).
+- `_validate_and_canonicalize_script_v2`: nueva señal `visual_mode`; en AUTO/MIXED, si el payload crudo contiene segmentos sin la clave `mediaPreference`, emitir error `MEDIA_PREFERENCE_MISSING` (provoca retry correctivo). Estricto durante generación, retries y validación final: si agotados los retries sigue faltando `mediaPreference`, el script NO se tolera silenciosamente y termina en `REVIEW_REQUIRED` (sin script canónico válido). No existe tolerancia en el último intento.
 
 ### Query neutral para VIDEO
 
@@ -137,6 +137,6 @@ Diferencia frente al Plan: el guard de ausencia se implementa en `_validate_and_
 Baseline `1809` → Slice 1 `1843` → final `1849 passed, 0 failed`; `git diff --check` limpio.
 
 AUTO E2E `cmo-2026-08-20-152730` VALIDATED (8 IMAGE + 1 VIDEO; mediaDecision==mediaKind,
-sin fallback). MIXED E2E `por-2026-08-20-153502` ASSETS_PARTIAL (9/10, mezcla editorial
+sin fallback). Real MIXED runtime run `por-2026-08-20-153502` ASSETS_PARTIAL (9/10, mezcla editorial
 5 IMAGE + 4 VIDEO; 1 ilustración sin cobertura supply). Mixed local smoke PASS
 (IMAGE/VIDEO/IMAGE, 1080x1920, 19.08s). Ver `results.md`.

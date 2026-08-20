@@ -57,7 +57,7 @@ auto`, ElevenLabs.
 - Distribution resolved: **IMAGE 8 / VIDEO 1** (VIDEO en scene 3 seg1: `VIDEO_PREFERRED` → `pexels.video.stock`).
 - AUTO no necesita ambos medios para pasar; aquí produjo ambos de forma editorial.
 
-## Real MIXED E2E
+## Real MIXED runtime run
 
 Job `por-2026-08-20-153502` — topic "Por qué el cielo es azul y por qué se pone
 rojo al atardecer", 30s, mismos providers, `--visual-mode mixed`, ElevenLabs.

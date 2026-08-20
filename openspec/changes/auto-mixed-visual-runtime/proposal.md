@@ -52,11 +52,15 @@ Decisiones editoriales + routing + fallback + persistencia (offline/mocked):
 - Bridge `mediaDecision` / `mediaFallback`.
 - MIXED tracker selected-only (tie-break EITHER).
 
-## Slice 2 (futura, no en esta sesión)
+## Slice 2 (completada)
 
-Runtime real + E2E:
+Runtime real + E2E — **COMPLETE**:
 
-- Hardening executor / restricciones de modo duro.
-- Regression mixta IMAGE/VIDEO prepare/render (fixture).
-- Real AUTO E2E y real MIXED E2E.
-- Docs/closure.
+- Hardening A: prompt sin contradicción (ejemplo de queries medium-neutral).
+- Hardening B: reconciliación de `mediaDecision` con los media kinds supervivientes a constraints/source policy; `PREFERRED_MEDIA_EXHAUSTED` solo para kind primario permitido que agotó candidatos.
+- Hardening C: `mediaDecision` preservado en TODOS los terminales del executor (incl. SEMANTIC POSTCONDITION, PROVIDER_UNAVAILABLE, dry-run, no-candidates).
+- Hardening D: guardia `MEDIA_PREFERENCE_MISSING` estricta en AUTO/MIXED (generación/retries/validación final, sin tolerancia silenciosa).
+- Mixed local render smoke PASS (`mixed-local-smoke`): prepare/render/validate, IMAGE/VIDEO/IMAGE, 1080x1920, 19.08s.
+- Real AUTO full E2E `cmo-2026-08-20-152730` **VALIDATED** (9/9 resolved, 8 IMAGE + 1 VIDEO, mediaDecision==mediaKind, sin fallback).
+- Real MIXED assets/runtime run `por-2026-08-20-153502` **ASSETS_PARTIAL** (9/10, mezcla editorial 5 IMAGE + 4 VIDEO; 1 ilustración sin cobertura supply).
+- Closure: tasks/proposal/design/results + session + project docs; suite final `1849 passed, 0 failed`; `git diff --check` limpio.

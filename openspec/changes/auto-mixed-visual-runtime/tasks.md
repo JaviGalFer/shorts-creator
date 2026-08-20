@@ -24,7 +24,7 @@
 - [x] Hardening D: guardia `MEDIA_PREFERENCE_MISSING` estricta en AUTO/MIXED; design.md actualizado (no se tolera silenciosamente).
 - [x] Mixed local render smoke (prepare/render/validate real, IMAGE/VIDEO/IMAGE, 1080x1920, PASS).
 - [x] Real AUTO E2E `cmo-2026-08-20-152730` VALIDATED (8 IMAGE + 1 VIDEO, mediaDecision==mediaKind, sin fallback).
-- [x] Real MIXED E2E `por-2026-08-20-153502` ASSETS_PARTIAL (9/10, mezcla 5 IMAGE + 4 VIDEO).
+- [x] Real MIXED runtime run `por-2026-08-20-153502` ASSETS_PARTIAL (9/10, mezcla 5 IMAGE + 4 VIDEO).
 - [x] Verificación del comportamiento LLM: mediaPreference explícito, sin default histórico.
 - [x] Suite completa 1849 passed, 0 failed; `git diff --check` limpio.
 

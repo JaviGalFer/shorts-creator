@@ -47,7 +47,7 @@ visualType image/video/image, `resolvedConfig.visuals.visualMode=MIXED`.
 - **AUTO** `cmo-2026-08-20-152730` — VALIDATED; 9/9 resolved, 8 IMAGE + 1 VIDEO;
   mediaPreference explícito (sin default histórico); mediaDecision==mediaKind
   (sin fallback).
-- **MIXED** `por-2026-08-20-153502` — ASSETS_PARTIAL (9/10); mezcla editorial
+- **Real MIXED runtime run** `por-2026-08-20-153502` — ASSETS_PARTIAL (9/10); mezcla editorial
   5 IMAGE + 4 VIDEO; 1 ilustración pixabay sin cobertura supply. Sin overwrite de
   preferencias fuertes, sin degradar diagramas, sin cuota.
   - `cmo-2026-08-20-153101` (rayos): bloqueado en audio `DURATION_FITTING_EXHAUSTED`

@@ -17,7 +17,7 @@
   `git diff --check` limpio.
 - Mixed local smoke PASS (`mixed-local-smoke`: IMAGE/VIDEO/IMAGE, 1080x1920,
   19.08s, validate PASS). AUTO E2E `cmo-2026-08-20-152730` VALIDATED
-  (8 IMAGE + 1 VIDEO, sin fallback). MIXED E2E `por-2026-08-20-153502`
+  (8 IMAGE + 1 VIDEO, sin fallback). Real MIXED runtime run `por-2026-08-20-153502`
   ASSETS_PARTIAL (9/10, mezcla editorial 5 IMAGE + 4 VIDEO). Modos duros sin
   regresión. Limitación aceptada: supply de ilustración/diagrama puede dar
   ASSETS_PARTIAL.
