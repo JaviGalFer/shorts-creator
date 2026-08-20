@@ -30,7 +30,11 @@ from shorts_creator.audio.generator import (
     resolve_audio_regeneration_config,
 )
 from shorts_creator.rendering.preparer import _get_tail_pause_sec, project_render_duration
-from shorts_creator.script.generator import repair_voiceover_duration, resolve_llm_config
+from shorts_creator.script.generator import (
+    repair_voiceover_duration,
+    resolve_llm_config,
+    validate_job_id,
+)
 
 ORCHESTRATION_VERSION = "1"
 MAX_DURATION_REPAIRS = 2
@@ -182,6 +186,9 @@ def build_script_command(args) -> list[str]:
     visual_mode = getattr(args, "visual_mode", None)
     if visual_mode:
         cmd.extend(["--visual-mode", visual_mode])
+    job_id = getattr(args, "job_id", None)
+    if job_id is not None:
+        cmd.extend(["--job-id", job_id])
     return cmd
 
 
@@ -346,6 +353,84 @@ def parse_script_output(stdout: str) -> dict | None:
                     return data
             except json.JSONDecodeError:
                 continue
+    return None
+
+
+def _canonical_metadata_path(job_id: str) -> str:
+    """Canonical metadata resource for an explicit job ID.
+
+    The single-identity layout data/videos/<job_id>/metadata.json is the only
+    authoritative location for an explicitly invoked job; the orchestrator never
+    follows a child-reported path for this case.
+    """
+    return str(_project_root() / "data" / "videos" / job_id / "metadata.json")
+
+
+def _resolve_script_metadata(
+    result: subprocess.CompletedProcess,
+    *,
+    job_id: str | None,
+) -> tuple[str | None, str | None]:
+    """Resolve the authoritative script metadata path after the script stage.
+
+    Returns (metadata_path | None, error | None). Exactly one is non-None.
+
+    Legacy (job_id=None): the metadata path is discovered from child stdout and
+    must exist on disk; this preserves the historical stdout-discovery contract.
+
+    Explicit job_id: the canonical data/videos/<job_id>/metadata.json path derived
+    from the invoked ID is authoritative. The child-reported jobId/path are
+    retained only as subprocess contract diagnostics; any mismatch fails closed
+    (SCRIPT_OUTPUT_CONTRACT_VIOLATION) instead of letting the runner read a
+    different file.
+    """
+    parsed = parse_script_output(result.stdout or "")
+    if job_id is not None:
+        canonical = _canonical_metadata_path(job_id)
+        reported_job_id = (parsed or {}).get("jobId")
+        reported_path = (parsed or {}).get("path")
+        if reported_job_id is not None and reported_job_id != job_id:
+            return None, (
+                "SCRIPT_OUTPUT_CONTRACT_VIOLATION: child reported jobId "
+                f"{reported_job_id!r} but explicit invocation requested {job_id!r}"
+            )
+        if reported_path is not None and os.path.normpath(reported_path) != os.path.normpath(canonical):
+            return None, (
+                "SCRIPT_OUTPUT_CONTRACT_VIOLATION: child reported metadata path "
+                f"{reported_path!r} which is not the canonical {canonical!r}"
+            )
+        if not os.path.exists(canonical):
+            return None, f"SCRIPT_OUTPUT_METADATA_MISSING: {canonical}"
+        return canonical, None
+
+    if not parsed or "path" not in parsed:
+        return None, "SCRIPT_OUTPUT_MISSING_PATH"
+    path = parsed["path"]
+    if not os.path.exists(path):
+        return None, f"SCRIPT_OUTPUT_METADATA_MISSING: {path}"
+    return path, None
+
+
+def _validate_explicit_metadata_identity(data: dict, job_id: str | None) -> str | None:
+    """Verify the loaded canonical metadata declares the requested explicit ID.
+
+    Returns None when the identity is consistent (or job_id is None / legacy),
+    else a stable script-stage contract violation diagnostic.
+
+    Single-identity invariant for explicit-ID invocation:
+        requested jobId == canonical directory jobId == loaded metadata["jobId"]
+
+    The canonical filesystem location is authoritative for the path; the loaded
+    canonical metadata's own jobId is the identity contract. Neither is bypassable
+    through child stdout, which remains diagnostic data only.
+    """
+    if job_id is None:
+        return None
+    if data.get("jobId") != job_id:
+        return (
+            "SCRIPT_OUTPUT_CONTRACT_VIOLATION: canonical metadata declares jobId "
+            f"{data.get('jobId')!r} but explicit invocation requested {job_id!r}"
+        )
     return None
 
 
@@ -601,6 +686,7 @@ def run_pipeline(
     dry_run_mode: bool = False,
     stop_after: str = "validate",
     verbose: bool = False,
+    job_id: str | None = None,
     duration: int | None = None,
     duration_profile: str | None = None,
     duration_preset: str | None = None,
@@ -622,6 +708,7 @@ def run_pipeline(
         dry_run=dry_run_mode,
         stop_after=stop_after,
         verbose=verbose,
+        job_id=job_id,
         duration=duration,
         duration_profile=duration_profile,
         duration_preset=duration_preset,
@@ -636,6 +723,8 @@ def run_pipeline(
         asset_providers=asset_providers,
         visual_mode=visual_mode,
     )
+    if job_id is not None:
+        validate_job_id(job_id)
     _resolve_audio_config(args)
 
     if args.dry_run:
@@ -658,33 +747,38 @@ def run_pipeline(
                 stderr = (result.stderr or "").strip()[:500]
                 err_msg = stderr or f"exit code {result.returncode}"
                 print(f"ERROR [script]: {err_msg}")
-                parsed = parse_script_output(result.stdout or "")
-                if parsed and "path" in parsed:
-                    mp = parsed["path"]
-                    if os.path.exists(mp):
-                        metadata_path = mp
-                        data = load_metadata(mp)
-                        started = data.get("createdAt", _utcnow())
-                        set_failure(data, "script", err_msg, cmd, result.returncode)
-                        append_orchestration(data, "script", "FAILED", started, _utcnow(), err_msg)
-                        save_metadata(mp, data)
+                metadata_path, script_err = _resolve_script_metadata(result, job_id=job_id)
+                if script_err is None and metadata_path is not None:
+                    data = load_metadata(metadata_path)
+                    identity_err = _validate_explicit_metadata_identity(data, job_id)
+                    if identity_err is not None:
+                        print(f"ERROR [script]: {identity_err}")
+                        _final_summary(None, None, "script")
+                        return 1
+                    started = data.get("createdAt", _utcnow())
+                    set_failure(data, "script", err_msg, cmd, result.returncode)
+                    append_orchestration(data, "script", "FAILED", started, _utcnow(), err_msg)
+                    save_metadata(metadata_path, data)
                 _final_summary(data, metadata_path, "script")
                 return 1
 
-            parsed = parse_script_output(result.stdout or "")
-            if not parsed or "path" not in parsed:
-                print("ERROR [script]: could not find job path in output")
-                print(f"Stdout: {(result.stdout or '')[:500]}")
-                _final_summary(None, None, "script")
-                return 1
-
-            metadata_path = parsed["path"]
-            if not os.path.exists(metadata_path):
-                print(f"ERROR [script]: metadata file not found at {metadata_path}")
+            metadata_path, script_err = _resolve_script_metadata(result, job_id=job_id)
+            if script_err is not None:
+                if script_err == "SCRIPT_OUTPUT_MISSING_PATH":
+                    print("ERROR [script]: could not find job path in output")
+                    print(f"Stdout: {(result.stdout or '')[:500]}")
+                else:
+                    print(f"ERROR [script]: {script_err}")
                 _final_summary(None, None, "script")
                 return 1
 
             data = load_metadata(metadata_path)
+            identity_err = _validate_explicit_metadata_identity(data, job_id)
+            if identity_err is not None:
+                print(f"ERROR [script]: {identity_err}")
+                _final_summary(None, None, "script")
+                return 1
+
             started = data.get("createdAt", _utcnow())
             finished = _utcnow()
             actual_status = data.get("status", "SCRIPT_DRAFT")

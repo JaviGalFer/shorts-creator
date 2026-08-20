@@ -419,6 +419,26 @@ def generate_job_id(topic: str) -> str:
     return f"{prefix}-{now.strftime('%Y-%m-%d-%H%M%S')}"
 
 
+# Safe explicit job-id shape. Accepts a single filename-compatible identifier so
+# the canonical layout data/videos/<job_id>/metadata.json cannot escape the
+# videos directory via path traversal ("..", path separators or control chars).
+_SAFE_JOB_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def validate_job_id(job_id: str) -> None:
+    """Reject path-dangerous explicit job IDs at the runner/script boundary.
+
+    Raises ValueError with INVALID_JOB_ID when the value could be used to
+    escape the canonical data/videos/<job_id>/ layout.
+    """
+    if (
+        not isinstance(job_id, str)
+        or not _SAFE_JOB_ID_RE.fullmatch(job_id)
+        or ".." in job_id
+    ):
+        raise ValueError(f"INVALID_JOB_ID: {job_id!r}")
+
+
 def _count_voiceover_words(script_data: dict) -> int:
     total = 0
     for scene in script_data.get("scenes", []):
@@ -1591,6 +1611,7 @@ def _apply_voiceover_repair(
 def generate_script(
     *,
     topic: str,
+    job_id: str | None = None,
     output: str | None = None,
     dry_run: bool = False,
     model: str | None = None,
@@ -1609,6 +1630,21 @@ def generate_script(
     visual_mode: str | None = None,
 ) -> int:
     """Generate and persist a canonical V2 script for one request."""
+    # Fail-fast at the entry boundary. An explicit non-None job_id is validated
+    # BEFORE any LLM call, retry work or filesystem path construction, so an
+    # unsafe value can never reach the network or write a byte.
+    if job_id is not None:
+        validate_job_id(job_id)
+        # An explicit job_id establishes the canonical invariant
+        # jobId == data/videos/<jobId>/metadata.json; an arbitrary --output must
+        # never silently coexist with it.
+        if output is not None:
+            raise ValueError(
+                f"JOB_ID_OUTPUT_CONFLICT: explicit job_id={job_id!r} cannot be "
+                "combined with an arbitrary --output; canonical layout requires "
+                "data/videos/<job_id>/metadata.json"
+            )
+
     llm_config = resolve_llm_config(model_override=model)
     api_key = llm_config["api_key"]
     model = llm_config["model"]
@@ -2094,7 +2130,9 @@ def generate_script(
         best_word_count = best_word_count if best_word_count is not None else _count_voiceover_words(script_data)
         best_scene_word_counts = best_scene_word_counts if best_scene_word_counts is not None else _scene_word_counts(script_data)
 
-    job_id = generate_job_id(topic)
+    if job_id is None:
+        job_id = generate_job_id(topic)
+    validate_job_id(job_id)
 
     # ── Build request ────────────────────────────────────────────────
     duration_dict = {

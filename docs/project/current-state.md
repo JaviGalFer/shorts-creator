@@ -2,6 +2,44 @@
 
 **Última actualización:** 2026-08-20
 
+## Cambio activo: `web-ui-mvp` — IN PROGRESS (Slice 1 COMPLETED / TESTED / REVIEWED / APPROVED)
+
+- Objetivo: exponer el pipeline canónico (`run_pipeline`) a través de una pequeña Web UI
+  (FastAPI + Angular) sin duplicar lógica de pipeline y sin romper la CLI.
+- Rama `change/web-ui-mvp`; baseline `main` `059552d`; Slice 1 committed.
+- **Slice 1 (COMPLETED / TESTED / REVIEWED / APPROVED):** límite de invocación reutilizable
+  con identidad de job explícita.
+  - `run_pipeline(job_id=<id seguro>)` → `build_script_command` → `bin/generate_script.py
+    --job-id` → `generate_script(job_id=...)` → `data/videos/<jobId>/metadata.json` →
+    `metadata["jobId"] == jobId`.
+  - Identidad única: `API jobId == directorio jobId == metadata.jobId`.
+  - `job_id=None` → comportamiento CLI histórico (ID derivado de topic) intacto.
+  - **Sin** `output_dir` arbitrario añadido a `run_pipeline`.
+  - `validate_job_id` rechaza traversal/separadores/control/vacío.
+  - Hardening pre-Review:
+    - Fail-fast: `job_id` explícito se valida en la entrada de `generate_script`, antes de
+      LLM/red/retries/rutas (`INVALID_JOB_ID` sin `call_llm`).
+    - `job_id` explícito + `--output` arbitrario: `JOB_ID_OUTPUT_CONFLICT` (antes de
+      LLM/red/filesystem); `--job-id`/`--output` mutuamente excluyentes en CLI; `--output`
+      sin `--job-id` sigue intacto.
+    - Ruta canónica autoritativa en `run_pipeline` para ID explícito: se rechaza el
+      `parsed["path"]` ajeno y el `jobId` discrepante (`SCRIPT_OUTPUT_CONTRACT_VIOLATION`);
+      `job_id=None` conserva descubrimiento por stdout.
+    - Identidad del metadata cargado: `_validate_explicit_metadata_identity` exige
+      `metadata["jobId"] == job_id` en ramas de éxito y de fallo, ANTES de mutar el archivo
+      (`SCRIPT_OUTPUT_CONTRACT_VIOLATION`).
+  - Tests: 33 dirigidos (`tests/test_run_job_job_id.py`); suite completa
+    `1913 passed, 0 failed`; `git diff --check` limpio.
+  - Review formal (retry): **`SLICE_1_APPROVED`**; finding previo de identidad del
+    metadata cargado CLOSED; triple invariante final `requested jobId == directorio
+    canónico == metadata.jobId`.
+- **NO implementado todavía:** FastAPI, Angular, `JobService`, `JobExecutor`, repositorio,
+  estado de ejecución web, polling, rutas REST, persistence web, Docker.
+- **Seguridad/API de diseño planificada y especificada, NO desplegada:** API nunca acepta/
+  devuelve paths; recursos job-scoped por UUID; DTO allowlist; errores centralizados
+  saneados; UUID no es autorización. Ver `openspec/changes/web-ui-mvp/specs/web-security.md`.
+- No describir componentes web planificados como runtime existente.
+
 ## Cambio cerrado: `script-watchability-v1` — COMPLETED / VERIFIED / CLOSED / MERGED (merge `745db7f`, no-ff)
 
 - Mejora watchability de guiones: contrato editorial en prompts (hook escena 1,
