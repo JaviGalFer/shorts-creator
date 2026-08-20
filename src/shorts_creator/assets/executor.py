@@ -477,13 +477,15 @@ def execute_visual_sourcing_plan_v2(
             candidates = []
 
         if not candidates:
-            unresolved_segments.append({
+            unresolved_no_cands = {
                 "segmentIndex": segment_idx,
                 "assetPreference": asset_pref,
                 "status": "PROVIDER_UNAVAILABLE",
                 "reason": "no provider candidates",
                 "attemptedProviders": [],
-            })
+            }
+            _apply_media_decision_outcome(unresolved_no_cands, seg)
+            unresolved_segments.append(unresolved_no_cands)
             diagnostics["summary"]["providerUnavailable"] += 1
             continue
 
@@ -533,7 +535,7 @@ def execute_visual_sourcing_plan_v2(
                 })
                 diagnostics["summary"]["dryRunAttempts"] += 1
             else:
-                unresolved_segments.append({
+                unresolved_entry = {
                     "segmentIndex": segment_idx,
                     "assetPreference": asset_pref,
                     "status": "PROVIDER_UNAVAILABLE",
@@ -543,7 +545,9 @@ def execute_visual_sourcing_plan_v2(
                         else "no provider candidates remain after filtering"
                     ),
                     "attemptedProviders": attempted,
-                })
+                }
+                _apply_media_decision_outcome(unresolved_entry, seg)
+                unresolved_segments.append(unresolved_entry)
                 diagnostics["summary"]["providerUnavailable"] += 1
             continue
 
@@ -639,7 +643,7 @@ def execute_visual_sourcing_plan_v2(
                     "returned RESOLVED without a RELEVANT semanticAssessment",
                     "",
                 ))
-                unresolved_segments.append({
+                unresolved_postcondition = {
                     "segmentIndex": segment_idx,
                     "assetPreference": asset_pref,
                     "status": "PROVIDER_ERROR",
@@ -647,7 +651,9 @@ def execute_visual_sourcing_plan_v2(
                     "searchQueriesTried": resolved_result.get("searchQueriesTried", []),
                     "reason": "SEMANTIC POSTCONDITION VIOLATION: RESOLVED without RELEVANT semanticAssessment",
                     "providerAttempts": provider_attempts,
-                })
+                }
+                _apply_media_decision_outcome(unresolved_postcondition, seg)
+                unresolved_segments.append(unresolved_postcondition)
                 diagnostics["summary"]["providerError"] += 1
         else:
             if last_non_terminal is not None:

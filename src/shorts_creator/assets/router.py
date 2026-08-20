@@ -592,8 +592,14 @@ def _resolve_segment_media_strategy(
     asset_preference: str,
     editorial_preference: str | None,
     request_visuals: dict,
+    runtime_override: frozenset | None = None,
 ):
-    """Resolve the media strategy decision from pure policy and static evidence."""
+    """Resolve the media strategy decision from pure policy and static evidence.
+
+    ``runtime_override`` (a set of media kinds) replaces the statically-derived
+    available kinds. It is used to reconcile the decision with the media kinds
+    that actually survive constraints/source policy.
+    """
     policy = normalize_visual_mode(request_visuals)
     image_supported = asset_preference in ROUTING_MATRIX
     video_capability = get_provider_capability("pexels.video.stock")
@@ -601,12 +607,18 @@ def _resolve_segment_media_strategy(
         video_capability is not None
         and get_visual_form_fit(video_capability, asset_preference) != UNSUPPORTED
     )
-    video_available = video_capability is not None and video_capability.runtime_status == AVAILABLE
+    if runtime_override is not None:
+        runtime_available_kinds = frozenset(runtime_override)
+    else:
+        video_available = video_capability is not None and video_capability.runtime_status == AVAILABLE
+        runtime_available_kinds = (
+            ({IMAGE} if image_supported else set()) | ({VIDEO} if video_available else set())
+        )
     return resolve_media_strategy(
         policy=policy,
         editorial_preference=editorial_preference,
         form_supported_kinds=({IMAGE} if image_supported else set()) | ({VIDEO} if video_supported else set()),
-        runtime_available_kinds=({IMAGE} if image_supported else set()) | ({VIDEO} if video_available else set()),
+        runtime_available_kinds=runtime_available_kinds,
     )
 
 
@@ -758,13 +770,25 @@ def _route_segment(
             "unsupportedReasons": list(decision.degradations),
         }
 
-    resolved_kind, ordered_kinds, decision = _ordered_media_levels(decision, policy, mix_counts)
+    # Candidate kinds the strategy attempts, in deterministic contract order.
+    candidate_kinds = tuple(
+        k for k in decision.allowed_kinds
+        if k in decision.form_supported_kinds and k in decision.runtime_available_kinds
+    )
 
-    # ── Build candidates grouped by media level ────────────────────────
-    groups: list[tuple[str, list[dict[str, Any]]]] = []
+    # ── Build candidates grouped by media kind ─────────────────────────
     excluded: list[dict[str, Any]] = []
 
-    for level_kind in ordered_kinds:
+    # Add providers NOT in the matrix row as excluded (complete audit)
+    for provider in sorted(ALLOWED_PROVIDERS):
+        if provider not in matrix_providers:
+            excluded.append(_make_excluded(
+                provider,
+                f"provider does not support assetPreference='{asset_pref}' in v2 routing matrix",
+            ))
+
+    groups_by_kind: dict[str, list[dict[str, Any]]] = {}
+    for level_kind in candidate_kinds:
         level_candidates: list[dict[str, Any]] = []
         for priority_rank, (provider, support_strength) in enumerate(matrix_row, start=1):
             if level_kind == VIDEO and provider != "pexels":
@@ -784,15 +808,9 @@ def _route_segment(
                 capability_id=capability_id,
                 media_kind=level_kind,
             ))
-        groups.append((level_kind, level_candidates))
+        groups_by_kind[level_kind] = level_candidates
 
-    # Add providers NOT in the matrix row as excluded (complete audit)
-    for provider in sorted(ALLOWED_PROVIDERS):
-        if provider not in matrix_providers:
-            excluded.append(_make_excluded(
-                provider,
-                f"provider does not support assetPreference='{asset_pref}' in v2 routing matrix",
-            ))
+    groups: list[tuple[str, list[dict[str, Any]]]] = list(groups_by_kind.items())
 
     # ── Apply constraints across all levels ─────────────────────────────
     blocked = set(request_visuals.get("blockedProviders") or [])
@@ -867,9 +885,9 @@ def _route_segment(
                         if w not in c["warnings"]:
                             c["warnings"].append(w)
 
-    # ── Source policy / priority per media level ────────────────────────
+    # ── Source policy / priority per media kind, then reconcile ─────────
     source_providers = request_visuals.get("sourceProviders") or []
-    candidates: list[dict[str, Any]] = []
+    surviving: list[str] = []
     for level_kind, level_cands in groups:
         if not level_cands:
             continue
@@ -900,7 +918,32 @@ def _route_segment(
                         "pexels",
                         f"Pexels Photos does not support assetPreference='{asset_pref}' as a direct visual form",
                     ))
-        candidates.extend(level_cands)
+        groups_by_kind[level_kind] = level_cands
+        if level_cands:
+            surviving.append(level_kind)
+
+    # ── Reconcile the decision with the kinds that really survive ───────
+    if not surviving:
+        return {
+            "segmentIndex": segment_idx, "assetPreference": asset_pref,
+            "searchQueries": search_queries, "generationPrompts": generation_prompts,
+            "providerCandidates": [], "excludedProviders": excluded,
+            "routingStatus": "UNROUTABLE", "warnings": [],
+            "unsupportedReasons": list(decision.degradations),
+        }
+    if set(surviving) != set(decision.runtime_available_kinds):
+        decision = _resolve_segment_media_strategy(
+            asset_pref, segment.get("mediaPreference"), request_visuals,
+            runtime_override=frozenset(surviving),
+        )
+    _resolved_kind, ordered_kinds, decision = _ordered_media_levels(decision, policy, mix_counts)
+
+    # ── Assemble final candidate list in media-preference order ─────────
+    candidates: list[dict[str, Any]] = []
+    for level_kind in ordered_kinds:
+        level_cands = groups_by_kind.get(level_kind)
+        if level_cands:
+            candidates.extend(level_cands)
 
     for i, c in enumerate(candidates, start=1):
         c["priority"] = i

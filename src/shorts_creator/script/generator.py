@@ -214,7 +214,7 @@ No existe una matriz rígida visualIntent→mediaKind: la decisión es editorial
         "visualIntent": "explain",
         "subjects": ["aurora boreal", "partículas solares", "atmósfera terrestre"],
         "searchQueries": [
-          "aurora borealis solar particles atmosphere photograph",
+          "aurora borealis solar particles atmosphere",
           "aurora borealis formation magnetosphere diagram"
         ],
         "assetPreferences": ["photograph", "diagram"],

@@ -160,6 +160,18 @@ class TestPromptMediaPreference:
         assert "Decisión editorial de medio ausente" in instruction
         assert "AUTO/MIXED" in instruction
 
+    def test_example_search_queries_are_medium_neutral(self):
+        import shorts_creator.script.generator as gs
+        from shorts_creator.contracts.visual_terms import medium_neutral_query
+
+        # The medium-neutral example must not carry a medium marker.
+        assert "aurora borealis solar particles atmosphere" in gs.SYSTEM_PROMPT_V2
+        assert "aurora borealis solar particles atmosphere photograph" not in gs.SYSTEM_PROMPT_V2
+        # Each search-query string in the JSON example is neutral (forms allowed).
+        for q in ("aurora borealis solar particles atmosphere",
+                  "aurora borealis formation magnetosphere diagram"):
+            assert medium_neutral_query(q) == q
+
 
 # ── Query / queryUsed ────────────────────────────────────────────────────────
 
@@ -331,6 +343,32 @@ class TestRouterMediaLevels:
         seg = _route(_plan(media="EITHER"), {"visualMode": MIXED, "sourceProviders": ["wikimedia_commons", "pixabay", "pexels"]})
         assert seg["mediaDecision"]["resolvedKind"] == IMAGE
 
+    def test_auto_video_preferred_source_without_pexels_reconciles_to_image(self):
+        # source policy excludes pexels -> VIDEO never survives -> strategy
+        # reconciles to IMAGE, so no spurious runtime fallback is expected.
+        seg = _route(_plan(media="VIDEO_PREFERRED"), {"visualMode": AUTO, "sourceProviders": ["wikimedia_commons", "pixabay"]})
+        assert seg["mediaDecision"]["resolvedKind"] == IMAGE
+        assert seg["mediaDecision"]["runtimeAvailableKinds"] == [IMAGE]
+        assert VIDEO not in [c["mediaKind"] for c in seg["providerCandidates"]]
+        assert _providers(seg) == ["wikimedia_commons", "pixabay"]
+        assert seg["mediaDecision"]["preferenceStatus"] == "FALLBACK_UNAVAILABLE"
+        assert "MEDIA_PREFERENCE_UNAVAILABLE" in seg["mediaDecision"]["degradations"]
+
+    def test_auto_video_preferred_pexels_allowed_keeps_video_first(self):
+        seg = _route(_plan(media="VIDEO_PREFERRED"), {"visualMode": AUTO, "sourceProviders": ["wikimedia_commons", "pixabay", "pexels"]})
+        assert seg["mediaDecision"]["resolvedKind"] == VIDEO
+        assert _kinds(seg) == [VIDEO, IMAGE, IMAGE, IMAGE]
+
+    def test_hard_modes_still_single_kind_after_reconcile(self):
+        seg = _route(_plan(media="IMAGE_PREFERRED"), {"visualMode": VIDEOS_ONLY, "sourceProviders": ["wikimedia_commons", "pixabay", "pexels"]})
+        assert _kinds(seg) == [VIDEO]
+        assert seg["mediaDecision"]["resolvedKind"] == VIDEO
+
+    def test_source_providers_order_preserved_within_surviving_level(self):
+        seg = _route(_plan(media="IMAGE_PREFERRED"), {"visualMode": AUTO, "sourceProviders": ["pixabay", "wikimedia_commons", "pexels"]})
+        image_cands = [c for c in seg["providerCandidates"] if c["mediaKind"] == IMAGE]
+        assert [c["provider"] for c in image_cands] == ["pixabay", "wikimedia_commons", "pexels"]
+
 
 # ── Executor fallback ────────────────────────────────────────────────────────
 
@@ -456,6 +494,25 @@ class TestExecutorCrossMediaFallback:
         _apply_media_decision_outcome(resolved, seg)
         assert resolved["mediaFallback"] is True
         assert resolved["mediaFallbackReason"] == PREFERRED_MEDIA_EXHAUSTED
+
+    def test_semantic_postcondition_violation_preserves_media_decision(self, monkeypatch, tmp_path):
+        candidates = [dict(_resolved("pexels", VIDEO, 1, "pexels.video.stock"))]
+        plan = _exec_plan(_exec_segment(candidates, VIDEO))
+
+        def fake_resolve(provider, candidate, seg, provider_config, job_dir, warnings,
+                         asset_namespace=None, excluded_source_urls=None,
+                         excluded_file_urls=None, wikimedia_cache=None,
+                         provider_credentials=None):
+            return {**candidate, "status": "RESOLVED", "mediaKind": VIDEO,
+                    "searchQueryUsed": "penguins", "semanticAssessment": {"verdict": "IRRELEVANT"}}
+
+        monkeypatch.setattr("shorts_creator.assets.executor._try_live_resolution", fake_resolve)
+        result = execute_visual_sourcing_plan_v2(plan, _exec_provider_config(), dry_run=False, job_dir=str(tmp_path))
+        unresolved = result["unresolvedSegments"][0]
+        assert unresolved["status"] == "PROVIDER_ERROR"
+        assert "SEMANTIC POSTCONDITION" in unresolved["reason"]
+        assert unresolved["mediaDecision"]["resolvedKind"] == VIDEO
+        assert unresolved["mediaFallback"] is False
 
 
 # ── MIXED tracker (fetcher threading) ────────────────────────────────────────
