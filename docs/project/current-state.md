@@ -2,7 +2,7 @@
 
 **Última actualización:** 2026-08-20
 
-## Cambio activo: `web-ui-mvp` — IN PROGRESS (Slice 1 COMPLETED / TESTED / REVIEWED / APPROVED)
+## Cambio activo: `web-ui-mvp` — IN PROGRESS (Slice 1 COMPLETED / TESTED / REVIEWED / APPROVED; Slice 2 IMPLEMENTED / TESTED / APPROVED — pendiente commit; Slices 3/4 pendientes)
 
 - Objetivo: exponer el pipeline canónico (`run_pipeline`) a través de una pequeña Web UI
   (FastAPI + Angular) sin duplicar lógica de pipeline y sin romper la CLI.
@@ -33,8 +33,39 @@
   - Review formal (retry): **`SLICE_1_APPROVED`**; finding previo de identidad del
     metadata cargado CLOSED; triple invariante final `requested jobId == directorio
     canónico == metadata.jobId`.
-- **NO implementado todavía:** FastAPI, Angular, `JobService`, `JobExecutor`, repositorio,
-  estado de ejecución web, polling, rutas REST, persistence web, Docker.
+- **Slice 2 (IMPLEMENTED / TESTED / APPROVED, pendiente commit):** backend FastAPI en
+  `src/shorts_creator/web/` (`exceptions`, `dto`, `repository`, `projection`, `executor`,
+  `service`, `capabilities`, `dependencies`, `routes/{health,jobs,media}` y `app`).
+  - DTO allowlist estricto (`extra="forbid"`); errores centralizados con códigos estables
+    (`INVALID_JOB_REQUEST`, `INVALID_JOB_ID`, `JOB_NOT_FOUND`, `JOB_VIDEO_UNAVAILABLE`,
+    `JOB_EXECUTION_BUSY`, `INTERNAL_ERROR`); sin stderr/traceback/raw al navegador.
+  - `JobService` como autoridad "jobs visibles al caller" (UUID4 estricto backend-generated;
+    el API expone recursos de dominio, nunca filesystem — no acepta ni devuelve paths).
+  - Repo filesystem con sidecar atómico `web-job.json` (`os.replace` + fsync); SOLO jobs
+    Web-managed (dir con sidecar); `metadata.json` canónico no se expone crudo.
+  - `LocalJobExecutor` invoca el MISMO `run_pipeline` en proceso (max_workers=1, admitencia
+    1 activo + 1 cola; busy→`409` con sidecar INTERRUPTED; reconciliación de stale
+    QUEUED/RUNNING→INTERRUPTED; `run_pipeline()==0`→FINISHED, `!=0`/excepción→FAILED;
+    REVIEW_REQUIRED/ASSETS_PARTIAL con rc==0 quedan FINISHED).
+  - Proyección allowlist `metadata.json`→`JobResponse` con sanitización de
+    warnings/reviewReasons (`_UNSAFE_FRAGMENTS`), sin `childCommand`/`failure`/paths;
+    `pipelineStatus` = `metadata["status"]` (None hasta que el pipeline persiste metadata).
+  - Endpoints: `POST /api/v1/jobs` (202), `GET /jobs`, `GET /jobs/{id}`, `GET
+    /jobs/{id}/video` (inline), `GET /jobs/{id}/download`, `GET /health`, `GET
+    /capabilities` (derivado de enums/contratos canónicos — visual_media, router, duration,
+    audio — nunca hardcoded; sin leak de claves).
+  - `Range` iniciado por Starlette nativo en `/video`: `Range: bytes=0-99` → `206` con
+    `Content-Range` y ventana exacta.
+  - Lifecycle/lifespan: wiring de producción (repo+executor+service) se construye DENTRO del
+    lifespan (no en import de módulo → sin pool sin cleanup); reconciliación de stale una
+    vez al arrancar; `executor.shutdown()` en `finally` al apagar (garantizado ante salida
+    excepcional).
+  - requirements.txt: +fastapi/uvicorn/httpx. 60 tests web (`tests/test_web_*` +
+    `test_web_lifecycle`); suite completa `1971 passed, 0 failed`; `git diff --check` limpio.
+  - Smoke production lifespan PASSED (wiring en startup, reconcile 1 vez, `_shutdown=True`
+    al salir). Ver `openspec/changes/web-ui-mvp/specs/job-api.md`.
+- **NO implementado todavía:** Angular (Slice 3), executor/servidor Uvicorn de despliegue
+  (Slice 4), polling, autenticación, persitencia avanzada, Docker/UI.
 - **Seguridad/API de diseño planificada y especificada, NO desplegada:** API nunca acepta/
   devuelve paths; recursos job-scoped por UUID; DTO allowlist; errores centralizados
   saneados; UUID no es autorización. Ver `openspec/changes/web-ui-mvp/specs/web-security.md`.

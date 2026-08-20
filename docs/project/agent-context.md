@@ -1,6 +1,6 @@
 # Agent Context
 
-## Active Change: web-ui-mvp — IN PROGRESS (Slice 1 APPROVED, committed; Slices 2/3/4 pending)
+## Active Change: web-ui-mvp — IN PROGRESS (Slice 1 APPROVED, committed; Slice 2 IMPLEMENTED / TESTED / APPROVED, commit autorizado; Slice 3/4 pending)
 
 - Rama `change/web-ui-mvp`, baseline `main` `059552d`, Slice 1 committed (`caa33c5`).
 - Objetivo: exponer `run_pipeline` (runner canónico) a través de una pequeña Web UI
@@ -23,8 +23,27 @@
   metadata cargado no validada); fix `_validate_explicit_metadata_identity`; Review retry
   `SLICE_1_APPROVED` con F1 CLOSED. Triple invariante final:
   `requested jobId == directorio canónico == metadata.jobId`.
-- Siguiente trabajo: **Slice 2 Backend / Job API** (FastAPI). Slices 3/4 (Angular, executor)
-  son PLANNED, NO implementados.
+- Siguiente trabajo: **Slice 2 Backend / Job API** (FastAPI). Slice 3 (Angular) y Slice 4
+  (executor/servidor real) son PLANNED, NO implementados. El task "executor web" se completó
+  dentro del propio Slice 2 con `LocalJobExecutor` (max_workers=1, admisión acotada, reconciliación
+  de stale QUEUED/RUNNING→INTERRUPTED); el servidor Uvicorn queda para el despliegue del Slice 4.
+- Slice 2 (implementado en rama, **APPROVED**, commit autorizado `feat(web): add backend job API`):
+  backend FastAPI en `src/shorts_creator/web/`
+  (`exceptions`, `dto`, `repository`, `projection`, `executor`, `service`, `capabilities`,
+  `dependencies`, `routes/{health,jobs,media}`, `app`). DTO allowlist (extra="forbid"), errores
+  centralizados con códigos estables, JobService como autoridad "jobs visibles al caller", repo
+  filesystem con sidecar atómico `web-job.json` (solo jobs Web-managed), LocalJobExecutor invoca el
+  MISMO `run_pipeline` en proceso (1 activo + 1 cola; busy→409 con sidecar INTERRUPTED), proyección
+  allowlist de `metadata.json`→JobResponse con sanitización de warnings/reviewReasons y sin
+  childCommand/failure/paths. `POST /api/v1/jobs` 202, `GET /jobs`, `GET /jobs/{id}`, `GET
+  /jobs/{id}/video` (inline), `GET /jobs/{id}/download`, `GET /health`, `GET /capabilities`.
+  Capabilities derivados de los enums/contratos canónicos (visual_media, router, duration, audio),
+  nunca hardcoded; sin leak de claves. Lifecycle/lifespan: wiring de producción dentro del lifespan
+  (no en import; sin pool sin cleanup), reconciliación de stale una vez al arrancar y
+  `executor.shutdown()` en `finally` al apagar. Range nativo → 206 en `/video`.
+  requirements.txt: +fastapi/uvicorn/httpx. 60 tests web (`tests/test_web_*` + `test_web_lifecycle`);
+  suite completa `1971 passed`; diff-check limpio; smoke production lifespan PASSED.
+- Corrección docs (tasks.md→agente): el executor web ya NO es Slice 4; se implementó en Slice 2.
 
 ### Seguridad — invariantes (HIGH PRIORITY, especificado no desplegado)
 - El Web API expone RECURSOS DE DOMINIO, nunca FILESYSTEM.

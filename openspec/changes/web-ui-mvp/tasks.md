@@ -2,7 +2,8 @@
 
 Cambio único `change/web-ui-mvp`, cuatro slices.
 
-**Estado general: IN PROGRESS — Slice 1 aprobado y committed; Slices 2/3/4 pending.**
+**Estado general: IN PROGRESS — Slice 1 aprobado y committed; Slice 2 IMPLEMENTED / TESTED /
+APPROVED (commit autorizado); Slices 3/4 pending.**
 No marcar el cambio global como completo.
 
 > OpenSpec regularizado después de la implementación de Slice 1 y antes del Review formal
@@ -47,21 +48,26 @@ No marcar el cambio global como completo.
 
 ## Slice 2 — Backend / Job API
 
-Estado: PENDING `[ ]`.
+**Estado: IMPLEMENTED / TESTED / APPROVED** (commit autorizado: `feat(web): add backend job API`).
 
-- [ ] Shell FastAPI (`web/backend`).
-- [ ] DTOs de request/respuesta (allowlist).
-- [ ] `/api/v1/capabilities` (modos visuales/providers/voices desde enums canónicos).
-- [ ] `JobService`.
-- [ ] Límite `JobRepository` (implementación por archivo permitida).
-- [ ] `LocalJobExecutor` (max concurrency 1).
-- [ ] Estado de ejecución web por job (`QUEUED|RUNNING|FINISHED|INTERRUPTED|FAILED`).
-- [ ] Proyección de polling (`currentStage`, `lastCompletedStage`, `pipelineStatus`,
-      `hasMp4`, warnings, reviewReasons).
-- [ ] Mapeo centralizado de excepciones (códigos estables + mensajes saneados).
-- [ ] Preview/download MP4 seguros y job-scoped.
-- [ ] Sin exposición de paths (frontend nunca envía/recibe paths).
-- [ ] Tests.
+- [x] Shell FastAPI (`web/backend`) en `src/shorts_creator/web/` (`app`, `dependencies`,
+      `routes/{health,jobs,media}`).
+- [x] DTOs de request/respuesta (allowlist estricto, `extra="forbid"`).
+- [x] `/api/v1/capabilities` (modos visuales/providers/voices desde enums canónicos).
+- [x] `JobService`.
+- [x] Límite `JobRepository` (implementación por archivo con sidecar atómico `web-job.json`).
+- [x] `LocalJobExecutor` (max concurrency 1, admitencia 1 activo + 1 cola, reconciliación de
+      stale QUEUED/RUNNING→INTERRUPTED).
+- [x] Estado de ejecución web por job (`QUEUED|RUNNING|FINISHED|INTERRUPTED|FAILED`).
+- [x] Proyección de polling (`currentStage`, `lastCompletedStage`, `pipelineStatus`,
+      `has_video`, warnings, reviewReasons).
+- [x] Mapeo centralizado de excepciones (códigos estables + mensajes saneados).
+- [x] Preview/download MP4 seguros y job-scoped (con `Range` nativo → 206).
+- [x] Sin exposición de paths (frontend nunca envía/recibe paths).
+- [x] Wiring de producción dentro del lifespan (no en import): reconciliación de stale una
+      vez al arrancar y `executor.shutdown()` en `finally` al apagar.
+- [x] Tests: 60 (`tests/test_web_*` + `test_web_lifecycle`); suite completa
+      `1971 passed, 0 failed`; `git diff --check` limpio.
 
 ## Slice 3 — UI Angular
 
