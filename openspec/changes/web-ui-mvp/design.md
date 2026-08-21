@@ -1,15 +1,17 @@
 # Design: web-ui-mvp
 
-> **Estado:** IN PROGRESS — Slice 1 implementado, pending formal Review. Slice 2/3/4
-> PLANNED. Especifica la arquitectura objetivo aprobada. Los componentes futuros se
-> marcan explícitamente como **PLANNED** (no implementados todavía).
+> **Estado:** IN PROGRESS — Slices 1, 2 y 3 implementados, revisados y committed.
+> Slice 4 en redefinición tras extraer el frontend Angular a un repositorio independiente.
+> El backend Python/FastAPI permanece en este repositorio y el frontend se integra
+> exclusivamente mediante el contrato HTTP.
 
 ## Arquitectura objetivo
 
 ```text
+shorts-creator-web (repositorio independiente)
 Angular
-   ↓
-FastAPI
+   ↓ HTTP / JSON
+FastAPI (este repositorio)
    ↓
 JobService
    ├── JobRepository

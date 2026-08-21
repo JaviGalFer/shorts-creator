@@ -109,6 +109,16 @@ def test_capabilities_do_not_leak_secret_values():
     for marker in ("ELEVENLABS_API_KEY", "sk-", "API_KEY="):
         assert marker not in txt
 
+def test_capabilities_expose_provider_and_media_kind():
+    from shorts_creator.web.capabilities import build_capabilities
+
+    providers = [provider.model_dump() for provider in build_capabilities().providers]
+
+    assert all("provider" in provider for provider in providers)
+    assert all("media_kind" in provider for provider in providers)
+
+    pexels = [provider for provider in providers if provider["provider"] == "pexels"]
+    assert {provider["media_kind"] for provider in pexels} == {"IMAGE", "VIDEO"}
 
 def test_health_shape_ok():
     from shorts_creator.web.dto import HealthResponse

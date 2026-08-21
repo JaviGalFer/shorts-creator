@@ -74,6 +74,11 @@ No marcar el cambio global como completo.
 
 **Estado: IMPLEMENTED / TESTED / REVIEWED / APPROVED / COMMITTED.**
 
+> Nota post-Slice 3: el workspace Angular fue implementado y aprobado originalmente bajo
+> `web/frontend/`. Durante la redefinición de Slice 4 se extrajo sin reimplementación a un
+> repositorio Git independiente `shorts-creator-web`; la separación no altera la evidencia
+> ni la aprobación histórica de Slice 3.
+
 Rebuild arquitectónico bajo `web/frontend/` (el spike anterior en `frontend/` fue descartado y
 eliminado). Angular 21.2.x standalone (sin `AppModule`), feature-first, según la skill
 `angular-architecture`. Review formal: `SLICE_3_APPROVED`.
@@ -103,16 +108,25 @@ eliminado). Angular 21.2.x standalone (sin `AppModule`), feature-first, según l
       transfer). Backend `python3 -m pytest -q tests`: `1971 passed, 0 failed`.
       `git diff --check` limpio.
 
-## Slice 4 — Integración / hardening
+## Slice 4 — Separación / integración / hardening
 
-Estado: PENDING.
+Estado: IN PROGRESS — topología single-container descartada antes de aprobación del slice.
 
-- [ ] Build de producción Angular servido con/por FastAPI (topología single container).
-- [ ] Volumen persistente `data/videos`.
-- [ ] Documentación (un worker Uvicorn mientras executor en memoria).
-- [ ] Revisión final de estructura/secretos/trazabilidad.
-- [ ] Suite completa + `git diff --check` + smoke real.
-- [ ] Cierre (results.md + docs + commit autorizado).
+- [x] Extraer el workspace Angular a un repositorio Git independiente
+      `shorts-creator-web`, preservando el estado funcional del frontend.
+- [x] Validar frontend aislado: 54 tests passed y build de producción OK.
+- [ ] Retirar de este repositorio `web/frontend/` y el WIP de serving estático Angular
+      desde FastAPI / Docker single-container.
+- [ ] Preservar y validar el contrato de capabilities requerido por la UI
+      (`provider` + `media_kind`).
+- [ ] Mantener integración frontend ↔ backend exclusivamente mediante HTTP/API;
+      desarrollo local mediante proxy del frontend.
+- [ ] Documentar un worker Uvicorn mientras `LocalJobExecutor` permanezca en memoria.
+- [ ] Revisión final focalizada de estructura, secretos, contrato HTTP y trazabilidad.
+- [ ] Suite backend completa + `git diff --check`.
+- [ ] Frontend: tests + build en `shorts-creator-web`.
+- [ ] Smoke real frontend ↔ API.
+- [ ] Cierre (`results.md` + documentación + commit autorizado).
 
 ## Fuera de alcance (no implementar)
 
