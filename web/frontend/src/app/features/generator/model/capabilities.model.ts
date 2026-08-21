@@ -1,9 +1,27 @@
 export interface ProviderCapability {
   id: string;
+  provider: string;
+  mediaKind: string;
   sourceType: string;
   queryStrategy: string;
   runtimeStatus: string;
   requiresApiKey: boolean;
+}
+
+/**
+ * One selectable row in the "Proveedores de assets" form control.
+ *
+ * A provider (e.g. Pexels) may expose more than one `ProviderCapability`
+ * (photo + video). The form lets the user opt in per PROVIDER, not per
+ * capability, matching the backend's `request.visuals.sourceProviders`
+ * contract — so capabilities are grouped by `provider` before rendering.
+ */
+export interface ProviderOption {
+  provider: string;
+  label: string;
+  mediaKinds: string[];
+  requiresApiKey: boolean;
+  available: boolean;
 }
 
 export interface DurationPreset {

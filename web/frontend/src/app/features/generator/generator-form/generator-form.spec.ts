@@ -5,12 +5,37 @@ import { GeneratorForm } from './generator-form';
 import type { Capabilities } from '../model/capabilities.model';
 
 const capabilities: Capabilities = {
-  visualModes: ['AUTO', 'MIXED'],
+  visualModes: ['AUTO', 'IMAGES_ONLY', 'VIDEOS_ONLY', 'MIXED'],
   mediaPreferences: [],
   assetPreferences: [],
   providers: [
-    { id: 'pexels', sourceType: 'STOCK', queryStrategy: 'SEARCH', runtimeStatus: 'AVAILABLE', requiresApiKey: true },
-    { id: 'wikimedia_commons', sourceType: 'SEARCH', queryStrategy: 'SEARCH', runtimeStatus: 'AVAILABLE', requiresApiKey: false },
+    {
+      id: 'wikimedia_commons.image.stock',
+      provider: 'wikimedia_commons',
+      mediaKind: 'IMAGE',
+      sourceType: 'STOCK',
+      queryStrategy: 'SEARCH',
+      runtimeStatus: 'AVAILABLE',
+      requiresApiKey: false,
+    },
+    {
+      id: 'pexels.photos.stock',
+      provider: 'pexels',
+      mediaKind: 'IMAGE',
+      sourceType: 'STOCK',
+      queryStrategy: 'SEARCH',
+      runtimeStatus: 'AVAILABLE',
+      requiresApiKey: true,
+    },
+    {
+      id: 'pexels.video.stock',
+      provider: 'pexels',
+      mediaKind: 'VIDEO',
+      sourceType: 'STOCK',
+      queryStrategy: 'SEARCH',
+      runtimeStatus: 'AVAILABLE',
+      requiresApiKey: true,
+    },
   ],
   duration: {
     presets: [
@@ -37,6 +62,7 @@ describe('GeneratorForm', () => {
     fixture = TestBed.createComponent(GeneratorForm);
     component = fixture.componentInstance;
     component.capabilities = capabilities;
+    component.ngOnChanges({ capabilities: {} as never });
     fixture.detectChanges();
   });
 
@@ -115,5 +141,63 @@ describe('GeneratorForm', () => {
 
     component.toggleProvider('pexels', { target: { checked: false } } as unknown as Event);
     expect(component.form.controls.assetProviders.value).toEqual(['wikimedia_commons']);
+  });
+
+  it('groups capability rows by plain provider name, merging photo + video', () => {
+    const groups = component.providerGroups;
+
+    expect(groups).toHaveLength(2);
+    const pexels = groups.find((g) => g.provider === 'pexels');
+    expect(pexels).toBeTruthy();
+    expect(pexels?.label).toBe('Pexels');
+    expect(pexels?.mediaKinds.sort()).toEqual(['IMAGE', 'VIDEO']);
+    expect(pexels?.requiresApiKey).toBe(true);
+
+    const wikimedia = groups.find((g) => g.provider === 'wikimedia_commons');
+    expect(wikimedia?.label).toBe('Wikimedia Commons');
+    expect(wikimedia?.mediaKinds).toEqual(['IMAGE']);
+  });
+
+  it('blocks submission for VIDEOS_ONLY without a video-capable provider selected', () => {
+    component.form.patchValue({ topic: 'Delfines', visualMode: 'VIDEOS_ONLY' });
+
+    expect(component.form.invalid).toBe(true);
+    expect(component.hasVideoProviderConflict).toBe(true);
+
+    const emitted = vi.fn();
+    component.generate.subscribe(emitted);
+    component.submit();
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  it('allows VIDEOS_ONLY once a video-capable provider (pexels) is selected', () => {
+    component.form.patchValue({ topic: 'Delfines', visualMode: 'VIDEOS_ONLY' });
+    component.toggleProvider('pexels', { target: { checked: true } } as unknown as Event);
+
+    expect(component.hasVideoProviderConflict).toBe(false);
+    expect(component.form.valid).toBe(true);
+
+    const emitted = vi.fn();
+    component.generate.subscribe(emitted);
+    component.submit();
+    expect(emitted).toHaveBeenCalledWith({
+      topic: 'Delfines',
+      visualMode: 'VIDEOS_ONLY',
+      assetProviders: ['pexels'],
+    });
+  });
+
+  it('does not block AUTO or IMAGES_ONLY without any asset provider selected', () => {
+    component.form.patchValue({ topic: 'Delfines', visualMode: 'AUTO' });
+    expect(component.hasVideoProviderConflict).toBe(false);
+
+    component.form.patchValue({ visualMode: 'IMAGES_ONLY' });
+    expect(component.hasVideoProviderConflict).toBe(false);
+  });
+
+  it('only surfaces the video-provider error once the person touched visualMode or providers', () => {
+    component.form.patchValue({ topic: 'Delfines', visualMode: 'VIDEOS_ONLY' });
+    // patchValue marks the control dirty, matching real select interaction.
+    expect(component.showVideoProviderConflict).toBe(true);
   });
 });

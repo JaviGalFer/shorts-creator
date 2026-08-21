@@ -61,7 +61,9 @@ describe('shorts-api mapper', () => {
       asset_preferences: ['photograph'],
       providers: [
         {
-          id: 'pexels',
+          id: 'pexels.video.stock',
+          provider: 'pexels',
+          media_kind: 'VIDEO',
           source_type: 'STOCK',
           query_strategy: 'SEARCH',
           runtime_status: 'AVAILABLE',
@@ -85,7 +87,9 @@ describe('shorts-api mapper', () => {
     expect(capabilities.assetPreferences).toEqual(['photograph']);
     expect(capabilities.providers).toEqual([
       {
-        id: 'pexels',
+        id: 'pexels.video.stock',
+        provider: 'pexels',
+        mediaKind: 'VIDEO',
         sourceType: 'STOCK',
         queryStrategy: 'SEARCH',
         runtimeStatus: 'AVAILABLE',

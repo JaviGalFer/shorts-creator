@@ -1,0 +1,27 @@
+# Docker ignore for web-ui-mvp Slice 4
+node_modules
+npm-debug.log
+yarn-error.log
+.git
+.gitignore
+.gitattributes
+Dockerfile
+.dockerignore
+README.md
+.tmp
+.tests
+coverage
+# Runtime data tree — must be mounted at runtime, not baked into the image
+data/
+# Environment files — keep local only
+.env
+.env.*
+# Node build artifacts
+dist
+# Coverage and evaluation artifacts
+coverage
+# CI / test artifacts
+.tmp
+.tests
+# Evaluation data (holdout sets, contact sheets, etc.)
+data/evaluations

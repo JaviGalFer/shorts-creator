@@ -41,6 +41,8 @@ def build_capabilities() -> CapabilitiesResponse:
     providers = [
         ProviderCapabilityResponse(
             id=cap.capability_id,
+            provider=cap.provider,
+            media_kind=cap.media_kind,
             source_type=cap.source_type,
             query_strategy=cap.query_strategy,
             runtime_status=cap.runtime_status,

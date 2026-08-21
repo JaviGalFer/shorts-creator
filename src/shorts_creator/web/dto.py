@@ -101,6 +101,8 @@ class ProviderCapabilityResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
+    provider: str
+    media_kind: str
     source_type: str
     query_strategy: str
     runtime_status: str

@@ -33,6 +33,8 @@ export interface HealthResponseDto {
 
 export interface ProviderCapabilityDto {
   id: string;
+  provider: string;
+  media_kind: string;
   source_type: string;
   query_strategy: string;
   runtime_status: string;

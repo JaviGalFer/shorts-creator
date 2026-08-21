@@ -26,6 +26,8 @@ export function mapJob(dto: JobResponseDto): Job {
 export function mapProvider(p: CapabilitiesDto['providers'][number]): ProviderCapability {
   return {
     id: p.id,
+    provider: p.provider,
+    mediaKind: p.media_kind,
     sourceType: p.source_type,
     queryStrategy: p.query_strategy,
     runtimeStatus: p.runtime_status,
