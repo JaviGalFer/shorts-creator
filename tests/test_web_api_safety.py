@@ -144,3 +144,17 @@ def test_capabilities_endpoint_http():
 
     pexels = [p for p in providers if p["provider"] == "pexels"]
     assert {p["media_kind"] for p in pexels} == {"IMAGE", "VIDEO"}
+
+
+def test_capabilities_endpoint_http_no_secret_leak():
+    from fastapi.testclient import TestClient
+
+    from shorts_creator.web.app import create_app
+
+    app = create_app()
+    c = TestClient(app)
+    resp = c.get("/api/v1/capabilities")
+    assert resp.status_code == 200
+    txt = resp.text
+    for marker in ("ELEVENLABS_API_KEY", "sk-", "API_KEY="):
+        assert marker not in txt
