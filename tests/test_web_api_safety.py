@@ -125,3 +125,22 @@ def test_health_shape_ok():
 
     h = HealthResponse()
     assert h.status == "ok"
+
+
+def test_capabilities_endpoint_http():
+    from fastapi.testclient import TestClient
+
+    from shorts_creator.web.app import create_app
+
+    app = create_app()
+    c = TestClient(app)
+    resp = c.get("/api/v1/capabilities")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    providers = data["providers"]
+    assert all("provider" in p for p in providers)
+    assert all("media_kind" in p for p in providers)
+
+    pexels = [p for p in providers if p["provider"] == "pexels"]
+    assert {p["media_kind"] for p in pexels} == {"IMAGE", "VIDEO"}
