@@ -7,6 +7,11 @@
     "reserved": 3000
   },
 
+  "permission": {
+    "task": "deny",
+    "skill": "deny"
+  },
+
   "watcher": {
     "ignore": [
       ".git/**",
