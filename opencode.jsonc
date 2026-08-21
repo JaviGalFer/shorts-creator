@@ -1,10 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
 
-  "instructions": [
-    "docs/project/agent-context.md"
-  ],
-
   "compaction": {
     "auto": true,
     "prune": true,
@@ -33,7 +29,7 @@
         "/home/javi/.local/bin/codebase-memory-mcp"
       ],
       "cwd": "/home/javi/projects/shorts-creator",
-      "enabled": true,
+      "enabled": false,
       "timeout": 15000,
       "environment": {
         "CBM_ALLOWED_ROOT": "/home/javi/projects/shorts-creator",
