@@ -115,13 +115,13 @@ Estado: IN PROGRESS — topología single-container descartada antes de aprobaci
 - [x] Extraer el workspace Angular a un repositorio Git independiente
       `shorts-creator-web`, preservando el estado funcional del frontend.
 - [x] Validar frontend aislado: 54 tests passed y build de producción OK.
-- [ ] Retirar de este repositorio `web/frontend/` y el WIP de serving estático Angular
+- [x] Retirar de este repositorio `web/frontend/` y el WIP de serving estático Angular
       desde FastAPI / Docker single-container.
-- [ ] Preservar y validar el contrato de capabilities requerido por la UI
+- [x] Preservar y validar el contrato de capabilities requerido por la UI
       (`provider` + `media_kind`).
-- [ ] Mantener integración frontend ↔ backend exclusivamente mediante HTTP/API;
+- [x] Mantener integración frontend ↔ backend exclusivamente mediante HTTP/API;
       desarrollo local mediante proxy del frontend.
-- [ ] Documentar un worker Uvicorn mientras `LocalJobExecutor` permanezca en memoria.
+- [x] Documentar un worker Uvicorn mientras `LocalJobExecutor` permanezca en memoria.
 - [ ] Revisión final focalizada de estructura, secretos, contrato HTTP y trazabilidad.
 - [ ] Suite backend completa + `git diff --check`.
 - [ ] Frontend: tests + build en `shorts-creator-web`.
