@@ -1,87 +1,43 @@
-# AGENTS.md — Shorts Creator
+# shorts-creator
 
-Reglas de trabajo para agentes que operan sobre este repositorio.
+Python backend and media pipeline for Shorts Creator. The Angular frontend lives in the separate `shorts-creator-web` repository and integrates only through HTTP.
 
-## Contexto inicial
+## Architecture
 
-- AGENTS.md se aplica automáticamente como regla de proyecto.
-- `docs/project/agent-context.md` es el contexto operativo caliente. Detalle en `docs/project/current-state.md`.
-- No cargar `docs/sessions/`, `openspec/changes/` ni skills por defecto al iniciar.
-- Abrir documentación detallada (current-state, OpenSpec, sessions, arquitectura) solo cuando la tarea lo requiera.
-- Leer un OpenSpec concreto solo cuando agent-context.md indique explícitamente un cambio activo y la tarea esté relacionada, o cuando la propia tarea lo requiera explícitamente.
-- El proyecto es un generador automatizado y configurable de vídeos cortos. El pipeline vigente es V2-only, orquestado por `bin/run_job.py` (`script → assets → audio → prepare → render → validate`). n8n es infraestructura legacy o alternativa, no el orquestador canónico.
+- V2-only pipeline.
+- `run_pipeline()` is the canonical reusable pipeline boundary.
+- `bin/run_job.py` is a thin CLI adapter, not the Web API boundary.
+- `src/shorts_creator/web/` contains the FastAPI backend only.
+- Preserve existing module boundaries under `src/shorts_creator/`.
+- Do not introduce new architectural layers unless explicitly required.
 
-## Exploración
+## API invariants
 
-- Prohibida la exploración masiva del repositorio.
-- Leer solo archivos necesarios para la tarea.
-- Prohibido inspeccionar `data/`, `logs/`, renders, assets generados, audio, vídeo, imágenes o metadata de jobs salvo necesidad directa.
-- No ejecutar el pipeline completo salvo petición explícita.
+- Frontends never send or receive local filesystem paths.
+- Web job resources use opaque job IDs.
+- Video preview/download remain job-scoped HTTP resources.
+- Never expose raw metadata, subprocess commands, stdout/stderr, secrets, or internal paths.
+- Do not change existing API or pipeline contracts outside task scope.
 
-## Niveles de cambio
+## Token-efficient workflow
 
-| Nivel | Ámbito | OpenSpec | Sesión |
-|-------|--------|----------|--------|
-| 0 | Corrección local o documental pequeña | No | No |
-| 1 | Cambio acotado dentro de una parte existente | No requerido | Opcional si deja decisión útil |
-| 2 | Arquitectura, contratos entre etapas, persistencia, integración externa, formato de datos, cambio entre componentes | Requerido | Requerida (cierre) |
+- Inspect only files directly relevant to the requested change and their direct dependencies.
+- Do not scan the repository globally unless explicitly required.
+- Do not inspect `data/`, `logs/`, generated media, job artifacts, or historical sessions unless directly required.
+- Do not load OpenSpec, project docs, skills, MCP, or historical context by default.
+- Load only the specific additional document needed when the task explicitly requires it.
+- Do not launch subagents by default.
+- Do not perform separate Plan, Review, or Closure phases unless explicitly requested or justified by concrete risk/findings.
+- Do not refactor unrelated code.
+- Prefer focused tests during implementation.
+- Run the full suite at most once at the end when the change warrants it.
+- Keep shell/test output concise.
 
-## Trazabilidad
+## Git
 
-- Solo cambios Nivel 2 requieren OpenSpec y sesión obligatorios.
-- Las sesiones son historial frío. No crear sesiones por cada cambio pequeño.
-- OpenSpec no se usa para microcambios.
+- `main` is stable; implementation uses dedicated branches.
+- Do not create, switch, merge, commit, or push unless explicitly authorized.
 
-## Skills y agentes
+## Verification
 
-- Skills solo bajo demanda. No cargar skills al iniciar.
-- Agentes especializados solo se invocan cuando su dominio es directamente relevante.
-- No lanzar subagentes para tareas pequeñas.
-
-## Workflow Git
-
-- `main` = estable; la implementación nunca se hace directamente en `main`.
-- Cada trabajo/change usa una rama dedicada; formato preferido `change/<slug>` para changes.
-- Review y Build verifican que la rama es la correcta antes de modificar.
-- Merge a `main` solo tras validación/cierre.
-- No crear, cambiar ni mergear ramas salvo autorización explícita de la tarea.
-
-### Model routing and token economy
-
-When selecting a model, variant, execution limit, or fallback, load the
-`model-routing-and-token-economy` skill. Its policy is based on the audited
-evidence in `docs/research/opencode-free-models-benchmark-r1.md`.
-
-Declare the model and variant explicitly for every session, agent, or command.
-Do not rely on implicit model inheritance. Load this skill only when routing or
-token-economy decisions are required.
-
-### Agentes disponibles
-
-| Agente | Rol |
-|--------|-----|
-| `@project-architect` | Arquitectura, ADRs, documentación técnica |
-| `@n8n-workflow-engineer` | Diseño y validación de workflows n8n |
-| `@video-pipeline-engineer` | Pipeline FFmpeg, formatos, assets |
-| `@integration-researcher` | Investigación de APIs y servicios externos |
-| `@quality-and-ops-reviewer` | Revisión de estructura, secretos y trazabilidad |
-
-### Skills disponibles
-
-| Skill | Propósito |
-|-------|-----------|
-| `project-session-management` | Iniciar/cerrar sesiones, crear bitácoras |
-| `openspec-change-management` | Crear, revisar y cerrar cambios OpenSpec |
-| `integration-validation` | Investigar servicios externos y registrar evidencia |
-| `n8n-workflow-design` | Diseñar workflows n8n robustos |
-| `video-rendering-ffmpeg` | Diseñar renders verticales con FFmpeg |
-| `media-rights-and-safety` | Verificar licencias y atribuciones |
-| `secrets-and-environment` | Gestionar .env, secretos y configuración |
-
-## Enlaces
-
-- Contexto operativo: `docs/project/agent-context.md`
-- Contexto legacy: `HANDOVER.md`
-- Arquitectura: `docs/project/architecture.md`
-- Integraciones: `docs/project/integrations.md`
-- Cambio activo si aplica: indicado en `agent-context.md`
+Git, pytest, linters, type checkers, and runtime tooling are authoritative over assumptions.

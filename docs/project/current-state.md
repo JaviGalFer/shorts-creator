@@ -2,6 +2,99 @@
 
 **Última actualización:** 2026-08-20
 
+## Cambio activo: `web-ui-mvp` — IN PROGRESS (Slice 1 APPROVED/committed; Slice 2 APPROVED/committed `f0d2efa`; Slice 3 IMPLEMENTED / TESTED / REVIEWED / APPROVED / COMMITTED; Slice 4 pendiente)
+
+- Objetivo: exponer el pipeline canónico (`run_pipeline`) a través de una pequeña Web UI
+  (FastAPI + Angular) sin duplicar lógica de pipeline y sin romper la CLI.
+- Rama `change/web-ui-mvp`; baseline `main` `059552d`; Slice 1 committed (`caa33c5`).
+- **Slice 1 (COMPLETED / TESTED / REVIEWED / APPROVED):** límite de invocación reutilizable
+  con identidad de job explícita.
+  - `run_pipeline(job_id=<id seguro>)` → `build_script_command` → `bin/generate_script.py
+    --job-id` → `generate_script(job_id=...)` → `data/videos/<jobId>/metadata.json` →
+    `metadata["jobId"] == jobId`.
+  - Identidad única: `API jobId == directorio jobId == metadata.jobId`.
+  - `job_id=None` → comportamiento CLI histórico (ID derivado de topic) intacto.
+  - **Sin** `output_dir` arbitrario añadido a `run_pipeline`.
+  - `validate_job_id` rechaza traversal/separadores/control/vacío.
+  - Hardening pre-Review:
+    - Fail-fast: `job_id` explícito se valida en la entrada de `generate_script`, antes de
+      LLM/red/retries/rutas (`INVALID_JOB_ID` sin `call_llm`).
+    - `job_id` explícito + `--output` arbitrario: `JOB_ID_OUTPUT_CONFLICT` (antes de
+      LLM/red/filesystem); `--job-id`/`--output` mutuamente excluyentes en CLI; `--output`
+      sin `--job-id` sigue intacto.
+    - Ruta canónica autoritativa en `run_pipeline` para ID explícito: se rechaza el
+      `parsed["path"]` ajeno y el `jobId` discrepante (`SCRIPT_OUTPUT_CONTRACT_VIOLATION`);
+      `job_id=None` conserva descubrimiento por stdout.
+    - Identidad del metadata cargado: `_validate_explicit_metadata_identity` exige
+      `metadata["jobId"] == job_id` en ramas de éxito y de fallo, ANTES de mutar el archivo
+      (`SCRIPT_OUTPUT_CONTRACT_VIOLATION`).
+  - Tests: 33 dirigidos (`tests/test_run_job_job_id.py`); suite completa
+    `1913 passed, 0 failed`; `git diff --check` limpio.
+  - Review formal (retry): **`SLICE_1_APPROVED`**; finding previo de identidad del
+    metadata cargado CLOSED; triple invariante final `requested jobId == directorio
+    canónico == metadata.jobId`.
+- **Slice 2 (IMPLEMENTED / TESTED / APPROVED, committed `f0d2efa`):** backend FastAPI en
+  `src/shorts_creator/web/` (`exceptions`, `dto`, `repository`, `projection`, `executor`,
+  `service`, `capabilities`, `dependencies`, `routes/{health,jobs,media}` y `app`).
+  - DTO allowlist estricto (`extra="forbid"`); errores centralizados con códigos estables
+    (`INVALID_JOB_REQUEST`, `INVALID_JOB_ID`, `JOB_NOT_FOUND`, `JOB_VIDEO_UNAVAILABLE`,
+    `JOB_EXECUTION_BUSY`, `INTERNAL_ERROR`); sin stderr/traceback/raw al navegador.
+  - `JobService` como autoridad "jobs visibles al caller" (UUID4 estricto backend-generated;
+    el API expone recursos de dominio, nunca filesystem — no acepta ni devuelve paths).
+  - Repo filesystem con sidecar atómico `web-job.json` (`os.replace` + fsync); SOLO jobs
+    Web-managed (dir con sidecar); `metadata.json` canónico no se expone crudo.
+  - `LocalJobExecutor` invoca el MISMO `run_pipeline` en proceso (max_workers=1, admitencia
+    1 activo + 1 cola; busy→`409` con sidecar INTERRUPTED; reconciliación de stale
+    QUEUED/RUNNING→INTERRUPTED; `run_pipeline()==0`→FINISHED, `!=0`/excepción→FAILED;
+    REVIEW_REQUIRED/ASSETS_PARTIAL con rc==0 quedan FINISHED).
+  - Proyección allowlist `metadata.json`→`JobResponse` con sanitización de
+    warnings/reviewReasons (`_UNSAFE_FRAGMENTS`), sin `childCommand`/`failure`/paths;
+    `pipelineStatus` = `metadata["status"]` (None hasta que el pipeline persiste metadata).
+  - Endpoints: `POST /api/v1/jobs` (202), `GET /jobs`, `GET /jobs/{id}`, `GET
+    /jobs/{id}/video` (inline), `GET /jobs/{id}/download`, `GET /health`, `GET
+    /capabilities` (derivado de enums/contratos canónicos — visual_media, router, duration,
+    audio — nunca hardcoded; sin leak de claves).
+  - `Range` iniciado por Starlette nativo en `/video`: `Range: bytes=0-99` → `206` con
+    `Content-Range` y ventana exacta.
+  - Lifecycle/lifespan: wiring de producción (repo+executor+service) se construye DENTRO del
+    lifespan (no en import de módulo → sin pool sin cleanup); reconciliación de stale una
+    vez al arrancar; `executor.shutdown()` en `finally` al apagar (garantizado ante salida
+    excepcional).
+  - requirements.txt: +fastapi/uvicorn/httpx. 60 tests web (`tests/test_web_*` +
+    `test_web_lifecycle`); suite completa `1971 passed, 0 failed`; `git diff --check` limpio.
+  - Smoke production lifespan PASSED (wiring en startup, reconcile 1 vez, `_shutdown=True`
+    al salir). Ver `openspec/changes/web-ui-mvp/specs/job-api.md`.
+- **Slice 3 (IMPLEMENTED / TESTED / REVIEWED / APPROVED / COMMITTED):** rebuild arquitectónico
+  de la UI Angular bajo `web/frontend/` (el spike anterior en `frontend/` fue descartado y
+  eliminado). Angular 21.2.x standalone (sin `AppModule`), feature-first, según la skill
+  `angular-architecture`. Review formal: **`SLICE_3_APPROVED`**.
+  - Workspace Angular standalone mínimo (`@angular/build:application` + tests Vitest
+    `@angular/build:unit-test`); Node 20.20.0, npm 10.8.2. Checkpoint `npm install` y
+    `npm run build` OK sobre el shell limpio.
+  - Estructura feature-first: `features/generator/{model,data-access,application,
+    generator-page,generator-form,job-progress,job-result}`; sin `core/`/`shared` vacíos.
+  - Dependencias: UI → `GeneratorFacade` → `ShortsApiClient` → FastAPI; transport DTO
+    (snake_case) → mapper → modelo de aplicación (camelCase).
+  - `GeneratorPage` = composición; `GeneratorForm` Reactive Form (sin HTTP); `JobProgress`
+    y `JobResult` presentacionales (sin polling ni `HttpClient`); `ShortsApiClient` solo
+    transporte HTTP; `GeneratorFacade` orquestación/estado (signals + computed).
+  - Polling lifecycle-safe: `timer(0, 1000)` + `exhaustMap` (sin solapamiento) +
+    `takeWhile(..., true)` (incluye resultado terminal) + `takeUntilDestroyed`; sin
+    `setInterval`; sin NgRx/Nx/event bus.
+  - Capacidades desde `GET /api/v1/capabilities` (nunca duplicadas); preview/download vía
+    `/api/v1/jobs/{id}/video` y `/api/v1/jobs/{id}/download`; sin paths de filesystem.
+  - Errores API mapeados a `{code, message, status}` saneado (nunca raw/traceback).
+  - Tests: 49 (`*.spec.ts` co-located). `npm test -- --watch=false`: 49 passed.
+    `npm run build`: OK (producción, 76.88 kB transfer). Backend
+    `python3 -m pytest -q tests`: `1971 passed, 0 failed`. `git diff --check` limpio.
+- **NO implementado todavía:** executor/servidor Uvicorn de despliegue (Slice 4), build de
+  producción servido por FastAPI, volumen persistente, autenticación, persitencia avanzada,
+  Docker/UI.
+- **Seguridad/API de diseño planificada y especificada, NO desplegada:** API nunca acepta/
+  devuelve paths; recursos job-scoped por UUID; DTO allowlist; errores centralizados
+  saneados; UUID no es autorización. Ver `openspec/changes/web-ui-mvp/specs/web-security.md`.
+- No describir componentes web planificados como runtime existente.
+
 ## Cambio cerrado: `script-watchability-v1` — COMPLETED / VERIFIED / CLOSED / MERGED (merge `745db7f`, no-ff)
 
 - Mejora watchability de guiones: contrato editorial en prompts (hook escena 1,

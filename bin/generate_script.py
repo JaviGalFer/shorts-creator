@@ -14,9 +14,18 @@ from shorts_creator.script import generator
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--topic", required=True, help="Topic for the video")
-    parser.add_argument(
+    id_group = parser.add_mutually_exclusive_group()
+    id_group.add_argument(
         "--output",
-        help="Output path for metadata.json (default: data/videos/{jobId}/metadata.json)",
+        help="Output path for metadata.json (default: data/videos/{jobId}/metadata.json). "
+             "Legacy CLI-only; cannot be combined with --job-id.",
+    )
+    id_group.add_argument(
+        "--job-id",
+        default=None,
+        help="Explicit job ID. When set, the canonical directory and "
+             "metadata.jobId use this value instead of the topic-derived ID. "
+             "Cannot be combined with --output.",
     )
     parser.add_argument(
         "--dry-run",
@@ -57,6 +66,7 @@ def main() -> int:
     args = build_parser().parse_args()
     return generator.generate_script(
         topic=args.topic,
+        job_id=args.job_id,
         output=args.output,
         dry_run=args.dry_run,
         model=args.model,

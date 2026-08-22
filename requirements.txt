@@ -13,6 +13,12 @@ tabulate==0.10.0
 typing_extensions==4.15.0
 yarl==1.24.2
 
+# Web backend / Job API (Slice 2, web-ui-mvp)
+fastapi==0.141.1
+uvicorn==0.52.4
+# Test client for the FastAPI app (used by tests/test_web_*.py)
+httpx==0.28.1
+
 # Opcional: subtítulos con faster-whisper (transcripción local)
 #   pip install faster-whisper
 #   Modelo por defecto: tiny (~500MB RAM, rápido en CPU)

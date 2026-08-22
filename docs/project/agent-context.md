@@ -1,5 +1,78 @@
 # Agent Context
 
+## Active Change: web-ui-mvp — IN PROGRESS (Slice 1 APPROVED, committed; Slice 2 APPROVED, committed `f0d2efa`; Slice 3 IMPLEMENTED / TESTED / REVIEWED / APPROVED / COMMITTED; Slice 4 pending)
+
+- Rama `change/web-ui-mvp`, baseline `main` `059552d`, Slice 1 committed (`caa33c5`).
+- Objetivo: exponer `run_pipeline` (runner canónico) a través de una pequeña Web UI
+  (FastAPI + Angular) sin duplicar pipeline y sin romper la CLI. El backend Web invoca el
+  MISMO `run_pipeline` en proceso; NUNCA ejecuta `bin/run_job.py` como API interna.
+- Slice 1 (implementado/tested, formal Review retry **`SLICE_1_APPROVED`**): límite de
+  invocación con identidad de job explícita
+  `run_pipeline(job_id=<id seguro>)` → `--job-id` → `data/videos/<jobId>/metadata.json` →
+  `metadata["jobId"] == jobId`. Identidad única `jobId == dir == metadata.jobId`; `job_id=None`
+  preserva CLI histórico; sin `output_dir` arbitrario. 33 tests (`tests/test_run_job_job_id.py`);
+  suite `1913 passed`; diff-check limpio. OpenSpec regularizado después de la implementación.
+- Hardening: `job_id` explícito fail-fast en la entrada de `generate_script` antes
+  de LLM/red (INVALID_JOB_ID sin call_llm); `job_id` explícito + `--output` →
+  `JOB_ID_OUTPUT_CONFLICT` (y mutuamente excluyentes en CLI); ruta canónica derivada del
+  jobId autoritativa en `run_pipeline` para IDs explícitos, con `SCRIPT_OUTPUT_CONTRACT_VIOLATION`
+  si el hijo reporta jobId/path discrepantes; identidad del metadata cargado validada en ramas
+  de éxito y de fallo (`metadata["jobId"] == job_id`) antes de mutar el archivo; legado
+  `job_id=None`/`--output` intacto.
+- Review formal: primera Review `SLICE_1_CHANGES_REQUIRED` con finding F1 (identidad del
+  metadata cargado no validada); fix `_validate_explicit_metadata_identity`; Review retry
+  `SLICE_1_APPROVED` con F1 CLOSED. Triple invariante final:
+  `requested jobId == directorio canónico == metadata.jobId`.
+- Siguiente trabajo (tras Slice 2: Slice 3 APPROVED/committed; Slice 4 como último slice): Slice 4
+  (integración/hardening). El task "executor web" se completó dentro del propio Slice 2 con
+  `LocalJobExecutor` (max_workers=1, admisión acotada, reconciliación de stale
+  QUEUED/RUNNING→INTERRUPTED); el servidor Uvicorn queda para el despliegue del Slice 4.
+  Slice 4 es PENDING, aún NO implementado.
+- Slice 2 (implementado en rama, **APPROVED**, committed `f0d2efa` — `feat(web): add backend job API`):
+  backend FastAPI en `src/shorts_creator/web/`
+  (`exceptions`, `dto`, `repository`, `projection`, `executor`, `service`, `capabilities`,
+  `dependencies`, `routes/{health,jobs,media}`, `app`). DTO allowlist (extra="forbid"), errores
+  centralizados con códigos estables, JobService como autoridad "jobs visibles al caller", repo
+  filesystem con sidecar atómico `web-job.json` (solo jobs Web-managed), LocalJobExecutor invoca el
+  MISMO `run_pipeline` en proceso (1 activo + 1 cola; busy→409 con sidecar INTERRUPTED), proyección
+  allowlist de `metadata.json`→JobResponse con sanitización de warnings/reviewReasons y sin
+  childCommand/failure/paths. `POST /api/v1/jobs` 202, `GET /jobs`, `GET /jobs/{id}`, `GET
+  /jobs/{id}/video` (inline), `GET /jobs/{id}/download`, `GET /health`, `GET /capabilities`.
+  Capabilities derivados de los enums/contratos canónicos (visual_media, router, duration, audio),
+  nunca hardcoded; sin leak de claves. Lifecycle/lifespan: wiring de producción dentro del lifespan
+  (no en import; sin pool sin cleanup), reconciliación de stale una vez al arrancar y
+  `executor.shutdown()` en `finally` al apagar. Range nativo → 206 en `/video`.
+  requirements.txt: +fastapi/uvicorn/httpx. 60 tests web (`tests/test_web_*` + `test_web_lifecycle`);
+  suite completa `1971 passed`; diff-check limpio; smoke production lifespan PASSED.
+- Corrección docs (tasks.md→agente): el executor web ya NO es Slice 4; se implementó en Slice 2.
+- Slice 3 (rebuild arquitectónico de la UI, **IMPLEMENTED / TESTED / REVIEWED / APPROVED / COMMITTED**):
+  Angular 21.2.x standalone (sin `AppModule`), feature-first bajo `web/frontend/`, según skill
+  `angular-architecture`. El spike previo (`frontend/`, `AppModule`, polling con `setInterval`)
+  fue descartado y eliminado. Node 20.20.0 / npm 10.8.2; build `@angular/build:application`,
+  tests Vitest `@angular/build:unit-test`; checkpoint `npm install` + `npm run build` OK.
+  Estructura: `features/generator/{model,data-access,application,generator-page,generator-form,
+  job-progress,job-result}` (sin `core`/`shared` vacíos). Dependencias UI → `GeneratorFacade` →
+  `ShortsApiClient` → FastAPI; transport DTO snake_case → mapper → modelo camelCase. Polling
+  `timer(0, 1000)` + `exhaustMap` (sin solapamiento) + `takeWhile(..., true)` (incluye terminal)
+  + `takeUntilDestroyed`; sin `setInterval`/NgRx/Nx. Capacidades desde `/api/v1/capabilities`;
+  preview/download `/api/v1/jobs/{id}/video|download`; sin paths. Errores mapeados a
+  `{code,message,status}`. 49 tests frontend (`*.spec.ts`); `npm test` 49 passed; `npm run build`
+  OK (76.88 kB transfer); backend `1971 passed, 0 failed`; `git diff --check` limpio. Review
+  formal: `SLICE_3_APPROVED`.
+
+### Seguridad — invariantes (HIGH PRIORITY, especificado no desplegado)
+- El Web API expone RECURSOS DE DOMINIO, nunca FILESYSTEM.
+- El API NUNCA acepta ni devuelve paths/directorios/nombres de archivo.
+- Recursos job-scoped por UUID4 opaco (backend-generated). UUID NO es autorización.
+- DTO allowlist: `metadata.json → projection → response DTO → frontend`. Nunca raw metadata.
+- Errores centralizados: códigos estables + mensajes saneados; nunca stderr/traceback/raw
+  al navegador.
+- `--output` CLI y `_final_summary` (jobPath/outputVideoPath) son SOLO CLI: nunca expuestos
+  por HTTP. `GET /jobs` semánticamente "jobs visibles al caller".
+- Puntos de inserción futuros: auth/ownership/rate-limit/quotas/concurrency/payload/timeouts/
+  CORS/HTTPS/audit. No implementarlos en MVP.
+- Ver `openspec/changes/web-ui-mvp/specs/web-security.md`.
+
 ## Closed Change: script-watchability-v1 — COMPLETED / VERIFIED / CLOSED / MERGED (into `main` `745db7f`, no-ff)
 - Branch `change/script-watchability-v1` (baseline `main` `d245964`, baseline suite `1849 passed`).
 - Mejora watchability de guiones: contrato editorial en prompts (hook escena 1,
