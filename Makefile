@@ -54,3 +54,6 @@ test:
 		if [ -f "$$f" ]; then echo "[OK] $$f"; else echo "[ERR] $$f"; errors=$$((errors+1)); fi; \
 	done; \
 	if [ $$errors -eq 0 ]; then echo "=== Estructura OK ==="; else echo "=== $$errors errores ==="; exit 1; fi
+
+backend-up:
+	PYTHONPATH=src python3 -m uvicorn shorts_creator.web.app:app --host 127.0.0.1 --port 8000 --workers 1
