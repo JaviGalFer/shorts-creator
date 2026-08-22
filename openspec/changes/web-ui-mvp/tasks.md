@@ -122,8 +122,8 @@ Estado: IN PROGRESS — topología single-container descartada antes de aprobaci
 - [x] Mantener integración frontend ↔ backend exclusivamente mediante HTTP/API;
       desarrollo local mediante proxy del frontend.
 - [x] Documentar un worker Uvicorn mientras `LocalJobExecutor` permanezca en memoria.
-- [ ] Revisión final focalizada de estructura, secretos, contrato HTTP y trazabilidad.
-- [ ] Suite backend completa + `git diff --check`.
+- [x] Revisión final focalizada de estructura, secretos, contrato HTTP y trazabilidad.
+- [x] Suite backend completa + `git diff --check`.
 - [ ] Frontend: tests + build en `shorts-creator-web`.
 - [ ] Smoke real frontend ↔ API.
 - [ ] Cierre (`results.md` + documentación + commit autorizado).
