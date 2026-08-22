@@ -110,7 +110,7 @@ eliminado). Angular 21.2.x standalone (sin `AppModule`), feature-first, según l
 
 ## Slice 4 — Separación / integración / hardening
 
-Estado: IN PROGRESS — topología single-container descartada antes de aprobación del slice.
+Estado: COMPLETED / VERIFIED / CLOSED — frontend extraído a repositorio independiente; topología single-container descartada.
 
 - [x] Extraer el workspace Angular a un repositorio Git independiente
       `shorts-creator-web`, preservando el estado funcional del frontend.
@@ -124,9 +124,9 @@ Estado: IN PROGRESS — topología single-container descartada antes de aprobaci
 - [x] Documentar un worker Uvicorn mientras `LocalJobExecutor` permanezca en memoria.
 - [x] Revisión final focalizada de estructura, secretos, contrato HTTP y trazabilidad.
 - [x] Suite backend completa + `git diff --check`.
-- [ ] Frontend: tests + build en `shorts-creator-web`.
-- [ ] Smoke real frontend ↔ API.
-- [ ] Cierre (`results.md` + documentación + commit autorizado).
+- [x] Frontend: tests + build en `shorts-creator-web`.
+- [x] Smoke real frontend ↔ API.
+- [x] Cierre (`results.md` + documentación + commit autorizado).
 
 ## Fuera de alcance (no implementar)
 

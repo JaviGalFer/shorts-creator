@@ -39,7 +39,7 @@ Abrir http://localhost:5679 en el navegador.
 Desde la raíz del repositorio:
 
 ```bash
-PYTHONPATH=src uvicorn shorts_creator.web.app:app --host 0.0.0.0 --port 8000 --workers 1
+PYTHONPATH=src python3 -m uvicorn shorts_creator.web.app:app --host 0.0.0.0 --port 8000 --workers 1
 ```
 
 Mientras `LocalJobExecutor` permanezca en proceso, el MVP requiere un único
